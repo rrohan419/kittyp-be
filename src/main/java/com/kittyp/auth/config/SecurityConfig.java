@@ -47,7 +47,7 @@ public class SecurityConfig {
 				.exceptionHandling(exception -> exception.authenticationEntryPoint(authEntryPointJwt)
 						.accessDeniedHandler(accessDeniedHandler))
 				.authorizeHttpRequests(auth -> auth
-						.requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/swagger-ui/**", "/v3/api-docs/**")
+						.requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/**")
 						.permitAll().anyRequest().authenticated());
 		http.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
