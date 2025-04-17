@@ -31,7 +31,7 @@ public class UserDaoImpl implements UserDao {
 			return userRepository.save(user);
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
-					HttpStatus.INTERNAL_SERVER_ERROR.value(), HttpStatus.INTERNAL_SERVER_ERROR);
+					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -44,7 +44,7 @@ public class UserDaoImpl implements UserDao {
 			return userRepository.existsByEmail(email);
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
-					HttpStatus.INTERNAL_SERVER_ERROR.value(), HttpStatus.INTERNAL_SERVER_ERROR);
+					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

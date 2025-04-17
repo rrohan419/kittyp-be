@@ -1,6 +1,5 @@
 package com.kittyp.common.exception;
 
-import java.nio.file.AccessDeniedException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -12,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -282,18 +282,18 @@ public class GlobalExceptionHandler {
     }
     
     @ExceptionHandler(CustomException.class)
-    public ResponseEntity<ApiError> handleCustomException(CustomException ex, WebRequest request) {
-        String path = extractPath(request);
+    public ResponseEntity<ErrorResponse<Void>> handleCustomException(CustomException ex, WebRequest request) {
+//        String path = extractPath(request);
+
         
-        ApiError apiError = new ApiError(
-                ex.getErrorCode(),
-                ex.getMessage(),
-                ex.getLocalizedMessage(),
-                path
-        );
+        ErrorResponse<Void> response = new ErrorResponse<>();
+        response.setSuccess(false);
+        response.setStatus(ex.getErrorCode());
+        response.setMessage(ex.getMessage());
+        response.setDetailedMessage(ex.getLocalizedMessage());
+        response.setTimestamp(LocalDateTime.now());
         
-        log.error("custom exception", ex);
-        return new ResponseEntity<>(apiError, ex.getHttpStatus());
+        return ResponseEntity.status(ex.getHttpStatus()).body(response);
     }
     
     /**

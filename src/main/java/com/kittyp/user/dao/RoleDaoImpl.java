@@ -32,7 +32,7 @@ public class RoleDaoImpl implements RoleDao {
 	public Role roleByName(ERole role) {
 		return roleRepository.findByName(role)
 				.orElseThrow(() -> new CustomException(env.getProperty(ExceptionConstant.ERROR_ROLE_NOT_FOUND),
-						HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND));
+						HttpStatus.NOT_FOUND));
 	}
 
 }

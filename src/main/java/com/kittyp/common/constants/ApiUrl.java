@@ -20,4 +20,9 @@ public class ApiUrl {
 	//user controller
 	public static final String USER_BASE_URL = "/user";
 	public static final String USER_DETAILS = USER_BASE_URL + "/me";
+	
+	public static final String ARTICLE_BASE_URL = "/article";
+	public static final String ALL_ARTICLES = ARTICLE_BASE_URL + "/all";
+	public static final String ARTICLE_BY_SLUG = ARTICLE_BASE_URL + "/{slug}";
+	
 }

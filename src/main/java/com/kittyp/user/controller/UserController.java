@@ -43,7 +43,7 @@ public class UserController {
     }
 	
 	@GetMapping("/test")
-    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
     public ResponseEntity<SuccessResponse<UserDetailsModel>> test() {
         
 		String email = SecurityContextHolder.getContext().getAuthentication().getName();

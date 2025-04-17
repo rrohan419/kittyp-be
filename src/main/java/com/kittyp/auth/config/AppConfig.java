@@ -46,14 +46,6 @@ public class AppConfig {
 		return threadPoolTaskExecutor;
 	}
 	
-//	@Bean
-//	public ObjectMapper objectMapper() {
-//	    ObjectMapper mapper = new ObjectMapper();
-//	    mapper.registerModule(new JavaTimeModule()); // Handles LocalDateTime
-//	    mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional: to format LocalDateTime as ISO string
-//        return mapper;
-//	}
-	
 	 @Bean
 	    public ObjectMapper objectMapper() {
 	        ObjectMapper objectMapper = new Jackson2ObjectMapperBuilder().build();

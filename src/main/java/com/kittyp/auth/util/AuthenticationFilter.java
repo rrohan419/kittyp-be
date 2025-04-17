@@ -83,7 +83,7 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		// Skip filtering for public endpoints
 		String path = request.getRequestURI();
 		return path.startsWith("/api/v1/auth/") || path.startsWith("/api/v1/public/") || path.startsWith("/swagger-ui/")
-				|| path.startsWith("/v3/api-docs/") || path.startsWith("/actuator/");
+				|| path.startsWith("/v3/api-docs/") || path.startsWith("/actuator/") || path.startsWith("/api/v1/article/");
 	}
 
 }
