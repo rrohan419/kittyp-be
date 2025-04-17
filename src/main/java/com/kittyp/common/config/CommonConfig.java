@@ -20,7 +20,7 @@ public class CommonConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**") // Allow all endpoints
-                        .allowedOrigins("http://localhost:8080", "https://kittyp.netlify.app") // Frontend URL
+                        .allowedOrigins("http://localhost:8080", "https://kittyp.netlify.app", "kittyp-fe-production.up.railway.app") // Frontend URL
                         .allowedMethods("*") // Allow all HTTP methods
                         .allowedHeaders("*")
                         .allowCredentials(true);
