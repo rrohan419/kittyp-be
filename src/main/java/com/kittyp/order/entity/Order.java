@@ -1,0 +1,67 @@
+package com.kittyp.order.entity;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.order.emus.OrderStatus;
+import com.kittyp.user.entity.User;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+
+/**
+ * @author rrohan419@gmail.com
+ */
+@Entity
+@Table(name = "orders")
+@Data
+@EqualsAndHashCode(callSuper = false)
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Order extends BaseEntity {
+
+	private static final long serialVersionUID = 1L;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "user_id", nullable = false)
+	private User user;
+
+	@Column(name = "order_number", unique = true, nullable = false, length = 20)
+	private String orderNumber;
+
+	@Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
+	private BigDecimal totalAmount;
+
+	@Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private OrderStatus status;
+	
+	@Column(name = "shipping_address", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+   private Address shippingAddress;
+
+   @Column(name = "billing_address", columnDefinition = "json")
+   @JdbcTypeCode(SqlTypes.JSON)
+   private Address billingAddress;
+
+   @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+   private List<OrderItem> orderItems;
+}

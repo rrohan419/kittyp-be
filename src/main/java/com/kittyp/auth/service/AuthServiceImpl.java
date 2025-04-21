@@ -3,6 +3,7 @@ package com.kittyp.auth.service;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -50,6 +51,7 @@ public class AuthServiceImpl implements AuthService {
 
 		// Create new user
 		User user = User.builder()
+				.uuid(UUID.randomUUID().toString())
 				.email(signupRequestDto.getEmail()).password(encoder.encode(signupRequestDto.getPassword())).build();
 
 		user = userDao.saveUser(user);

@@ -57,4 +57,14 @@ public class UserDaoImpl implements UserDao {
 				.orElseThrow(() -> new ResourceNotFoundException("email", "email", email));
 	}
 
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public User userByUuid(String uuid) {
+		return userRepository.findByUuid(uuid)
+				.orElseThrow(() -> new ResourceNotFoundException("uuid", "uuid", uuid));
+	
+	}
+
 }
