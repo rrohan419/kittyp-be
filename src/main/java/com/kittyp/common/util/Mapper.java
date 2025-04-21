@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.json.JSONObject;
 import org.modelmapper.ConfigurationException;
 import org.modelmapper.MappingException;
 import org.modelmapper.ModelMapper;
@@ -56,6 +57,17 @@ public class Mapper {
 		}
 
 		return response;
+	}
+	
+	public <T>T convertJsonToObejct(JSONObject orderJsonObject, Class<T> targetClass) {
+		try {
+			// Convert the JSONObject to a Map
+			Map<String, Object> orderMap = objectMapper.readValue(orderJsonObject.toString(), new TypeReference<Map<String, Object>>() {});
+			// Convert the Map to CreateOrderModel
+			return convert(orderMap, targetClass);
+		} catch (JsonProcessingException ex) {
+			throw new CustomException("Error converting Order JSONObject to CreateOrderModel: " + ex.getMessage());
+		}
 	}
 	
 	public Map<String, String> convertStringToHashMap(String jsonString) {

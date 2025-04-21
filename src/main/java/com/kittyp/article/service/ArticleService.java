@@ -4,6 +4,7 @@
 package com.kittyp.article.service;
 
 import com.kittyp.article.dto.ArticleDto;
+import com.kittyp.article.dto.ArticleEditDto;
 import com.kittyp.article.dto.ArticleFilterDto;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
@@ -38,4 +39,13 @@ public interface ArticleService {
 	 * @return
 	 */
 	ArticleModel saveArticle(ArticleDto articleDto);
+	
+	/**
+	 * 
+	 * @author rrohan419@gmail.com
+	 * @param slug
+	 * @param articleEditDto
+	 * @return
+	 */
+	ArticleModel editArticle(String slug, ArticleEditDto articleEditDto);
 }

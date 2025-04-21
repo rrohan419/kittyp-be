@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.article.dto.ArticleDto;
+import com.kittyp.article.dto.ArticleEditDto;
 import com.kittyp.article.dto.ArticleFilterDto;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
@@ -59,10 +61,20 @@ public class ArticleController {
 	
 	@PostMapping(ApiUrl.ARTICLE_BASE_URL)
 	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
-    public ResponseEntity<SuccessResponse<ArticleModel>> savearticles(
+    public ResponseEntity<SuccessResponse<ArticleModel>> saveArticles(
 			@RequestBody ArticleDto articleDto) {
         		
         ArticleModel response = articleService.saveArticle(articleDto);
+        
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+	
+	@PatchMapping(ApiUrl.ARTICLE_BASE_URL)
+	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+    public ResponseEntity<SuccessResponse<ArticleModel>> editArticles(
+			@RequestBody ArticleEditDto articleEditDto, @RequestParam String slug) {
+        		
+        ArticleModel response = articleService.editArticle(slug, articleEditDto);
         
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }

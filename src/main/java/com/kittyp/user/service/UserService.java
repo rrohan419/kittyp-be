@@ -11,4 +11,6 @@ import com.kittyp.user.models.UserDetailsModel;
 public interface UserService {
 
 	UserDetailsModel userDetailsByEmail(String email);
+	
+	void addRoleAdminToUser(String uuid);
 }

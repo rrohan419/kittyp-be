@@ -5,6 +5,7 @@ package com.kittyp.article.service;
 
 import java.util.List;
 
+import org.springframework.core.env.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -16,11 +17,13 @@ import org.springframework.stereotype.Service;
 import com.kittyp.article.dao.ArticleDao;
 import com.kittyp.article.dao.AuthorDao;
 import com.kittyp.article.dto.ArticleDto;
+import com.kittyp.article.dto.ArticleEditDto;
 import com.kittyp.article.dto.ArticleFilterDto;
 import com.kittyp.article.entity.Article;
 import com.kittyp.article.entity.Author;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
+import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
@@ -38,6 +41,7 @@ public class ArticleServiceImpl implements ArticleService {
 	private final ArticleDao articleDao;
 	private final Mapper mapper;
 	private final AuthorDao authorDao;
+	private final Environment env;
 	/**
 	 * @author rrohan419@gmail.com
 	 */
@@ -96,6 +100,26 @@ public class ArticleServiceImpl implements ArticleService {
 		article.setAuthor(author);
 		
 		article = articleDao.saveArticle(article);
+		
+		return mapper.convert(article, ArticleModel.class);
+	}
+
+	/**
+	 * 
+	 * @author rrohan419@gmail.com
+	 * @param slug
+	 * @param articleEditDto
+	 * @return
+	 */
+	@Override
+	public ArticleModel editArticle(String slug, ArticleEditDto articleEditDto) {
+		Article article = articleDao.findArticleBySlug(slug);
+		
+		if(article == null) {
+			throw new CustomException(String.format(env.getProperty(ExceptionConstant.ARTICLE_NOT_FOUND), slug), HttpStatus.NOT_FOUND);
+		}
+		
+		article = mapper.convert(articleEditDto, Article.class);
 		
 		return mapper.convert(article, ArticleModel.class);
 	}

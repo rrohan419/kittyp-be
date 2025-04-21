@@ -5,6 +5,8 @@ package com.kittyp.article.dto;
 
 import java.util.List;
 
+import com.kittyp.article.enums.ArticleStatus;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -41,4 +43,7 @@ public class ArticleDto {
     
     @Valid
     private AuthorDto author;
+    
+    @NotNull
+    private ArticleStatus status;
 }

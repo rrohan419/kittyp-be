@@ -9,4 +9,6 @@ public interface UserDao {
 	boolean userPresentByEmail(String email);
 	
 	User userByEmail(String email);
+	
+	User userByUuid(String uuid);
 }
