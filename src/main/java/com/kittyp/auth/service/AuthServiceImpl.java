@@ -94,6 +94,7 @@ public class AuthServiceImpl implements AuthService {
 
 	@Override
 	public JwtResponseModel loginUser(LoginRequestDto loginRequestDto) {
+		
 		Authentication authentication = authenticationManager.authenticate(
 				new UsernamePasswordAuthenticationToken(loginRequestDto.getEmail(), loginRequestDto.getPassword()));
 

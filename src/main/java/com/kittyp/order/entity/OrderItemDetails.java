@@ -7,12 +7,12 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 @Getter
 @Setter
 public class OrderItemDetails {
 
 	private String size;
-	  private String color;
+	private String color;
 }
