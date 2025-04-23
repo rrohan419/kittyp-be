@@ -4,6 +4,7 @@
 package com.kittyp.order.model;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.kittyp.order.emus.CurrencyType;
@@ -18,7 +19,11 @@ import lombok.Data;
 @Data
 public class OrderModel {
 
-	private String orderNumber; 
+	private String orderNumber;
+	
+	private LocalDateTime createdAt;
+	
+	private String aggregatorOrderNumber;
 	
 	private BigDecimal totalAmount;
 	

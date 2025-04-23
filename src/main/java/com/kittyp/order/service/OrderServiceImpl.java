@@ -12,15 +12,23 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.core.env.Environment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.order.dao.OrderDao;
 import com.kittyp.order.dto.OrderDto;
+import com.kittyp.order.dto.OrderFilterDto;
 import com.kittyp.order.dto.OrderItemDto;
 import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.emus.OrderStatus;
@@ -50,19 +58,19 @@ public class OrderServiceImpl implements OrderService {
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final UserDao userDao;
 
-	/**
-	 * @author rrohan419@gmail.com
-	 */
-	@Override
-	public List<OrderModel> ordersByUserUuid(String uuid) {
-		List<Order> orders = orderDao.ordersByUserUuid(uuid);
-
-		if (orders == null || orders.isEmpty()) {
-			return List.of();
-		}
-
-		return orders.stream().map(order -> mapper.convert(order, OrderModel.class)).toList();
-	}
+//	/**
+//	 * @author rrohan419@gmail.com
+//	 */
+//	@Override
+//	public List<OrderModel> ordersByUserUuid(String uuid) {
+//		List<Order> orders = orderDao.ordersByUserUuid(uuid);
+//
+//		if (orders == null || orders.isEmpty()) {
+//			return List.of();
+//		}
+//
+//		return orders.stream().map(order -> mapper.convert(order, OrderModel.class)).toList();
+//	}
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -259,6 +267,53 @@ public class OrderServiceImpl implements OrderService {
 		order.setStatus(orderStatusUpdateDto.getOrderStatus());
 		order = orderDao.saveOrder(order);
 		return mapper.convert(order, OrderModel.class);
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public OrderModel latestCreatedCartByUser(String userUuid) {
+		User user = userDao.userByUuid(userUuid);
+		Order order = orderDao.getLastCreatedOrder(user.getUuid());
+		if(order == null) {
+			order = new Order();
+			order.setOrderItems(null);
+			order.setUser(user);
+			order.setTotalAmount(BigDecimal.ZERO);
+			order.setStatus(OrderStatus.CREATED);
+			order.setOrderNumber(orderNumberGenerator.generateInvoiceNumber());
+			order = orderDao.saveOrder(order);
+		}
+		return mapper.convert(order, OrderModel.class);
+	}
+
+
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public PaginationModel<OrderModel> allOrderByFilter(OrderFilterDto orderFilterDto, Integer pageNumber,
+			Integer pageSize) {
+		Pageable pageable = PageRequest.of(pageNumber-1, pageSize);
+		
+		Specification<Order> orderSpecification = OrderSpecification.articlesByFilters(orderFilterDto);
+		Page<Order> orderPage = orderDao.findAllOrders(pageable, orderSpecification);
+		
+		List<OrderModel> orderListModel = orderPage.getContent().stream().map(order -> mapper.convert(order, OrderModel.class)).toList();
+	
+		return orderPageToModel(new PageImpl<>(orderListModel, pageable, orderPage.getTotalElements()));
+	}
+	
+	private PaginationModel<OrderModel> orderPageToModel(Page<OrderModel> orderPage) {
+		PaginationModel<OrderModel> orderModel = new PaginationModel<>();
+		orderModel.setModels(orderPage.getContent());
+		orderModel.setIsFirst(orderPage.isFirst());
+		orderModel.setIsLast(orderPage.isLast());
+		orderModel.setTotalElements(orderPage.getTotalElements());
+		orderModel.setTotalPages(orderPage.getTotalPages());
+		return orderModel;
 	}
 
 }

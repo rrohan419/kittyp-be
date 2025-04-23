@@ -6,7 +6,9 @@ package com.kittyp.order.service;
 import java.util.List;
 import java.util.Map;
 
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.order.dto.OrderDto;
+import com.kittyp.order.dto.OrderFilterDto;
 import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.model.OrderModel;
 
@@ -15,11 +17,14 @@ import com.kittyp.order.model.OrderModel;
  */
 public interface OrderService {
 
-	List<OrderModel> ordersByUserUuid(String uuid);
+	PaginationModel<OrderModel> allOrderByFilter(OrderFilterDto orderFilterDto, Integer pageNumber,
+			Integer pageSize);
 	
 	OrderModel createUpdateOrder(OrderDto orderDto);
 	
 	OrderModel orderDetailsByOrderNumber(String orderNumber);
 	
 	OrderModel updateOrderStatus(OrderStatusUpdateDto orderQuantityUpdateDto);
+	
+	OrderModel latestCreatedCartByUser(String userUuid);
 }

@@ -52,7 +52,8 @@ public class AuthServiceImpl implements AuthService {
 		// Create new user
 		User user = User.builder()
 				.uuid(UUID.randomUUID().toString())
-				.email(signupRequestDto.getEmail()).password(encoder.encode(signupRequestDto.getPassword())).build();
+				.email(signupRequestDto.getEmail()).password(encoder.encode(signupRequestDto.getPassword()))
+				.firstName(signupRequestDto.getFirstName()).lastName(signupRequestDto.getLastName()).build();
 
 		user = userDao.saveUser(user);
 

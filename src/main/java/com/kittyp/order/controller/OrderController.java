@@ -3,8 +3,6 @@
  */
 package com.kittyp.order.controller;
 
-import java.util.List;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,7 +19,9 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.order.dto.OrderDto;
+import com.kittyp.order.dto.OrderFilterDto;
 import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.model.OrderModel;
 import com.kittyp.order.service.OrderService;
@@ -47,11 +47,13 @@ public class OrderController {
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 	
-	@GetMapping(ApiUrl.ORDERS_BY_USER)
+	@PostMapping(ApiUrl.ORDERS_BY_FILTER)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	public ResponseEntity<SuccessResponse<List<OrderModel>>> userOrders(@PathVariable String userUuid) {
+	public ResponseEntity<SuccessResponse<PaginationModel<OrderModel>>> userOrders(@RequestBody OrderFilterDto orderFilterDto,
+			@RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) int page,
+			@RequestParam(defaultValue = KeyConstant.PAGE_SIZE) int size) {
         		
-		List<OrderModel> response = orderService.ordersByUserUuid(userUuid);
+		PaginationModel<OrderModel> response = orderService.allOrderByFilter(orderFilterDto, page, size);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 	
@@ -68,6 +70,14 @@ public class OrderController {
 	public ResponseEntity<SuccessResponse<OrderModel>> orderStatusyUpdate(@RequestBody OrderStatusUpdateDto orderQuantityUpdateDto) {
         		
 		OrderModel response = orderService.updateOrderStatus(orderQuantityUpdateDto);
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+	
+	@GetMapping(ApiUrl.CREATED_ORDER_BY_USER)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<OrderModel>> userLastCreatedOrders(@PathVariable String userUuid) {
+        		
+		OrderModel response = orderService.latestCreatedCartByUser(userUuid);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 }

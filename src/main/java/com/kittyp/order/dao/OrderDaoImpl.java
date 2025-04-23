@@ -3,9 +3,10 @@
  */
 package com.kittyp.order.dao;
 
-import java.util.List;
-
 import org.springframework.core.env.Environment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Repository;
 
@@ -26,19 +27,6 @@ public class OrderDaoImpl implements OrderDao {
 
 	private final Environment env;
 	private final OrderRepository orderRepository;
-
-	/**
-	 * @author rrohan419@gmail.com
-	 */
-	@Override
-	public List<Order> ordersByUserUuid(String uuid) {
-		try {
-			return orderRepository.findByUser_Uuid(uuid);
-		} catch (Exception e) {
-			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
-					HttpStatus.INTERNAL_SERVER_ERROR);
-		}
-	}
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -71,6 +59,32 @@ public class OrderDaoImpl implements OrderDao {
 	public Order getLastCreatedOrder(String userUuid) {
 		try {
 			return orderRepository.findByUser_UuidAndStatus(userUuid, OrderStatus.CREATED);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public Order orderByAggregatorOrderNumber(String aggregatorOrderNumber) {
+		try {
+			return orderRepository.findByAggregatorOrderNumber(aggregatorOrderNumber);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public Page<Order> findAllOrders(Pageable pageable, Specification<Order> specification) {
+		try {
+			return orderRepository.findAll(specification, pageable);
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
 					HttpStatus.INTERNAL_SERVER_ERROR);
