@@ -16,7 +16,7 @@ public enum OrderStatus{
 	REFUND_INITIATED;
     
     public static OrderStatus fromRazorpayStatus(String status) {
-        switch (status.toLowerCase()) {
+        switch (status.toLowerCase().trim()) {
             case "created": return CREATED;
             case "authorized": return SUCCESSFULL;
             case "captured": return CAPTURED;
