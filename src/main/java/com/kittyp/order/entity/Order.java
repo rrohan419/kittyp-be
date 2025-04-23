@@ -8,6 +8,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.user.entity.User;
 
@@ -50,6 +51,11 @@ public class Order extends BaseEntity {
 
 	@Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
 	private BigDecimal totalAmount;
+	
+	@Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10, columnDefinition = "VARCHAR(10) DEFAULT 'INR'")
+	@Builder.Default
+	private CurrencyType currency = CurrencyType.INR;
 
 	@Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -57,11 +63,11 @@ public class Order extends BaseEntity {
 	
 	@Column(name = "shipping_address", columnDefinition = "json")
     @JdbcTypeCode(SqlTypes.JSON)
-   private Address shippingAddress;
+   private transient Address shippingAddress;
 
    @Column(name = "billing_address", columnDefinition = "json")
    @JdbcTypeCode(SqlTypes.JSON)
-   private Address billingAddress;
+   private transient Address billingAddress;
 
    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
    private List<OrderItem> orderItems;
