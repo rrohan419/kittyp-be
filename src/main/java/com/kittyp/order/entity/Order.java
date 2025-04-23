@@ -1,6 +1,7 @@
 package com.kittyp.order.entity;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -64,4 +65,19 @@ public class Order extends BaseEntity {
 
    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
    private List<OrderItem> orderItems;
+   
+   public void removeOrderItems(OrderItem orderItem) {
+	    orderItems.remove(orderItem);
+	    orderItem.setOrder(null); // This is critical for proper orphan removal
+	}
+   
+   public void addOrderItem(OrderItem item) {
+	   if(orderItems == null) {
+		   orderItems = new ArrayList<>();
+	   }
+	    orderItems.add(item);
+	    item.setOrder(this);
+	}
+
+
 }
