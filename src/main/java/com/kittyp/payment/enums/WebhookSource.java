@@ -6,6 +6,7 @@ package com.kittyp.payment.enums;
 /**
  * @author rrohan419@gmail.com 
  */
-public enum CurrencySymbol {
-	INR, USD, JPY
+public enum WebhookSource {
+
+	RAZORPAY, JUSPAY
 }

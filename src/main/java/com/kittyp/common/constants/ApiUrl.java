@@ -35,5 +35,6 @@ public class ApiUrl {
 	public static final String ORDER_BASE_URL = "/order";
 	public static final String ORDER_CREATE = ORDER_BASE_URL+"/create";
 	public static final String ORDER_STATUS_UPDATE = ORDER_BASE_URL+"/update/status";
-	public static final String ORDERS_BY_USER = ORDER_BASE_URL+"/{userUuid}";
+	public static final String ORDERS_BY_FILTER = ORDER_BASE_URL+"/filter";
+	public static final String CREATED_ORDER_BY_USER = ORDER_BASE_URL+"/created/{userUuid}";
 }

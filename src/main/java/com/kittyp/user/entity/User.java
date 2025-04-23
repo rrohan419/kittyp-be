@@ -35,6 +35,12 @@ public class User extends BaseEntity {
 	 * @author rrohan419@gmail.com
 	 */
 	private static final long serialVersionUID = 1L;
+	
+	@Column
+	private String firstName;
+	
+	@Column
+	private String lastName;
 
 	@Column(nullable = false, unique = true)
     private String uuid;

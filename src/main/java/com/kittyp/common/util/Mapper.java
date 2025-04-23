@@ -80,4 +80,13 @@ public class Mapper {
 		}
 		return map;
 	}
+	
+	public String convertObjectToJson(Object obj) {
+		try {
+			return objectMapper.writeValueAsString(obj);
+		} catch (JsonProcessingException e) {
+			throw new CustomException("Error converting object to JSON string: " + e.getMessage());
+		}
+	}
+
 }

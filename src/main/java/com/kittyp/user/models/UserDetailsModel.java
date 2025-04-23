@@ -19,6 +19,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UserDetailsModel {
     
+	private String firstName;
+	private String lastName;
     private Long id;
     private String email;
     private Set<String> roles;

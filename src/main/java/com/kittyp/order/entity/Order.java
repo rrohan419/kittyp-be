@@ -48,6 +48,9 @@ public class Order extends BaseEntity {
 
 	@Column(name = "order_number", unique = true, nullable = false, length = 20)
 	private String orderNumber;
+	
+	@Column
+	private String aggregatorOrderNumber;
 
 	@Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
 	private BigDecimal totalAmount;

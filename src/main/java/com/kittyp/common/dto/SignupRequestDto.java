@@ -15,6 +15,12 @@ public class SignupRequestDto {
 //	private String username;
 
 	@NotBlank
+	@Size(min = 2)
+	private String firstName;
+	
+	private String lastName;
+	
+	@NotBlank
 	@Size(max = 50)
 	@Email
 	private String email;
