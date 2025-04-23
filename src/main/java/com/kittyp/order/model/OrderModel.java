@@ -6,6 +6,7 @@ package com.kittyp.order.model;
 import java.math.BigDecimal;
 import java.util.List;
 
+import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.entity.Address;
 
@@ -20,6 +21,8 @@ public class OrderModel {
 	private String orderNumber; 
 	
 	private BigDecimal totalAmount;
+	
+	private CurrencyType currency;
 	
 	private OrderStatus status;
 	

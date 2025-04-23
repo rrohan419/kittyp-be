@@ -10,6 +10,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.product.enums.ProductStatus;
 
 import jakarta.persistence.Column;
@@ -48,6 +49,11 @@ public class Product extends BaseEntity {
 
     @Column(name = "price", nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10, columnDefinition = "VARCHAR(10) DEFAULT 'INR'")
+	@Builder.Default
+	private CurrencyType currency = CurrencyType.INR;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

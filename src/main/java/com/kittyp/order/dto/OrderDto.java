@@ -6,6 +6,7 @@ package com.kittyp.order.dto;
 import java.math.BigDecimal;
 import java.util.List;
 
+import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.entity.Address;
 
 import jakarta.validation.Valid;
@@ -20,6 +21,8 @@ public class OrderDto {
 
 	@NotNull
 	private BigDecimal totalAmount;
+	
+	private CurrencyType currency;
 
 //	@NotNull
 	private Address shippingAddress;

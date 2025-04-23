@@ -6,6 +6,7 @@ package com.kittyp.product.model;
 import java.math.BigDecimal;
 import java.util.Set;
 
+import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.product.entity.ProductAttributes;
 import com.kittyp.product.enums.ProductStatus;
 
@@ -21,6 +22,7 @@ public class ProductModel {
 	private String name;
 	private String description;
 	private BigDecimal price;
+	private CurrencyType currency;
 	private ProductStatus status;
 	private Set<String> productImageUrls;
 	private String category;

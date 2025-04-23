@@ -6,6 +6,7 @@ package com.kittyp.product.dto;
 import java.math.BigDecimal;
 import java.util.Set;
 
+import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.product.entity.ProductAttributes;
 import com.kittyp.product.enums.ProductStatus;
 
@@ -27,6 +28,9 @@ public class ProductSaveDto {
 	
 	@NotNull
 	private BigDecimal price;
+	
+	@NotNull
+	private CurrencyType currency;
 	
 	@NotNull
 	private ProductStatus status;
