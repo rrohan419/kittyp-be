@@ -10,6 +10,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.order.dto.OrderFilterDto;
+import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.entity.Order;
 import com.kittyp.user.entity.User;
 
@@ -30,6 +31,10 @@ public class OrderSpecification {
 		return (Root<Order> root, CriteriaQuery<?> query, CriteriaBuilder builder) -> {
 			List<Predicate> predicates = new ArrayList<>();
 
+			// Filter for active orders
+	        predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), true));
+	        predicates.add(builder.notEqual(root.get("status"), OrderStatus.CREATED));
+			
 			 // Join with the User entity to filter by user UUID
 	        if (orderFilterDto.getUserUuid() != null) {
 	            Join<Order, User> userJoin = root.join("user");
@@ -40,14 +45,14 @@ public class OrderSpecification {
 	        if (orderFilterDto.getOrderStatus() != null) {
 	            predicates.add(builder.equal(root.get("status"), orderFilterDto.getOrderStatus()));
 	        }
-
+	        
 	        // Filter by orderNumber
 	        if (orderFilterDto.getOrderNumber() != null && !orderFilterDto.getOrderNumber().isEmpty()) {
-	            predicates.add(builder.equal(root.get("orderNumber"), orderFilterDto.getOrderNumber()));
+//	            predicates.add(builder.equal(root.get("orderNumber"), orderFilterDto.getOrderNumber()));
+	            predicates.add(builder.like(builder.lower(root.get("orderNumber")), "%" + orderFilterDto.getOrderNumber().toLowerCase() + "%"));
 	        }
-
-	        // Filter for active orders
-	        predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), true));
+	        
+	        
 
 	        return builder.and(predicates.toArray(new Predicate[0]));
 		};
