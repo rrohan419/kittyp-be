@@ -32,6 +32,7 @@ import com.kittyp.order.dto.OrderFilterDto;
 import com.kittyp.order.dto.OrderItemDto;
 import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.emus.OrderStatus;
+import com.kittyp.order.entity.Address;
 import com.kittyp.order.entity.Order;
 import com.kittyp.order.entity.OrderItem;
 import com.kittyp.order.model.OrderModel;
@@ -192,7 +193,11 @@ public class OrderServiceImpl implements OrderService {
 
 		    // 8. Save order and return model
 		    Order saved = orderDao.saveOrder(order);
-		    return mapper.convert(saved, OrderModel.class);
+		    OrderModel orderModel =  mapper.convert(saved, OrderModel.class);
+		    orderModel.setBillingAddress(saved.getBillingAddress());
+		    orderModel.setShippingAddress(saved.getShippingAddress());
+		    
+		    return orderModel;
 		}
 
 
@@ -217,6 +222,10 @@ public class OrderServiceImpl implements OrderService {
 	@Override
 	public OrderModel orderDetailsByOrderNumber(String orderNumber) {
 		Order order = orderDao.orderByOrderNumber(orderNumber);
+		
+		Address billing = order.getBillingAddress();
+		
+		System.out.println(billing);
 
 		return mapper.convert(order, OrderModel.class);
 	}
