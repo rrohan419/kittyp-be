@@ -49,7 +49,7 @@ public class RazorPayServiceImpl implements RazorPayService {
         }
 		
 		JSONObject orderRequest = new JSONObject();
-		orderRequest.put(RazorPayConstant.AMOUNT, orderRequestDto.getAmount().multiply(BigDecimal.valueOf(100)));
+		orderRequest.put(RazorPayConstant.AMOUNT,  orderRequestDto.getAmount().multiply(BigDecimal.valueOf(100)).intValue());
 		orderRequest.put(RazorPayConstant.CURRENCY,orderRequestDto.getCurrency());
 		orderRequest.put(RazorPayConstant.RECEIPT, orderRequestDto.getReceipt());
 		orderRequest.put(RazorPayConstant.NOTES, orderRequestDto.getNotes() != null ? new JSONObject(orderRequestDto.getNotes()) : new JSONObject());
