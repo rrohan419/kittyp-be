@@ -3,8 +3,10 @@
  */
 package com.kittyp.payment.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
+import com.kittyp.order.entity.Taxes;
 import com.kittyp.payment.enums.CurrencySymbol;
 
 import lombok.Getter;
@@ -17,11 +19,15 @@ import lombok.Setter;
 @Getter
 public class RazorPayOrderRequestDto {
 
-	private Long amount;
+	private BigDecimal amount;
 	
 	private CurrencySymbol currency;
 	
-	private String recipt;
+	private String receipt;
 	
 	private List<String> notes;
+	
+	private Taxes taxes;
+	
+	
 }

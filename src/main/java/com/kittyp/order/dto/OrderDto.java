@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.entity.Address;
+import com.kittyp.order.entity.Taxes;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +19,9 @@ import lombok.Getter;
  */
 @Getter
 public class OrderDto {
+	
+	@NotNull
+	private BigDecimal subTotal;
 
 	@NotNull
 	private BigDecimal totalAmount;
@@ -29,6 +33,8 @@ public class OrderDto {
 
 //	@NotNull
 	private Address billingAddress;
+	
+	private Taxes taxes;
 
 	@Valid
 	private List<OrderItemDto> orderItems;

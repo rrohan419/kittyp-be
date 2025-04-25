@@ -4,6 +4,7 @@
 package com.kittyp.order.entity;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -13,15 +14,10 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-public class Address  implements Serializable {
+public class Taxes implements Serializable {
 
-	/**
-	 * @author rrohan419@gmail.com
-	 */
 	private static final long serialVersionUID = 1L;
-	private String street;
-    private String city;
-    private String state;
-    private String postalCode;
-    private String country;
+
+	private BigDecimal serviceCharge;
+	private BigDecimal shippingCharges;
 }
