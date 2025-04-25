@@ -10,6 +10,7 @@ import java.util.List;
 import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.entity.Address;
+import com.kittyp.order.entity.Taxes;
 
 import lombok.Data;
 
@@ -27,9 +28,13 @@ public class OrderModel {
 	
 	private BigDecimal totalAmount;
 	
+	private BigDecimal subTotal;
+	
 	private CurrencyType currency;
 	
 	private OrderStatus status;
+	
+	private Taxes taxes;
 	
 	private Address shippingAddress;
 	

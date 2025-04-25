@@ -5,6 +5,7 @@ package com.kittyp.order.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -16,6 +17,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -68,6 +71,10 @@ public class OrderServiceImpl implements OrderService {
 
 		// 1. Get the latest cart or create a new one
 		Order order = getLatestCreatedCart(user, orderDto);
+		order.setTotalAmount(orderDto.getTotalAmount());
+		order.setBillingAddress(orderDto.getBillingAddress());
+		order.setShippingAddress(orderDto.getShippingAddress());
+		order.setCurrency(orderDto.getCurrency());
 
 		// 2. Extract incoming order items and their UUIDs
 		List<OrderItemDto> orderItemDtos = orderDto.getOrderItems();
@@ -80,6 +87,12 @@ public class OrderServiceImpl implements OrderService {
 		// 3. Track existing product UUIDs
 		Set<String> existingProductUuids = existingItems.stream().map(item -> item.getProduct().getUuid())
 				.collect(Collectors.toSet());
+		
+//		Set<String> existingProductUuids = existingItems.stream()
+//		        .filter(item -> item.getProduct() != null)
+//		        .map(item -> item.getProduct().getUuid())
+//		        .collect(Collectors.toSet());
+
 
 		// 4. Remove items not in DTO
 		List<OrderItem> toRemove = existingItems.stream()
@@ -116,11 +129,38 @@ public class OrderServiceImpl implements OrderService {
 			order.addOrderItem(newItem);
 		}
 
-		// 7. Recalculate total
-		BigDecimal total = order.getOrderItems().stream()
-				.map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
-				.reduce(BigDecimal.ZERO, BigDecimal::add);
-		order.setTotalAmount(total);
+//		 7. Recalculate total
+//		BigDecimal total = order.getOrderItems().stream()
+//				.map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+//				.reduce(BigDecimal.ZERO, BigDecimal::add);
+//		order.setTotalAmount(total);
+		
+		// 7. Recalculate subtotal and total amount
+//		BigDecimal subTotal = order.getOrderItems().stream()
+//		        .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+//		        .reduce(BigDecimal.ZERO, BigDecimal::add);
+		
+		List<OrderItem> items = order.getOrderItems();
+		if (items == null) items = Collections.emptyList();
+
+		BigDecimal subTotal = items.stream()
+		    .filter(i -> i != null && i.getPrice() != null)
+		    .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+		    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+		order.setSubTotal(subTotal);
+
+		BigDecimal serviceCharge = order.getTaxes() != null && order.getTaxes().getServiceCharge() != null
+		        ? order.getTaxes().getServiceCharge()
+		        : BigDecimal.ZERO;
+
+		BigDecimal shippingCharges = order.getTaxes() != null && order.getTaxes().getShippingCharges() != null
+		        ? order.getTaxes().getShippingCharges()
+		        : BigDecimal.ZERO;
+
+		BigDecimal totalAmount = subTotal.add(serviceCharge).add(shippingCharges);
+		order.setTotalAmount(totalAmount);
+
 
 		// 8. Save order and return model
 		Order saved = orderDao.saveOrder(order);
@@ -134,7 +174,7 @@ public class OrderServiceImpl implements OrderService {
 	private Order getLatestCreatedCart(User user, OrderDto orderDto) {
 		Order order = orderDao.getLastCreatedOrder(user.getUuid());
 		if (order == null) {
-			order = mapper.convert(orderDto, Order.class);
+			order = new Order();
 			order.setOrderItems(null);
 			order.setUser(user);
 			order.setStatus(OrderStatus.CREATED);
@@ -173,10 +213,11 @@ public class OrderServiceImpl implements OrderService {
 		Order order = orderDao.getLastCreatedOrder(user.getUuid());
 		if (order == null) {
 			order = new Order();
-			order.setOrderItems(null);
+			order.setOrderItems(List.of());
 			order.setUser(user);
 			order.setTotalAmount(BigDecimal.ZERO);
 			order.setStatus(OrderStatus.CREATED);
+			order.setSubTotal(BigDecimal.ZERO);
 			order.setOrderNumber(orderNumberGenerator.generateInvoiceNumber());
 			order = orderDao.saveOrder(order);
 		}
@@ -189,7 +230,8 @@ public class OrderServiceImpl implements OrderService {
 	@Override
 	public PaginationModel<OrderModel> allOrderByFilter(OrderFilterDto orderFilterDto, Integer pageNumber,
 			Integer pageSize) {
-		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
+		Sort sort = Sort.by(Direction.DESC, "updatedAt");
+		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
 
 		Specification<Order> orderSpecification = OrderSpecification.articlesByFilters(orderFilterDto);
 		Page<Order> orderPage = orderDao.findAllOrders(pageable, orderSpecification);

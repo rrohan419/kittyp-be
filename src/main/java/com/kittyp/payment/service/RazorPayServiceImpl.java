@@ -3,6 +3,8 @@
  */
 package com.kittyp.payment.service;
 
+import java.math.BigDecimal;
+
 import org.json.JSONObject;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
@@ -47,9 +49,9 @@ public class RazorPayServiceImpl implements RazorPayService {
         }
 		
 		JSONObject orderRequest = new JSONObject();
-		orderRequest.put(RazorPayConstant.AMOUNT,orderRequestDto.getAmount()*100);
+		orderRequest.put(RazorPayConstant.AMOUNT, orderRequestDto.getAmount().multiply(BigDecimal.valueOf(100)));
 		orderRequest.put(RazorPayConstant.CURRENCY,orderRequestDto.getCurrency());
-		orderRequest.put(RazorPayConstant.RECEIPT, orderRequestDto.getRecipt());
+		orderRequest.put(RazorPayConstant.RECEIPT, orderRequestDto.getReceipt());
 		orderRequest.put(RazorPayConstant.NOTES, orderRequestDto.getNotes() != null ? new JSONObject(orderRequestDto.getNotes()) : new JSONObject());
 
 		try {
@@ -57,11 +59,13 @@ public class RazorPayServiceImpl implements RazorPayService {
 			System.out.println("order -----------------------------------"+order);
 			CreateOrderModel orderModel = mapper.convertJsonToObejct(order.toJson(), CreateOrderModel.class);
 			
-			com.kittyp.order.entity.Order dbOrder = orderDao.orderByOrderNumber(orderRequestDto.getRecipt());
+			com.kittyp.order.entity.Order dbOrder = orderDao.orderByOrderNumber(orderRequestDto.getReceipt());
 			dbOrder.setAggregatorOrderNumber(orderModel.getId());
 			OrderStatus status = OrderStatus.fromRazorpayStatus(orderModel.getStatus());
 			dbOrder.setStatus(status);
-//			dbOrder.setStatus(orderModel.getStatus());
+			dbOrder.setTotalAmount(orderRequestDto.getAmount());
+			dbOrder.setTaxes(orderRequestDto.getTaxes());
+			
 			orderDao.saveOrder(dbOrder);
 			
 			

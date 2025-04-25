@@ -5,7 +5,6 @@ package com.kittyp.order.service;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.springframework.data.jpa.domain.Specification;
 
 import com.kittyp.common.constants.KeyConstant;
@@ -30,7 +29,7 @@ public class OrderSpecification {
 	public static Specification<Order> articlesByFilters(OrderFilterDto orderFilterDto) {
 		return (Root<Order> root, CriteriaQuery<?> query, CriteriaBuilder builder) -> {
 			List<Predicate> predicates = new ArrayList<>();
-
+			
 			// Filter for active orders
 	        predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), true));
 	        predicates.add(builder.notEqual(root.get("status"), OrderStatus.CREATED));

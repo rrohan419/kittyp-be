@@ -55,6 +55,13 @@ public class Order extends BaseEntity {
 	@Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
 	private BigDecimal totalAmount;
 	
+	@Column(name = "sub_total", nullable = false, precision = 10, scale = 2)
+	private BigDecimal subTotal;
+	
+	@Column(name = "taxes", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+	private Taxes taxes;
+	
 	@Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10, columnDefinition = "VARCHAR(10) DEFAULT 'INR'")
 	@Builder.Default
