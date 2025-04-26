@@ -14,6 +14,7 @@ import com.kittyp.product.entity.Product;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 
@@ -45,6 +46,11 @@ public class ProductSpecification {
 			if(productFilterDto.getMaxPrice() != null) {
 				predicates.add(builder.lessThanOrEqualTo(root.get(KeyConstant.PRODUCT_PRICE), productFilterDto.getMaxPrice()));
 			}
+			
+			if (productFilterDto.getIsRandom() != null && Boolean.TRUE.equals(productFilterDto.getIsRandom())) {
+	            Expression<Double> randomFunction = builder.function("RANDOM", Double.class);
+	            query.orderBy(builder.asc(randomFunction));
+	        }
 			
 			return builder.and(predicates.toArray(new Predicate[0]));
 		};
