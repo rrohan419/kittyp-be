@@ -22,4 +22,6 @@ public class ProductFilterDto {
 	private Integer maxPrice;
 	
 	private ProductStatus status;
+	
+	private Boolean isRandom;
 }

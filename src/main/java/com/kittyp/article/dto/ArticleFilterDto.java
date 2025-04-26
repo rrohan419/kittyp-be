@@ -12,4 +12,6 @@ import lombok.Data;
 public class ArticleFilterDto {
 
 	private String name;
+	
+	private Boolean isRandom;
 }

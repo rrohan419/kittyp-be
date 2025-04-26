@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -63,113 +64,201 @@ public class OrderServiceImpl implements OrderService {
 	/**
 	 * @author rrohan419@gmail.com
 	 */
+//	@Transactional
+//	@Override
+//	public OrderModel createUpdateOrder(OrderDto orderDto) {
+//		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+//		User user = userDao.userByEmail(email);
+//
+//		// 1. Get the latest cart or create a new one
+//		Order order = getLatestCreatedCart(user, orderDto);
+//		order.setTotalAmount(orderDto.getTotalAmount());
+//		order.setBillingAddress(orderDto.getBillingAddress());
+//		order.setShippingAddress(orderDto.getShippingAddress());
+//		order.setCurrency(orderDto.getCurrency());
+//
+//		// 2. Extract incoming order items and their UUIDs
+//		List<OrderItemDto> orderItemDtos = orderDto.getOrderItems();
+//		Map<String, OrderItemDto> dtoItemMap = orderItemDtos.stream()
+//				.collect(Collectors.toMap(OrderItemDto::getProductUuid, Function.identity()));
+//
+//		Set<String> incomingProductUuids = dtoItemMap.keySet();
+//		List<OrderItem> existingItems = order.getOrderItems() != null ? order.getOrderItems() : new ArrayList<>();
+//
+//		// 3. Track existing product UUIDs
+//		Set<String> existingProductUuids = existingItems.stream().map(item -> item.getProduct().getUuid())
+//				.collect(Collectors.toSet());
+//		
+////		Set<String> existingProductUuids = existingItems.stream()
+////		        .filter(item -> item.getProduct() != null)
+////		        .map(item -> item.getProduct().getUuid())
+////		        .collect(Collectors.toSet());
+//
+//
+//		// 4. Remove items not in DTO
+//		List<OrderItem> toRemove = existingItems.stream()
+//				.filter(item -> !incomingProductUuids.contains(item.getProduct().getUuid())).toList();
+//		toRemove.forEach(order::removeOrderItems);
+//
+//		// 5. Update existing items
+//		existingItems.forEach(item -> {
+//			String uuid = item.getProduct().getUuid();
+//			if (dtoItemMap.containsKey(uuid)) {
+//				OrderItemDto dto = dtoItemMap.get(uuid);
+//				item.setQuantity(dto.getQuantity());
+//				item.setPrice(dto.getPrice());
+//				item.setItemDetails(dto.getItemDetails());
+//			}
+//		});
+//
+//		// 6. Add new items
+//		List<String> newUuids = incomingProductUuids.stream().filter(uuid -> !existingProductUuids.contains(uuid))
+//				.toList();
+//
+//		for (String uuid : newUuids) {
+//			Product product = productDao.productUuid(uuid);
+//			if (product == null) {
+//				throw new CustomException(String.format(env.getProperty(ExceptionConstant.PRODUCT_NOT_FOUND), uuid),
+//						HttpStatus.NOT_FOUND);
+//			}
+//
+//			OrderItemDto dto = dtoItemMap.get(uuid);
+//
+//			OrderItem newItem = OrderItem.builder().order(order).product(product).price(dto.getPrice())
+//					.quantity(dto.getQuantity()).itemDetails(dto.getItemDetails()).build();
+//
+//			order.addOrderItem(newItem);
+//		}
+//
+////		 7. Recalculate total
+////		BigDecimal total = order.getOrderItems().stream()
+////				.map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+////				.reduce(BigDecimal.ZERO, BigDecimal::add);
+////		order.setTotalAmount(total);
+//		
+//		// 7. Recalculate subtotal and total amount
+////		BigDecimal subTotal = order.getOrderItems().stream()
+////		        .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+////		        .reduce(BigDecimal.ZERO, BigDecimal::add);
+//		
+//		List<OrderItem> items = order.getOrderItems();
+//		if (items == null) items = Collections.emptyList();
+//
+//		BigDecimal subTotal = items.stream()
+//		    .filter(i -> i != null && i.getPrice() != null)
+//		    .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+//		    .reduce(BigDecimal.ZERO, BigDecimal::add);
+//
+//		order.setSubTotal(subTotal);
+//
+//		BigDecimal serviceCharge = order.getTaxes() != null && order.getTaxes().getServiceCharge() != null
+//		        ? order.getTaxes().getServiceCharge()
+//		        : BigDecimal.ZERO;
+//
+//		BigDecimal shippingCharges = order.getTaxes() != null && order.getTaxes().getShippingCharges() != null
+//		        ? order.getTaxes().getShippingCharges()
+//		        : BigDecimal.ZERO;
+//
+//		BigDecimal totalAmount = subTotal.add(serviceCharge).add(shippingCharges);
+//		order.setTotalAmount(totalAmount);
+//
+//
+//		// 8. Save order and return model
+//		Order saved = orderDao.saveOrder(order);
+//		OrderModel orderModel = mapper.convert(saved, OrderModel.class);
+//		orderModel.setBillingAddress(saved.getBillingAddress());
+//		orderModel.setShippingAddress(saved.getShippingAddress());
+//
+//		return orderModel;
+//	}
+	
 	@Transactional
 	@Override
 	public OrderModel createUpdateOrder(OrderDto orderDto) {
 		String email = SecurityContextHolder.getContext().getAuthentication().getName();
 		User user = userDao.userByEmail(email);
 
-		// 1. Get the latest cart or create a new one
+		// 1. Get or create order
 		Order order = getLatestCreatedCart(user, orderDto);
-		order.setTotalAmount(orderDto.getTotalAmount());
 		order.setBillingAddress(orderDto.getBillingAddress());
 		order.setShippingAddress(orderDto.getShippingAddress());
 		order.setCurrency(orderDto.getCurrency());
 
-		// 2. Extract incoming order items and their UUIDs
-		List<OrderItemDto> orderItemDtos = orderDto.getOrderItems();
+		List<OrderItemDto> orderItemDtos = Optional.ofNullable(orderDto.getOrderItems()).orElse(Collections.emptyList());
+		if (orderItemDtos.isEmpty()) {
+			order.setOrderItems(new ArrayList<>());
+			order.setSubTotal(BigDecimal.ZERO);
+			order.setTotalAmount(BigDecimal.ZERO);
+			return mapper.convert(orderDao.saveOrder(order), OrderModel.class);
+		}
+
 		Map<String, OrderItemDto> dtoItemMap = orderItemDtos.stream()
-				.collect(Collectors.toMap(OrderItemDto::getProductUuid, Function.identity()));
+				.collect(Collectors.toMap(OrderItemDto::getProductUuid, Function.identity(), (a, b) -> b)); // Latest wins
 
-		Set<String> incomingProductUuids = dtoItemMap.keySet();
-		List<OrderItem> existingItems = order.getOrderItems() != null ? order.getOrderItems() : new ArrayList<>();
+		List<OrderItem> existingItems = Optional.ofNullable(order.getOrderItems()).orElse(new ArrayList<>());
+		Map<String, OrderItem> existingItemMap = existingItems.stream()
+				.filter(i -> i.getProduct() != null && i.getProduct().getUuid() != null)
+				.collect(Collectors.toMap(i -> i.getProduct().getUuid(), Function.identity(), (a, b) -> a));
 
-		// 3. Track existing product UUIDs
-		Set<String> existingProductUuids = existingItems.stream().map(item -> item.getProduct().getUuid())
-				.collect(Collectors.toSet());
-		
-//		Set<String> existingProductUuids = existingItems.stream()
-//		        .filter(item -> item.getProduct() != null)
-//		        .map(item -> item.getProduct().getUuid())
-//		        .collect(Collectors.toSet());
+		Set<String> incomingUuids = dtoItemMap.keySet();
 
-
-		// 4. Remove items not in DTO
+		// 2. Remove items not in DTO
 		List<OrderItem> toRemove = existingItems.stream()
-				.filter(item -> !incomingProductUuids.contains(item.getProduct().getUuid())).toList();
+				.filter(item -> item.getProduct() == null || !incomingUuids.contains(item.getProduct().getUuid()))
+				.toList();
 		toRemove.forEach(order::removeOrderItems);
 
-		// 5. Update existing items
-		existingItems.forEach(item -> {
-			String uuid = item.getProduct().getUuid();
-			if (dtoItemMap.containsKey(uuid)) {
-				OrderItemDto dto = dtoItemMap.get(uuid);
+		// 3. Update or Add
+		for (String uuid : incomingUuids) {
+			OrderItemDto dto = dtoItemMap.get(uuid);
+			OrderItem item = existingItemMap.get(uuid);
+
+			if (item != null) {
 				item.setQuantity(dto.getQuantity());
 				item.setPrice(dto.getPrice());
 				item.setItemDetails(dto.getItemDetails());
+			} else {
+				Product product = productDao.productUuid(uuid);
+				if (product == null) {
+					throw new CustomException(String.format(env.getProperty(ExceptionConstant.PRODUCT_NOT_FOUND), uuid), HttpStatus.NOT_FOUND);
+				}
+				item = OrderItem.builder()
+						.order(order)
+						.product(product)
+						.price(dto.getPrice())
+						.quantity(dto.getQuantity())
+						.itemDetails(dto.getItemDetails())
+						.build();
+				order.addOrderItem(item);
 			}
-		});
-
-		// 6. Add new items
-		List<String> newUuids = incomingProductUuids.stream().filter(uuid -> !existingProductUuids.contains(uuid))
-				.toList();
-
-		for (String uuid : newUuids) {
-			Product product = productDao.productUuid(uuid);
-			if (product == null) {
-				throw new CustomException(String.format(env.getProperty(ExceptionConstant.PRODUCT_NOT_FOUND), uuid),
-						HttpStatus.NOT_FOUND);
-			}
-
-			OrderItemDto dto = dtoItemMap.get(uuid);
-
-			OrderItem newItem = OrderItem.builder().order(order).product(product).price(dto.getPrice())
-					.quantity(dto.getQuantity()).itemDetails(dto.getItemDetails()).build();
-
-			order.addOrderItem(newItem);
 		}
 
-//		 7. Recalculate total
-//		BigDecimal total = order.getOrderItems().stream()
-//				.map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
-//				.reduce(BigDecimal.ZERO, BigDecimal::add);
-//		order.setTotalAmount(total);
-		
-		// 7. Recalculate subtotal and total amount
-//		BigDecimal subTotal = order.getOrderItems().stream()
-//		        .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
-//		        .reduce(BigDecimal.ZERO, BigDecimal::add);
-		
-		List<OrderItem> items = order.getOrderItems();
-		if (items == null) items = Collections.emptyList();
-
-		BigDecimal subTotal = items.stream()
-		    .filter(i -> i != null && i.getPrice() != null)
-		    .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
-		    .reduce(BigDecimal.ZERO, BigDecimal::add);
+		// 4. Calculate amounts
+		BigDecimal subTotal = order.getOrderItems().stream()
+				.filter(i -> i.getPrice() != null)
+				.map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+				.reduce(BigDecimal.ZERO, BigDecimal::add);
 
 		order.setSubTotal(subTotal);
 
-		BigDecimal serviceCharge = order.getTaxes() != null && order.getTaxes().getServiceCharge() != null
-		        ? order.getTaxes().getServiceCharge()
-		        : BigDecimal.ZERO;
+		BigDecimal serviceCharge = Optional.ofNullable(order.getTaxes())
+				.map(t -> t.getServiceCharge())
+				.orElse(BigDecimal.ZERO);
 
-		BigDecimal shippingCharges = order.getTaxes() != null && order.getTaxes().getShippingCharges() != null
-		        ? order.getTaxes().getShippingCharges()
-		        : BigDecimal.ZERO;
+		BigDecimal shippingCharge = Optional.ofNullable(order.getTaxes())
+				.map(t -> t.getShippingCharges())
+				.orElse(BigDecimal.ZERO);
 
-		BigDecimal totalAmount = subTotal.add(serviceCharge).add(shippingCharges);
-		order.setTotalAmount(totalAmount);
+		order.setTotalAmount(subTotal.add(serviceCharge).add(shippingCharge));
 
-
-		// 8. Save order and return model
+		// 5. Save and return
 		Order saved = orderDao.saveOrder(order);
-		OrderModel orderModel = mapper.convert(saved, OrderModel.class);
-		orderModel.setBillingAddress(saved.getBillingAddress());
-		orderModel.setShippingAddress(saved.getShippingAddress());
-
-		return orderModel;
+		OrderModel model = mapper.convert(saved, OrderModel.class);
+		model.setBillingAddress(saved.getBillingAddress());
+		model.setShippingAddress(saved.getShippingAddress());
+		return model;
 	}
+
 
 	private Order getLatestCreatedCart(User user, OrderDto orderDto) {
 		Order order = orderDao.getLastCreatedOrder(user.getUuid());

@@ -15,6 +15,7 @@ import com.kittyp.common.constants.KeyConstant;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 
@@ -35,6 +36,11 @@ public class ArticleSpecification {
 			if(articleFilterDto.getName() != null && !articleFilterDto.getName().isEmpty()) {
 				predicates.add(builder.like(builder.lower(root.get(KeyConstant.TITLE)), "%" + articleFilterDto.getName().toLowerCase() + "%"));
 			}
+			
+			if (articleFilterDto.getIsRandom() != null && Boolean.TRUE.equals(articleFilterDto.getIsRandom())) {
+	            Expression<Double> randomFunction = builder.function("RANDOM", Double.class);
+	            query.orderBy(builder.asc(randomFunction));
+	        }
 			
 			return builder.and(predicates.toArray(new Predicate[0]));
 		};
