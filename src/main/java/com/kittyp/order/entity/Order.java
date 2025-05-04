@@ -43,7 +43,7 @@ public class Order extends BaseEntity {
 	private static final long serialVersionUID = 1L;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_id", nullable = false)
+	@JoinColumn(name = "user_uuid", referencedColumnName = "uuid", nullable = false)
 	private User user;
 
 	@Column(name = "order_number", unique = true, nullable = false, length = 20)

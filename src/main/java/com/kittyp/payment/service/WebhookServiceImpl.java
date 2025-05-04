@@ -3,6 +3,7 @@
  */
 package com.kittyp.payment.service;
 
+import org.hibernate.Hibernate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.model.RazorpayResponseModel.PaymentEntity;
 import com.kittyp.payment.repository.WebhookEventRepository;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -32,6 +34,7 @@ public class WebhookServiceImpl implements WebhookService {
 	 * @author rrohan419@gmail.com
 	 */
 	@Async
+//	@Transactional
 	@Override
 	public void razorpayWebbhook(RazorpayResponseModel razorpayResponseModel) {
 		
@@ -50,11 +53,21 @@ public class WebhookServiceImpl implements WebhookService {
 		
 		webhookEventRepository.save(webhookEvent);
 		
-		Order order = orderDao.orderByAggregatorOrderNumber(paymentEntity.getOrder_id());
-		OrderStatus status = OrderStatus.fromRazorpayStatus(paymentEntity.getStatus());
-		order.setStatus(status);
+		try {
+			Order order = orderDao.orderByAggregatorOrderNumber(paymentEntity.getOrder_id());
+			if (order != null) {
+			    Hibernate.initialize(order.getUser());
+			}
+			OrderStatus status = OrderStatus.fromRazorpayStatus(paymentEntity.getStatus());
+			order.setStatus(status);
+			System.out.println("paymentEntity.getStatus() -----------------------------------"+paymentEntity.getStatus());
+			System.out.println("webhook updated order -----------------------------------"+order);
+			orderDao.saveOrder(order);
+		} catch (Exception e) {
+			System.out.println(e.getMessage());
+		}
 		
-		orderDao.saveOrder(order);
+		
 		
 		System.out.println(razorpayResponseModel);
 		

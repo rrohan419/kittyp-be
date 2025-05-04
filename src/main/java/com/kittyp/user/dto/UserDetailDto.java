@@ -1,0 +1,22 @@
+/**
+ * @author rrohan419@gmail.com
+ */
+package com.kittyp.user.dto;
+
+import java.time.LocalDateTime;
+import java.util.Set;
+
+import lombok.Getter;
+
+/**
+ * @author rrohan419@gmail.com 
+ */
+@Getter
+public class UserDetailDto {
+
+	private String firstName;
+	private String lastName;
+    private String email;
+    private String phoneNumber;
+    private String phoneCountryCode;
+}

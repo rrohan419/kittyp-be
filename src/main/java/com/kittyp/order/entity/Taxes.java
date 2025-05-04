@@ -20,4 +20,5 @@ public class Taxes implements Serializable {
 
 	private BigDecimal serviceCharge;
 	private BigDecimal shippingCharges;
+	private BigDecimal otherTax;
 }

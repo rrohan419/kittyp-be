@@ -9,7 +9,7 @@ package com.kittyp.order.emus;
 public enum OrderStatus{
 	CREATED,        // When order is created
     SUCCESSFULL,     // When payment is authorized (especially for UPI, Netbanking)
-    CAPTURED,       // Final successful state (for captured payments)
+    DELIVERED,       // Final successful DELIVERY state
     FAILED,         // Payment failed
     REFUNDED,       // If refund happens
     CANCELLED,      // If order is manually cancelled
@@ -18,8 +18,9 @@ public enum OrderStatus{
     public static OrderStatus fromRazorpayStatus(String status) {
         switch (status.toLowerCase().trim()) {
             case "created": return CREATED;
-            case "authorized": return SUCCESSFULL;
-            case "captured": return CAPTURED;
+            case "captured", "authorized": return SUCCESSFULL;
+//            case "authorized": return SUCCESSFULL;
+//            case "captured": return CAPTURED;
             case "failed": return FAILED;
             case "cancelled": return CANCELLED;
             case "refund_initiated": return REFUND_INITIATED;

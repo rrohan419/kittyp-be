@@ -10,6 +10,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +22,7 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.models.UserDetailsModel;
 import com.kittyp.user.service.UserService;
 
@@ -44,6 +47,16 @@ public class UserController {
 		String email = SecurityContextHolder.getContext().getAuthentication().getName();
 		
         UserDetailsModel response = userService.userDetailsByEmail(email);
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+	
+	@PostMapping(ApiUrl.USER_BASE_URL)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<UserDetailsModel>> updateUserDetails(@RequestParam(required = false) String userUuid, @RequestBody UserDetailDto userDetailDto) {
+        
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		
+        UserDetailsModel response = userService.updateUserDetail(email, userDetailDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 	
