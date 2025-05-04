@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
+import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserRole;
 import com.kittyp.user.enums.ERole;
@@ -64,6 +65,30 @@ public class UserServiceImpl implements UserService {
 		user.addRole(roleDao.roleByName(ERole.ROLE_ADMIN));
 		
 		userDao.saveUser(user);
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public UserDetailsModel updateUserDetail(String email, UserDetailDto userDetailDto) {
+		User user = userDao.userByEmail(email);
+		
+		if(userDetailDto.getEmail() != null && !userDetailDto.getEmail().isBlank()) {
+			user.setEmail(userDetailDto.getEmail());
+		}
+		
+		if(userDetailDto.getFirstName() != null && !userDetailDto.getFirstName().isBlank()) {
+			user.setFirstName(userDetailDto.getFirstName());
+		}
+		if(userDetailDto.getLastName() != null && !userDetailDto.getLastName().isBlank()) {
+			user.setLastName(userDetailDto.getLastName());
+		}
+		
+		
+		user = userDao.saveUser(user);
+		
+		return mapper.convert(user, UserDetailsModel.class);
 	}
 
 }

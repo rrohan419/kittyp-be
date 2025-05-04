@@ -3,6 +3,7 @@
  */
 package com.kittyp.user.models;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
@@ -21,9 +22,10 @@ public class UserDetailsModel {
     
 	private String firstName;
 	private String lastName;
-    private Long id;
     private String email;
     private Set<String> roles;
-    private boolean enabled;
     private String uuid;
+    private LocalDateTime createdAt;
+    private String phoneNumber;
+    private String phoneCountryCode;
 }
