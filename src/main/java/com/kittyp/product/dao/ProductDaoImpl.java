@@ -82,4 +82,17 @@ public class ProductDaoImpl implements ProductDao {
 		}
 	}
 
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public Integer productCount(Boolean isActive) {
+		try {
+			return productRepository.countByIsActive(isActive);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR, e);
+		}
+	}
+
 }

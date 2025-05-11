@@ -12,10 +12,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import com.kittyp.auth.util.AuthEntryPointJwt;
-import com.kittyp.auth.util.AuthenticationFilter;
 
 import lombok.RequiredArgsConstructor;
 
@@ -26,7 +24,6 @@ import lombok.RequiredArgsConstructor;
 public class SecurityConfig {
 
 	private final AuthEntryPointJwt authEntryPointJwt;
-	private final AuthenticationFilter authenticationFilter;
 	private final JwtAccessDeniedHandler accessDeniedHandler;
 
 	@Bean
@@ -47,9 +44,9 @@ public class SecurityConfig {
 				.exceptionHandling(exception -> exception.authenticationEntryPoint(authEntryPointJwt)
 						.accessDeniedHandler(accessDeniedHandler))
 				.authorizeHttpRequests(auth -> auth
-						.requestMatchers("/api/v1/article/**","/api/v1/auth/**","/api/v1/webhook/**", "/api/v1/product/**", "/api/v1/public/**", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/**")
+//						.requestMatchers("/api/v1/article/**","/api/v1/auth/**","/api/v1/webhook/**", "/api/v1/product/**", "/api/v1/public/**", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/**")
+						.requestMatchers("/api/v1/**")
 						.permitAll().anyRequest().authenticated());
-		http.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
 		return http.build();
 	}

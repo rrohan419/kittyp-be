@@ -17,7 +17,6 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,51 +33,13 @@ public class JwtUtils {
     
     @Value("${jwt.audience}")
     private String audience;
-    
-    private Key key;
-    
+        
     @Autowired
     private Environment env;
+
     
-    @PostConstruct
-    public void init() {
-//        try {
-//            // Ensure the jwtSecret is properly base64 encoded and has sufficient length for HS512
-//            // The secret should be at least 64 bytes (512 bits) for HS512
-//            byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
-//            
-//            if (keyBytes.length < 64) {
-//                logger.warn("JWT secret key is too short for HS512. Using a secure generated key instead.");
-//                this.key = Keys.secretKeyFor(SignatureAlgorithm.HS512);
-//            } else {
-//                this.key = Keys.hmacShaKeyFor(keyBytes);
-//            }
-//            
-//            logger.info("JWT signing key initialized successfully");
-//        } catch (Exception e) {
-//            logger.error("Failed to initialize JWT key from secret. Using a secure generated key instead.", e);
-//            // Fallback to a secure generated key
-//            this.key = Keys.secretKeyFor(SignatureAlgorithm.HS512);
-//        }
-    	
-    	try {
-            // Ensure the jwtSecret is properly base64 encoded and has sufficient length for HS512
-            // The secret should be at least 64 bytes (512 bits) for HS512
-            byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
-            
-            if (keyBytes.length < 64) {
-                logger.warn("JWT secret key is too short for HS512. Using a secure generated key instead.");
-                this.key = Keys.secretKeyFor(SignatureAlgorithm.HS512);
-            } else {
-                this.key = Keys.hmacShaKeyFor(keyBytes);
-            }
-            
-            logger.info("JWT signing key initialized successfully");
-        } catch (Exception e) {
-            logger.error("Failed to initialize JWT key from secret. Using a secure generated key instead.", e);
-            // Fallback to a secure generated key
-            this.key = Keys.secretKeyFor(SignatureAlgorithm.HS512);
-        }
+    private Key key(){
+        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
     }
     
     public String generateJwtToken(Authentication authentication) {
@@ -89,14 +50,14 @@ public class JwtUtils {
                 .setAudience(audience)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
-                .signWith(key, SignatureAlgorithm.HS512)
+                .signWith(key(), SignatureAlgorithm.HS256)
                 .compact();
     }
     
     public String getUserNameFromJwtToken(String token) {
         try {
             return Jwts.parserBuilder()
-                    .setSigningKey(key)
+                    .setSigningKey(key())
                     .build()
                     .parseClaimsJws(token)
                     .getBody()
@@ -109,7 +70,7 @@ public class JwtUtils {
     public boolean validateJwtToken(String authToken) {
         try {
             Jwts.parserBuilder()
-                .setSigningKey(key)
+                .setSigningKey(key())
                 .build()
                 .parseClaimsJws(authToken);
             return true;

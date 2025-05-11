@@ -16,4 +16,6 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 	Product findByUuid(String uuid);
 	
 	boolean existsByNameIgnoreCase(String name);
+	
+	Integer countByIsActive(Boolean isActive);
 }
