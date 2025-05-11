@@ -4,6 +4,7 @@
 package com.kittyp.payment.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import org.json.JSONObject;
 import org.springframework.core.env.Environment;
@@ -65,7 +66,7 @@ public class RazorPayServiceImpl implements RazorPayService {
 			dbOrder.setStatus(status);
 			dbOrder.setTotalAmount(orderRequestDto.getAmount());
 			dbOrder.setTaxes(orderRequestDto.getTaxes());
-			
+			dbOrder.setCreatedAt(LocalDateTime.now());
 			orderDao.saveOrder(dbOrder);
 			
 			
