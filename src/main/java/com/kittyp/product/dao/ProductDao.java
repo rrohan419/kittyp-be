@@ -21,4 +21,6 @@ public interface ProductDao {
 	Product productUuid(String uuid);
 	
 	boolean productExistsByName(String name);
+	
+	Integer productCount(Boolean isActive);
 }

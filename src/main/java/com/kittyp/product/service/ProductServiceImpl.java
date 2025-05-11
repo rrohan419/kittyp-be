@@ -93,4 +93,12 @@ public class ProductServiceImpl implements ProductService {
 		return projectModel;
 	}
 
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public Integer productCount(Boolean isActive) {
+		return productDao.productCount(isActive == null ? true : isActive);
+	}
+
 }

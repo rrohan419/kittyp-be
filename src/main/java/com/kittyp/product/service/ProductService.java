@@ -20,4 +20,5 @@ public interface ProductService {
 	PaginationModel<ProductModel> productsByFilter(ProductFilterDto productFilterDto, Integer pageNumber,
 			Integer pageSize);
 	
+	Integer productCount(Boolean isActive);
 }

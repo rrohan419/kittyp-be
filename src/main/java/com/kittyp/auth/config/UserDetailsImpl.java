@@ -32,7 +32,7 @@ private static final long serialVersionUID = 1L;
         this.authorities = authorities;
     }
     
-    public static UserDetailsImpl build(User user) {
+    public static UserDetails build(User user) {
         List<GrantedAuthority> authorities = user.getUserRoles().stream()
                 .map(userRole -> new SimpleGrantedAuthority(userRole.getRole().getName().name()))
                 .collect(Collectors.toList());

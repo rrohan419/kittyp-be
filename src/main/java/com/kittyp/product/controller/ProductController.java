@@ -53,6 +53,14 @@ public class ProductController {
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
+	
+	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+	@GetMapping(ApiUrl.PRODUCT_COUNT)
+	public ResponseEntity<SuccessResponse<Integer>> productCount(@RequestParam(required = false) Boolean isActive) {
+		Integer response = productService.productCount(isActive);
+
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
 
 	@PostMapping(ApiUrl.ALL_PRODUCT)
     public ResponseEntity<SuccessResponse<PaginationModel<ProductModel>>> getAllProducts(@RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) int page,

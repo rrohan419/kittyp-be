@@ -30,6 +30,7 @@ public class ApiUrl {
 	public static final String PRODUCT_BASE_URL = "/product";
 	public static final String ALL_PRODUCT = PRODUCT_BASE_URL + "/all";
 	public static final String PRODUCT_BY_UUID = PRODUCT_BASE_URL + "/{uuid}";
+	public static final String PRODUCT_COUNT = "/admin"+PRODUCT_BASE_URL + "/count";
 	
 	// Order controller
 	public static final String ORDER_BASE_URL = "/order";
