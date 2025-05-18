@@ -9,7 +9,7 @@ package com.kittyp.common.constants;
 public class AppConstant {
 	private AppConstant() {}
 	
-	//AWS KEYS
+		//AWS KEYS
 		public static final String AWS_SECRET_KEY = "aws.secret.key";
 		public static final String AWS_ACCESS_KEY = "aws.access.key";
 		
@@ -28,4 +28,12 @@ public class AppConstant {
 	    public static final String MAX_FILE_NAME_LENGTH = "max.file.name.length";
 	    public static final String ATTACHMENT_HEADER = "attachment;";
 	    public static final String FILE_NAME = "filename=";
+	    
+	    // Zoho
+	    public static final String KITTYP = "KittyP";
+		public static final String ZOHO_BEARER_KEY = "Zoho-enczapikey ";
+	    public static final String ZOHO_API_KEY="zoho.api.key";
+	    public static final String KITTYP_MAIL_ID ="kittyp.mail.id";
+	    public static final String ZOHO_EMAIL_SEND_URL="zoho.email.send.url.with.template";
+	    public static final String ZOHO_WELCOME_EMAIL_TEMPLATE_ID="zoho.welcome.template.id";
 }
