@@ -71,7 +71,7 @@ public class OrderServiceImpl implements OrderService {
 		User user = userDao.userByEmail(email);
 
 		// 1. Get or create order
-		Order order = getLatestCreatedCart(user, orderDto);
+		Order order = getLatestCreatedCart(user);
 		order.setBillingAddress(orderDto.getBillingAddress());
 		order.setShippingAddress(orderDto.getShippingAddress());
 		order.setCurrency(orderDto.getCurrency());
@@ -86,8 +86,7 @@ public class OrderServiceImpl implements OrderService {
 		}
 
 		Map<String, OrderItemDto> dtoItemMap = orderItemDtos.stream()
-				.collect(Collectors.toMap(OrderItemDto::getProductUuid, Function.identity(), (a, b) -> b)); // Latest
-																											// wins
+				.collect(Collectors.toMap(OrderItemDto::getProductUuid, Function.identity(), (a, b) -> b)); 
 
 		List<OrderItem> existingItems = Optional.ofNullable(order.getOrderItems()).orElse(new ArrayList<>());
 		Map<String, OrderItem> existingItemMap = existingItems.stream()
@@ -134,20 +133,6 @@ public class OrderServiceImpl implements OrderService {
 
 		order.setSubTotal(subTotal);
 
-//		BigDecimal serviceCharge = Optional.ofNullable(order.getTaxes())
-//				.map(Taxes::getServiceCharge)
-//				.orElse(BigDecimal.ZERO);
-//
-//		BigDecimal shippingCharge = Optional.ofNullable(order.getTaxes())
-//				.map(Taxes::getShippingCharges)
-//				.orElse(BigDecimal.ZERO);
-//		
-//		BigDecimal otherTaxes = Optional.ofNullable(order.getTaxes())
-//				.map(Taxes::getOtherTax)
-//				.orElse(BigDecimal.ZERO);
-//
-//		order.setTotalAmount(subTotal.add(serviceCharge).add(shippingCharge).add(otherTaxes));
-
 		// 5. Save and return
 		Order saved = orderDao.saveOrder(order);
 		OrderModel model = mapper.convert(saved, OrderModel.class);
@@ -156,7 +141,7 @@ public class OrderServiceImpl implements OrderService {
 		return model;
 	}
 
-	private Order getLatestCreatedCart(User user, OrderDto orderDto) {
+	private Order getLatestCreatedCart(User user) {
 		Order order = orderDao.getLastCreatedOrder(user.getUuid());
 		if (order == null) {
 			order = new Order();

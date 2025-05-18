@@ -17,7 +17,6 @@ public class RestClientConfig {
 
 	@Bean
 	RestClient restClient() {
-
 		return RestClient
 				.builder()
 				.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)

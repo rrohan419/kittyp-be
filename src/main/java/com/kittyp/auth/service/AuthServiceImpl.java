@@ -21,6 +21,7 @@ import com.kittyp.common.dto.SignupRequestDto;
 import com.kittyp.common.exception.ResourceAlreadyExistsException;
 import com.kittyp.common.model.JwtResponseModel;
 import com.kittyp.common.model.MessageResponse;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Role;
@@ -40,6 +41,7 @@ public class AuthServiceImpl implements AuthService {
 	private final RoleDao roleDao;
 	private final AuthenticationManager authenticationManager;
 	private final JwtUtils jwtUtils;
+	private final ZeptoMailService zeptoMailService;
 
 	@Transactional
 	@Override
@@ -90,6 +92,7 @@ public class AuthServiceImpl implements AuthService {
 
 		user.getUserRoles().addAll(userRoles);
 		userDao.saveUser(user);
+		zeptoMailService.sendWelcomeEmail(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
