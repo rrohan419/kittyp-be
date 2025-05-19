@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <style>
+        body { font-family: 'Helvetica'; font-size: 12px; margin: 2em; position: relative; }
+        h1 { color: #444; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 8px; border: 1px solid #ddd; }
+        .right-align { text-align: right; }
+        .summary-table td { border: none; }
+        .footer {
+            position: fixed;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Invoice #<span th:text="${invoice.invoiceNumber}"></span></h1>
+    <p>Date: <span th:text="${invoice.date}"></span></p>
+    <p>Customer: <span th:text="${invoice.customerName}"></span></p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="item : ${invoice.items}">
+                <td th:text="${item.name}">Item</td>
+                <td th:text="${item.quantity}">1</td>
+                <td th:text="${item.price}">10.00</td>
+                <td th:text="${item.total}">10.00</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Cost Summary -->
+    <table class="summary-table" style="margin-top: 30px; width: 100%;">
+        <tr>
+            <td class="right-align">Subtotal:</td>
+            <td class="right-align" th:text="${invoice.subtotal}"></td>
+        </tr>
+        <tr>
+            <td class="right-align">Shipping:</td>
+            <td class="right-align" th:text="${invoice.shippingCost}"></td>
+        </tr>
+        <tr>
+            <td class="right-align">Tax:</td>
+            <td class="right-align" th:text="${invoice.tax}"></td>
+        </tr>
+        <tr>
+            <td class="right-align">Service Charges:</td>
+            <td class="right-align" th:text="${invoice.serviceCharges}"></td>
+        </tr>
+        <tr>
+            <td class="right-align" style="font-weight: bold;">Grand Total:</td>
+            <td class="right-align" style="font-weight: bold;" th:text="${invoice.total}"></td>
+        </tr>
+    </table>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>
+            Thank you for your purchase! | Kittyp Pvt. Ltd. | 123 Street Name, City, Country | 
+            support@kittyp.in | +91-9876543210
+        </p>
+    </div>
+
+</body>
+</html>

@@ -12,12 +12,14 @@ import com.kittyp.email.entity.EmailAudit;
 import com.kittyp.email.model.ZeptoWebhookEventRequest;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * @author rrohan419@gmail.com 
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EmailAuditServiceImpl implements EmailAuditService {
 
 	private final EmailAuditDao emailAuditDao;
@@ -31,7 +33,6 @@ public class EmailAuditServiceImpl implements EmailAuditService {
 		EmailAudit emailAudit = mapper.convert(emailAuditDto, EmailAudit.class);
 		
 		emailAuditDao.save(emailAudit);
-
 	}
 
 	/**
@@ -42,6 +43,7 @@ public class EmailAuditServiceImpl implements EmailAuditService {
 //		EmailAudit savedAudit = emailAuditDao.emailAuditByRequestId(webhookEventRequest.getEventMessage().get(0).getRequestId());
 		
 //		if(savedAudit == null) {
+		log.info("zepto mail webhook triggered with wehook request id : "+webhookEventRequest.getWebhookRequestId());
 			EmailAudit emailAudit = new EmailAudit();
 			emailAudit.setWebhookRequestId(webhookEventRequest.getWebhookRequestId());
 			emailAudit.setEventName(webhookEventRequest.getEventName().get(0));
@@ -51,6 +53,8 @@ public class EmailAuditServiceImpl implements EmailAuditService {
 			emailAudit.setIpLocationInfo(webhookEventRequest.getEventMessage().get(0).getEventData().get(0).getDetails().get(0).getIpLocationInfo());
 			emailAudit.setProvider("Zepto Mail");
 			emailAuditDao.save(emailAudit);
+			
+			log.info("zepto mail webhook triggered with wehook request id : "+webhookEventRequest.getWebhookRequestId());
 //			return mapper.convert(savedAudit, EmailAuditModel.class);
 //		}
 		
