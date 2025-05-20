@@ -16,6 +16,9 @@ public class ApiUrl {
 	public static final String AUTH_BASE_URL = "/auth";
 	public static final String SIGNUP = AUTH_BASE_URL+"/signup";
 	public static final String SIGNIN = AUTH_BASE_URL+"/signin";
+	public static final String SEND_CODE = AUTH_BASE_URL+"/send-code";
+	public static final String VERIFY_CODE = AUTH_BASE_URL+"/verify-code";
+	public static final String USER_PASSWORD_RESET = AUTH_BASE_URL + "/password-reset";
 	
 	// User controller
 	public static final String USER_BASE_URL = "/user";

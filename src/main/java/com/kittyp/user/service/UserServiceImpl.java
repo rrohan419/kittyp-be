@@ -5,11 +5,15 @@ package com.kittyp.user.service;
 
 import java.util.stream.Collectors;
 
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.kittyp.common.util.Mapper;
+import com.kittyp.common.util.VerificationCodeService;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
+import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserRole;
@@ -29,6 +33,9 @@ public class UserServiceImpl implements UserService {
 	private final UserDao userDao;
 	private final Mapper mapper;
 	private final RoleDao roleDao;
+	private final VerificationCodeService verificationCodeService;
+	private final PasswordEncoder encoder;
+	private final ZeptoMailService zeptoMailService;
 	
 	/**
 	 * @author rrohan419@gmail.com
@@ -43,15 +50,6 @@ public class UserServiceImpl implements UserService {
                         .collect(Collectors.toSet()));
 		
 		return userDetailsModel;
-//		return UserDetailsModel.builder()
-//                .id(user.getId())
-//                .email(user.getEmail())
-//                .roles(user.getUserRoles().stream()
-//                        .map(UserRole::getRole)
-//                        .map(role -> role.getName().name())
-//                        .collect(Collectors.toSet()))
-//                .enabled(user.isEnabled())
-//                .build();
 	}
 
 	/**
@@ -89,6 +87,45 @@ public class UserServiceImpl implements UserService {
 		user = userDao.saveUser(user);
 		
 		return mapper.convert(user, UserDetailsModel.class);
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public boolean updatePassword(UpdatePasswordDto updatePasswordDto) {
+		User user = userDao.userByEmail(updatePasswordDto.getEmail());
+		boolean verified = verificationCodeService.verifyCode(user.getUuid(), updatePasswordDto.getCode(), true);
+		
+		if(verified) {
+		user.setPassword(encoder.encode(updatePasswordDto.getPassword()));
+		userDao.saveUser(user);
+		return true;
+	}
+	return false;
+	}
+	
+
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public boolean sendResetPasswordCode(String email) {
+		User user = userDao.userByEmail(email);
+		zeptoMailService.sendPasswordResetCode(user.getEmail());
+		return true;
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public boolean verifyResetPasswordCode(String code, String email) {
+		User user = userDao.userByEmail(email);
+		return verificationCodeService.verifyCode(user.getUuid(), code, false);
+		
+
 	}
 
 }
