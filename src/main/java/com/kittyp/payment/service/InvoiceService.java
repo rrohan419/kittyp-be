@@ -3,12 +3,14 @@
  */
 package com.kittyp.payment.service;
 
-import com.kittyp.order.entity.Order;
+import java.net.URL;
 
 /**
  * @author rrohan419@gmail.com 
  */
 public interface InvoiceService {
 
-	void generateInvoice(String orderNumber);
+	void generateInvoiceAndSaveInS3(String orderNumber);
+	
+	URL getInvoicePresignedUrl(String orderNumber, String userUuid);
 }
