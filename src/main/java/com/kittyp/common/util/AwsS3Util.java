@@ -18,7 +18,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 @Slf4j
 @Configuration
@@ -26,20 +26,17 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 public class AwsS3Util {
 
 	private final Environment env;
-	
-//	@Bean
-//    public S3Client s3Client() {
-//        return S3Client.builder()
-//                .region(Region.of(env.getProperty(AppConstant.S3_REGION)))
-//                .credentialsProvider(DefaultCredentialsProvider.create())
-//                .build();
-//    }
-//	
-//	 @Bean
-//	    public S3Presigner s3Presigner() {
-//	        return S3Presigner.builder()
-//	                .region(Region.of(env.getProperty(AppConstant.S3_REGION)))
-//	                .credentialsProvider(DefaultCredentialsProvider.create())
-//	                .build();
-//	    }
+
+	@Bean
+	public S3Client s3Client() {
+		log.info("initilizing aws s3 slient for regiion ===> "+ env.getProperty(AppConstant.S3_REGION));
+		return S3Client.builder().region(Region.of(env.getProperty(AppConstant.S3_REGION)))
+				.credentialsProvider(DefaultCredentialsProvider.create()).build();
+	}
+
+	@Bean
+	public S3Presigner s3Presigner() {
+		return S3Presigner.builder().region(Region.of(env.getProperty(AppConstant.S3_REGION)))
+				.credentialsProvider(DefaultCredentialsProvider.create()).build();
+	}
 }

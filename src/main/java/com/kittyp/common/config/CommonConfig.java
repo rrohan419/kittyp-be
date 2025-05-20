@@ -30,10 +30,4 @@ public class CommonConfig {
 			}
 		};
 	}
-
-	@Bean
-	public S3Presigner s3Presigner() {
-		return S3Presigner.builder().region(Region.of("ap-south-1"))
-				.credentialsProvider(DefaultCredentialsProvider.create()).build();
-	}
 }
