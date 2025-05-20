@@ -3,6 +3,8 @@
  */
 package com.kittyp.order.controller;
 
+import java.net.URL;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +27,7 @@ import com.kittyp.order.dto.OrderFilterDto;
 import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.model.OrderModel;
 import com.kittyp.order.service.OrderService;
+import com.kittyp.payment.service.InvoiceService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +41,7 @@ import lombok.RequiredArgsConstructor;
 public class OrderController {
 	private final ApiResponse responseBuilder;
 	private final OrderService orderService;
+	private final InvoiceService invoiceService;
 
 	@PostMapping(ApiUrl.ORDER_CREATE)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
@@ -78,6 +82,14 @@ public class OrderController {
 	public ResponseEntity<SuccessResponse<OrderModel>> userLastCreatedOrders(@PathVariable String userUuid) {
         		
 		OrderModel response = orderService.latestCreatedCartByUser(userUuid);
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+	
+	@GetMapping(ApiUrl.ORDER_INVOICE_BY_USER)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<URL>> orderInvoice(@PathVariable String orderNumber, @RequestParam(required = false) String userUuid) {
+        		
+		URL response = invoiceService.getInvoicePresignedUrl(orderNumber, userUuid);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 }

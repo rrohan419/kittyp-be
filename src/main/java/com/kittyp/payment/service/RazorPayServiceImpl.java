@@ -25,10 +25,12 @@ import com.razorpay.RazorpayException;
 import com.razorpay.Utils;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * @author rrohan419@gmail.com 
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RazorPayServiceImpl implements RazorPayService {
@@ -36,6 +38,7 @@ public class RazorPayServiceImpl implements RazorPayService {
 	private final Environment env;
 	private final Mapper mapper;
 	private final OrderDao orderDao;
+	private final InvoiceService invoiceService;
 	/**
 	 * @author rrohan419@gmail.com
 	 */
@@ -57,7 +60,7 @@ public class RazorPayServiceImpl implements RazorPayService {
 
 		try {
 			Order order = razorpayClient.orders.create(orderRequest);
-			System.out.println("order -----------------------------------"+order);
+			log.info("order -----------------------------------"+order.toString());
 			CreateOrderModel orderModel = mapper.convertJsonToObejct(order.toJson(), CreateOrderModel.class);
 			
 			com.kittyp.order.entity.Order dbOrder = orderDao.orderByOrderNumber(orderRequestDto.getReceipt());
@@ -68,7 +71,6 @@ public class RazorPayServiceImpl implements RazorPayService {
 			dbOrder.setTaxes(orderRequestDto.getTaxes());
 			dbOrder.setCreatedAt(LocalDateTime.now());
 			orderDao.saveOrder(dbOrder);
-			
 			
 			return orderModel;
 		} catch (RazorpayException e) {
@@ -96,6 +98,7 @@ public class RazorPayServiceImpl implements RazorPayService {
 	    	com.kittyp.order.entity.Order order = orderDao.orderByAggregatorOrderNumber(verificationRequest.getOrderId());
 	    	order.setStatus(OrderStatus.SUCCESSFULL);
 	    	orderDao.saveOrder(order);
+	    	invoiceService.generateInvoiceAndSaveInS3(order.getOrderNumber());
 	        return "Payment verified";
 	    } else {
 //	        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid signature");

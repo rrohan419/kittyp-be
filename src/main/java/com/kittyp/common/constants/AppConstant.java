@@ -10,11 +10,11 @@ public class AppConstant {
 	private AppConstant() {}
 	
 		//AWS KEYS
-		public static final String AWS_SECRET_KEY = "aws.secret.key";
-		public static final String AWS_ACCESS_KEY = "aws.access.key";
 		
 		public static final String AWS_INVOICE_BUCKET_NAME="aws.invoice.bucket.name";
 		public static final String S3_REGION="amazon.s3.region";
+		public static final String AWS_ACCESS_KEY_ID="aws.access.key.id";
+		public static final String AWS_SECRET_KEY = "aws.secret.key";
 		
 		// AWS S3 constants
 	    public static final String S3_BUCKET_NAME = "amazon.s3.bucket.name";
