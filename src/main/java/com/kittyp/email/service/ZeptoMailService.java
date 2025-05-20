@@ -9,4 +9,6 @@ package com.kittyp.email.service;
 public interface ZeptoMailService {
 
 	void sendWelcomeEmail(String recipientEmail);
+	
+	void sendPasswordResetCode(String email);
 }
