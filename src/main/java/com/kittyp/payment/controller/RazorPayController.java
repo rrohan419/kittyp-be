@@ -3,6 +3,9 @@
  */
 package com.kittyp.payment.controller;
 
+import java.net.URL;
+import java.time.Duration;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +19,7 @@ import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.service.S3StorageService;
 import com.kittyp.payment.dto.RazorPayOrderRequestDto;
 import com.kittyp.payment.dto.RazorpayVerificationRequest;
 import com.kittyp.payment.model.CreateOrderModel;
@@ -34,7 +38,6 @@ public class RazorPayController {
 
 	private final ApiResponse responseBuilder;
 	private final RazorPayService razorPayService;
-	private final InvoiceService invoiceService;
 	
 	
 	@PostMapping("/razorpay")
@@ -54,10 +57,5 @@ public class RazorPayController {
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
-	@GetMapping("/razorpay/test")
-	public ResponseEntity<SuccessResponse<String>> generateInvoice(@RequestParam String orderId) throws Exception {
-	    
-		 invoiceService.generateInvoice(orderId);
-		return responseBuilder.buildSuccessResponse("Success", ResponseMessage.SUCCESS, HttpStatus.OK);
-	}
+	
 }
