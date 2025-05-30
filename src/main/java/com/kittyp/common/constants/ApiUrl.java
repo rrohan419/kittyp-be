@@ -42,4 +42,14 @@ public class ApiUrl {
 	public static final String ORDERS_BY_FILTER = ORDER_BASE_URL+"/filter";
 	public static final String CREATED_ORDER_BY_USER = ORDER_BASE_URL+"/created/{userUuid}";
 	public static final String ORDER_INVOICE_BY_USER = ORDER_BASE_URL+"/invoice/{orderNumber}";
+	public static final String ORDER_CHECKOUT = ORDER_BASE_URL+"/checkout/{userUuid}";
+
+	// cart controller
+	public static final String CART_BASE_URL = "/cart";
+	public static final String GET_CART_BY_USER = CART_BASE_URL+"/get/{userUuid}";
+	public static final String ADD_TO_CART = CART_BASE_URL+"/add/{userUuid}";
+	public static final String REMOVE_FROM_CART = CART_BASE_URL+"/remove/{userUuid}/{productUuid}";
+	public static final String CLEAR_CART = CART_BASE_URL+"/clear/{userUuid}";
+
+    public static final String UPDATE_CART_ITEM = CART_BASE_URL+"/update/{userUuid}";
 }

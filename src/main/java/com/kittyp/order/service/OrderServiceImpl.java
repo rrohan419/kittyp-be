@@ -4,16 +4,9 @@
 package com.kittyp.order.service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-import org.springframework.core.env.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -22,29 +15,33 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
-import com.kittyp.common.constants.ExceptionConstant;
+import com.kittyp.cart.dto.CartCheckoutRequest;
+import com.kittyp.cart.entity.Cart;
+import com.kittyp.cart.entity.CartItem;
+import com.kittyp.cart.service.CartService;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.order.dao.OrderDao;
-import com.kittyp.order.dto.OrderDto;
 import com.kittyp.order.dto.OrderFilterDto;
-import com.kittyp.order.dto.OrderItemDto;
-import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.emus.OrderStatus;
+import com.kittyp.order.emus.ShippingTypes;
 import com.kittyp.order.entity.Order;
 import com.kittyp.order.entity.OrderItem;
+import com.kittyp.order.entity.Taxes;
 import com.kittyp.order.model.OrderModel;
 import com.kittyp.order.util.OrderNumberGenerator;
-import com.kittyp.product.dao.ProductDao;
-import com.kittyp.product.entity.Product;
+import com.kittyp.payment.enums.ChargeType;
+import com.kittyp.payment.service.ChargeService;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -56,123 +53,18 @@ public class OrderServiceImpl implements OrderService {
 
 	private final OrderDao orderDao;
 	private final Mapper mapper;
-	private final Environment env;
-	private final ProductDao productDao;
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final UserDao userDao;
-
-	/**
-	 * @author rrohan419@gmail.com
-	 */
-	@Transactional
-	@Override
-	public OrderModel createUpdateOrder(OrderDto orderDto) {
-		String email = SecurityContextHolder.getContext().getAuthentication().getName();
-		User user = userDao.userByEmail(email);
-
-		// 1. Get or create order
-		Order order = getLatestCreatedCart(user);
-		order.setBillingAddress(orderDto.getBillingAddress());
-		order.setShippingAddress(orderDto.getShippingAddress());
-		order.setCurrency(orderDto.getCurrency());
-
-		List<OrderItemDto> orderItemDtos = Optional.ofNullable(orderDto.getOrderItems())
-				.orElse(Collections.emptyList());
-		if (orderItemDtos.isEmpty()) {
-			order.setOrderItems(new ArrayList<>());
-			order.setSubTotal(BigDecimal.ZERO);
-			order.setTotalAmount(BigDecimal.ZERO);
-			return mapper.convert(orderDao.saveOrder(order), OrderModel.class);
-		}
-
-		Map<String, OrderItemDto> dtoItemMap = orderItemDtos.stream()
-				.collect(Collectors.toMap(OrderItemDto::getProductUuid, Function.identity(), (a, b) -> b)); 
-
-		List<OrderItem> existingItems = Optional.ofNullable(order.getOrderItems()).orElse(new ArrayList<>());
-		Map<String, OrderItem> existingItemMap = existingItems.stream()
-				.filter(i -> i.getProduct() != null && i.getProduct().getUuid() != null)
-				.collect(Collectors.toMap(i -> i.getProduct().getUuid(), Function.identity(), (a, b) -> a));
-
-		Set<String> incomingUuids = dtoItemMap.keySet();
-
-		// 2. Remove items not in DTO
-		List<OrderItem> toRemove = existingItems.stream()
-				.filter(item -> item.getProduct() == null || !incomingUuids.contains(item.getProduct().getUuid()))
-				.toList();
-		toRemove.forEach(order::removeOrderItems);
-
-		// 3. Update or Add
-		for (String uuid : incomingUuids) {
-			OrderItemDto dto = dtoItemMap.get(uuid);
-			OrderItem item = existingItemMap.get(uuid);
-
-			if (item != null) {
-				item.setQuantity(dto.getQuantity());
-				item.setPrice(dto.getPrice());
-				item.setItemDetails(dto.getItemDetails());
-			} else {
-				Product product = productDao.productUuid(uuid);
-				if (product == null) {
-					throw new CustomException(String.format(env.getProperty(ExceptionConstant.PRODUCT_NOT_FOUND), uuid),
-							HttpStatus.NOT_FOUND);
-				}
-				item = OrderItem.builder().order(order).product(product).price(dto.getPrice())
-						.quantity(dto.getQuantity()).itemDetails(dto.getItemDetails()).build();
-				order.addOrderItem(item);
-			}
-		}
-
-		// 4. Calculate amounts
-		BigDecimal subTotal = Optional.ofNullable(order.getOrderItems())
-			    .orElse(Collections.emptyList())
-			    .stream()
-			    .filter(i -> i != null && i.getPrice() != null)
-			    .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
-			    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-
-		order.setSubTotal(subTotal);
-
-		// 5. Save and return
-		Order saved = orderDao.saveOrder(order);
-		OrderModel model = mapper.convert(saved, OrderModel.class);
-		model.setBillingAddress(saved.getBillingAddress());
-		model.setShippingAddress(saved.getShippingAddress());
-		return model;
-	}
-
-	private Order getLatestCreatedCart(User user) {
-		Order order = orderDao.getLastCreatedOrder(user.getUuid());
-		if (order == null) {
-			order = new Order();
-			order.setOrderItems(null);
-			order.setUser(user);
-			order.setStatus(OrderStatus.CREATED);
-			order.setOrderNumber(orderNumberGenerator.generateInvoiceNumber());
-			order.setSubTotal(BigDecimal.ZERO);
-			order.setTotalAmount(BigDecimal.ZERO);
-			order = orderDao.saveOrder(order);
-		}
-
-		return order;
-	}
+	private final CartService cartService;
+	private final ChargeService chargeService;
 
 	/**
 	 * @author rrohan419@gmail.com
 	 */
 	@Override
+	@Transactional(readOnly = true)
 	public OrderModel orderDetailsByOrderNumber(String orderNumber) {
 		Order order = orderDao.orderByOrderNumber(orderNumber);
-
-		return mapper.convert(order, OrderModel.class);
-	}
-
-	@Transactional
-	@Override
-	public OrderModel updateOrderStatus(OrderStatusUpdateDto orderStatusUpdateDto) {
-		Order order = orderDao.orderByOrderNumber(orderStatusUpdateDto.getOrderNumber());
-		order.setStatus(orderStatusUpdateDto.getOrderStatus());
-		order = orderDao.saveOrder(order);
 		return mapper.convert(order, OrderModel.class);
 	}
 
@@ -180,29 +72,10 @@ public class OrderServiceImpl implements OrderService {
 	 * @author rrohan419@gmail.com
 	 */
 	@Override
-	public OrderModel latestCreatedCartByUser(String userUuid) {
-		User user = userDao.userByUuid(userUuid);
-		Order order = orderDao.getLastCreatedOrder(user.getUuid());
-		if (order == null) {
-			order = new Order();
-			order.setOrderItems(List.of());
-			order.setUser(user);
-			order.setTotalAmount(BigDecimal.ZERO);
-			order.setStatus(OrderStatus.CREATED);
-			order.setSubTotal(BigDecimal.ZERO);
-			order.setOrderNumber(orderNumberGenerator.generateInvoiceNumber());
-			order = orderDao.saveOrder(order);
-		}
-		return mapper.convert(order, OrderModel.class);
-	}
-
-	/**
-	 * @author rrohan419@gmail.com
-	 */
-	@Override
+	@Transactional(readOnly = true)
 	public PaginationModel<OrderModel> allOrderByFilter(OrderFilterDto orderFilterDto, Integer pageNumber,
 			Integer pageSize) {
-		Sort sort = Sort.by(Direction.DESC, "updatedAt");
+		Sort sort = Sort.by(Direction.DESC, KeyConstant.UPDATED_AT);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
 
 		Specification<Order> orderSpecification = OrderSpecification.articlesByFilters(orderFilterDto);
@@ -224,4 +97,90 @@ public class OrderServiceImpl implements OrderService {
 		return orderModel;
 	}
 
+	@Override
+	@Transactional(isolation = Isolation.REPEATABLE_READ, propagation = Propagation.REQUIRED)
+	public OrderModel createOrderFromCart(String userUuid, CartCheckoutRequest request) {
+		User user = userDao.userByUuid(userUuid);
+		Cart cart = cartService.getOrCreateCart(user);
+
+		if (cart.getCartItems().isEmpty()) {
+			throw new CustomException("Cart is empty", HttpStatus.BAD_REQUEST);
+		}
+
+		// Create order
+		Order order = new Order();
+		order.setUser(user);
+		order.setOrderNumber(orderNumberGenerator.generateInvoiceNumber());
+		order.setStatus(OrderStatus.CREATED);
+
+		// Set addresses
+		order.setBillingAddress(request.getBillingAddress());
+		order.setShippingAddress(request.getShippingAddress());
+
+		// Convert cart items to order items
+		BigDecimal subTotal = BigDecimal.ZERO;
+		for (CartItem cartItem : cart.getCartItems()) {
+			OrderItem orderItem = OrderItem.builder().order(order).product(cartItem.getProduct())
+					.quantity(cartItem.getQuantity()).price(cartItem.getPrice()).build();
+			order.addOrderItem(orderItem);
+			subTotal = subTotal.add(cartItem.getTotal());
+		}
+
+		// Calculate totals
+		order.setSubTotal(subTotal);
+
+		// Add shipping cost based on method
+		BigDecimal shippingCost = calculateShippingCost(request.getShippingMethod());
+
+
+//		// Calculate tax
+//		BigDecimal tax = calculateTax(subTotal);
+//
+//		// Calculate Service charge
+//		BigDecimal serviceCharge = calculateServiceCharge(subTotal);
+//
+//		Taxes taxes = new Taxes();
+//		taxes.setShippingCharges(shippingCost);
+//		taxes.setOtherTax(tax);
+//		taxes.setServiceCharge(serviceCharge);
+		
+		Map<ChargeType, BigDecimal> charges = chargeService.chargeBreakdown(subTotal, List.of(ChargeType.GST, ChargeType.SERVICE_CHARGE));
+		BigDecimal tax = charges.getOrDefault(ChargeType.GST, BigDecimal.ZERO);
+		BigDecimal serviceCharge = charges.getOrDefault(ChargeType.SERVICE_CHARGE, BigDecimal.ZERO);
+
+		Taxes taxes = new Taxes();
+		taxes.setOtherTax(tax);
+		taxes.setServiceCharge(serviceCharge);
+		taxes.setShippingCharges(shippingCost);
+
+		BigDecimal totalAmount = subTotal.add(shippingCost).add(tax).add(serviceCharge);
+		order.setTaxes(taxes);
+		order.setTotalAmount(totalAmount);
+
+
+		// Set total amount
+		order.setTotalAmount(subTotal.add(shippingCost).add(tax).add(serviceCharge));
+		order.setTaxes(taxes);
+
+		// Save order
+		Order savedOrder = orderDao.saveOrder(order);
+
+		// Clear the cart
+		cartService.clearCart(userUuid);
+
+		return mapper.convert(savedOrder, OrderModel.class);
+	}
+
+	public BigDecimal calculateShippingCost(ShippingTypes shippingMethod) {
+	    return shippingMethod.getCost();
+	}
+
+//
+//	private BigDecimal calculateTax(BigDecimal amount) {
+//		return amount.multiply(new BigDecimal("0.18")); // 18% GST
+//	}
+//
+//	private BigDecimal calculateServiceCharge(BigDecimal amount) {
+//		return amount.multiply(new BigDecimal("0.05")); // 5%
+//	}
 }
