@@ -59,13 +59,10 @@ public class ProductDaoImpl implements ProductDao {
 	 */
 	@Override
 	public Product productUuid(String uuid) {
-		try {
-			return productRepository.findByUuid(uuid);
-		} catch (Exception e) {
-			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
-					HttpStatus.INTERNAL_SERVER_ERROR, e);
-
-		}
+		return productRepository.findByUuid(uuid)
+		.orElseThrow(() -> new CustomException(
+						String.format(env.getProperty(ExceptionConstant.PRODUCT_NOT_FOUND), uuid),
+						HttpStatus.NOT_FOUND));
 	}
 
 	/**

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.cart.dto.CartCheckoutRequest;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -43,53 +44,59 @@ public class OrderController {
 	private final OrderService orderService;
 	private final InvoiceService invoiceService;
 
-	@PostMapping(ApiUrl.ORDER_CREATE)
-	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	public ResponseEntity<SuccessResponse<OrderModel>> createUpdateOrder(@RequestBody @Valid OrderDto orderDto) {
-
-		OrderModel response = orderService.createUpdateOrder(orderDto);
-		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-	}
-	
 	@PostMapping(ApiUrl.ORDERS_BY_FILTER)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	public ResponseEntity<SuccessResponse<PaginationModel<OrderModel>>> userOrders(@RequestBody OrderFilterDto orderFilterDto,
-			@RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) int page,
+	public ResponseEntity<SuccessResponse<PaginationModel<OrderModel>>> userOrders(
+			@RequestBody OrderFilterDto orderFilterDto, @RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) int page,
 			@RequestParam(defaultValue = KeyConstant.PAGE_SIZE) int size) {
-        		
+
 		PaginationModel<OrderModel> response = orderService.allOrderByFilter(orderFilterDto, page, size);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
-	
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
 	@GetMapping(ApiUrl.ORDER_BASE_URL)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
 	public ResponseEntity<SuccessResponse<OrderModel>> orderByOrderNumber(@RequestParam String orderNumber) {
-        		
+
 		OrderModel response = orderService.orderDetailsByOrderNumber(orderNumber);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
-	
-	@PostMapping(ApiUrl.ORDER_STATUS_UPDATE)
-	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	public ResponseEntity<SuccessResponse<OrderModel>> orderStatusyUpdate(@RequestBody OrderStatusUpdateDto orderQuantityUpdateDto) {
-        		
-		OrderModel response = orderService.updateOrderStatus(orderQuantityUpdateDto);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
-	
-	@GetMapping(ApiUrl.CREATED_ORDER_BY_USER)
-	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	public ResponseEntity<SuccessResponse<OrderModel>> userLastCreatedOrders(@PathVariable String userUuid) {
-        		
-		OrderModel response = orderService.latestCreatedCartByUser(userUuid);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
-	
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	// @PostMapping(ApiUrl.ORDER_STATUS_UPDATE)
+	// @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	// public ResponseEntity<SuccessResponse<OrderModel>>
+	// orderStatusyUpdate(@RequestBody OrderStatusUpdateDto orderQuantityUpdateDto)
+	// {
+
+	// OrderModel response = orderService.updateOrderStatus(orderQuantityUpdateDto);
+	// return responseBuilder.buildSuccessResponse(response,
+	// ResponseMessage.SUCCESS, HttpStatus.OK);
+	// }
+
+	// @GetMapping(ApiUrl.CREATED_ORDER_BY_USER)
+	// @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	// public ResponseEntity<SuccessResponse<OrderModel>>
+	// userLastCreatedOrders(@PathVariable String userUuid) {
+
+	// OrderModel response = orderService.latestCreatedCartByUser(userUuid);
+	// return responseBuilder.buildSuccessResponse(response,
+	// ResponseMessage.SUCCESS, HttpStatus.OK);
+	// }
+
 	@GetMapping(ApiUrl.ORDER_INVOICE_BY_USER)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	public ResponseEntity<SuccessResponse<URL>> orderInvoice(@PathVariable String orderNumber, @RequestParam(required = false) String userUuid) {
-        		
+	public ResponseEntity<SuccessResponse<URL>> orderInvoice(@PathVariable String orderNumber,
+			@RequestParam(required = false) String userUuid) {
+
 		URL response = invoiceService.getInvoicePresignedUrl(orderNumber, userUuid);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.ORDER_CHECKOUT)
+	// @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<OrderModel>> createOrder(@PathVariable String userUuid,
+			@Valid @RequestBody CartCheckoutRequest request) {
+		OrderModel response = orderService.createOrderFromCart(userUuid, request);
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
 }

@@ -24,6 +24,11 @@ public class KeyConstant {
 	public static final String PRODUCT_CATEGORY = "category";
 	public static final String PRODUCT_PRICE = "price";
 	public static final String PRODUCT_NAME = "name";
+	public static final String UPDATED_AT = "updatedAt";
+	
+	// shipping type
+	public static final String EXPRESS_SHIPPING = "EXPRESS";
+	public static final String STANDRAD_SHIPPING = "STANDARD";
 
 	
 	

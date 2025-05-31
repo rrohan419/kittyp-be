@@ -13,19 +13,25 @@ public enum OrderStatus{
     FAILED,         // Payment failed
     REFUNDED,       // If refund happens
     CANCELLED,      // If order is manually cancelled
-	REFUND_INITIATED;
+	REFUND_INITIATED,
+    CAPTURED,
+    PROCESSING,
+    PAYMENT_PENDING,
+    PAYMENT_TIMEOUT,
+    PAYMENT_CANCELLED;
     
     public static OrderStatus fromRazorpayStatus(String status) {
-        switch (status.toLowerCase().trim()) {
-            case "created": return CREATED;
-            case "captured", "authorized": return SUCCESSFULL;
-//            case "authorized": return SUCCESSFULL;
-//            case "captured": return CAPTURED;
-            case "failed": return FAILED;
-            case "cancelled": return CANCELLED;
-            case "refund_initiated": return REFUND_INITIATED;
-            case "refunded","partially_refunded": return REFUNDED;
-            default: throw new IllegalArgumentException("Unknown Razorpay status: " + status);
-        }
+        return switch (status.toUpperCase()) {
+            case "CREATED" -> CREATED;
+            case "CAPTURED" -> CAPTURED;
+            case "PROCESSING" -> PROCESSING;
+            case "PAID" -> SUCCESSFULL;
+            case "REFUNDED" -> REFUNDED;
+            case "CANCELLED" -> CANCELLED;
+            case "PAYMENT_PENDING" -> PAYMENT_PENDING;
+            case "PAYMENT_TIMEOUT" -> PAYMENT_TIMEOUT;
+            case "PAYMENT_CANCELLED" -> PAYMENT_CANCELLED;
+            default -> throw new IllegalArgumentException("Unknown status: " + status);
+        };
     }
 }
