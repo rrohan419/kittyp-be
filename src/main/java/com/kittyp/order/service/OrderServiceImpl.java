@@ -5,8 +5,6 @@ package com.kittyp.order.service;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -37,8 +35,6 @@ import com.kittyp.order.entity.OrderItem;
 import com.kittyp.order.entity.Taxes;
 import com.kittyp.order.model.OrderModel;
 import com.kittyp.order.util.OrderNumberGenerator;
-import com.kittyp.payment.enums.ChargeType;
-import com.kittyp.payment.service.ChargeService;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
 
@@ -56,7 +52,6 @@ public class OrderServiceImpl implements OrderService {
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final UserDao userDao;
 	private final CartService cartService;
-	private final ChargeService chargeService;
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -133,20 +128,20 @@ public class OrderServiceImpl implements OrderService {
 		BigDecimal shippingCost = calculateShippingCost(request.getShippingMethod());
 
 
-//		// Calculate tax
-//		BigDecimal tax = calculateTax(subTotal);
-//
-//		// Calculate Service charge
-//		BigDecimal serviceCharge = calculateServiceCharge(subTotal);
-//
+		// Calculate tax
+		BigDecimal tax = calculateTax(subTotal);
+
+		// Calculate Service charge
+		BigDecimal serviceCharge = calculateServiceCharge(subTotal);
+
 //		Taxes taxes = new Taxes();
 //		taxes.setShippingCharges(shippingCost);
 //		taxes.setOtherTax(tax);
 //		taxes.setServiceCharge(serviceCharge);
 		
-		Map<ChargeType, BigDecimal> charges = chargeService.chargeBreakdown(subTotal, List.of(ChargeType.GST, ChargeType.SERVICE_CHARGE));
-		BigDecimal tax = charges.getOrDefault(ChargeType.GST, BigDecimal.ZERO);
-		BigDecimal serviceCharge = charges.getOrDefault(ChargeType.SERVICE_CHARGE, BigDecimal.ZERO);
+//		Map<ChargeType, BigDecimal> charges = chargeService.chargeBreakdown(subTotal, List.of(ChargeType.GST, ChargeType.SERVICE_CHARGE));
+//		BigDecimal tax = charges.getOrDefault(ChargeType.GST, BigDecimal.ZERO);
+//		BigDecimal serviceCharge = charges.getOrDefault(ChargeType.SERVICE_CHARGE, BigDecimal.ZERO);
 
 		Taxes taxes = new Taxes();
 		taxes.setOtherTax(tax);
@@ -154,12 +149,9 @@ public class OrderServiceImpl implements OrderService {
 		taxes.setShippingCharges(shippingCost);
 
 		BigDecimal totalAmount = subTotal.add(shippingCost).add(tax).add(serviceCharge);
-		order.setTaxes(taxes);
-		order.setTotalAmount(totalAmount);
-
 
 		// Set total amount
-		order.setTotalAmount(subTotal.add(shippingCost).add(tax).add(serviceCharge));
+		order.setTotalAmount(totalAmount);
 		order.setTaxes(taxes);
 
 		// Save order
@@ -175,12 +167,12 @@ public class OrderServiceImpl implements OrderService {
 	    return shippingMethod.getCost();
 	}
 
-//
-//	private BigDecimal calculateTax(BigDecimal amount) {
-//		return amount.multiply(new BigDecimal("0.18")); // 18% GST
-//	}
-//
-//	private BigDecimal calculateServiceCharge(BigDecimal amount) {
-//		return amount.multiply(new BigDecimal("0.05")); // 5%
-//	}
+
+	private BigDecimal calculateTax(BigDecimal amount) {
+		return amount.multiply(new BigDecimal("0.18")); // 18% GST
+	}
+
+	private BigDecimal calculateServiceCharge(BigDecimal amount) {
+		return amount.multiply(new BigDecimal("0.05")); // 5%
+	}
 }

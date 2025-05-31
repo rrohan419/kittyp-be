@@ -6,13 +6,12 @@ package com.kittyp.order.emus;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-import com.kittyp.common.exception.CustomException;
-
 public enum ShippingTypes {
 
-    EXPRESS_SHIPPING(BigDecimal.valueOf(150).setScale(2, RoundingMode.UNNECESSARY), "Express (1‑2 days)"),
-    STANDARD_SHIPPING(BigDecimal.valueOf(100).setScale(2, RoundingMode.UNNECESSARY), "Standard (3‑5 days)");
-
+    EXPRESS(BigDecimal.valueOf(199).setScale(2, RoundingMode.UNNECESSARY), "Express (2-3 days)"),
+    STANDARD(BigDecimal.valueOf(99).setScale(2, RoundingMode.UNNECESSARY), "Standard (5-7 days)"),
+    PRIORITY(BigDecimal.valueOf(499).setScale(2, RoundingMode.UNNECESSARY), "Standard (1-2 days)");
+	
     private final BigDecimal cost;
     private final String label;
 

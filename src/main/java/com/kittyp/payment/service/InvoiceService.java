@@ -10,7 +10,7 @@ import java.net.URL;
  */
 public interface InvoiceService {
 
-	void generateInvoiceAndSaveInS3(String orderNumber);
+	void generateInvoiceAndSaveInS3(String orderNumber, String userUuid);
 	
 	URL getInvoicePresignedUrl(String orderNumber, String userUuid);
 }

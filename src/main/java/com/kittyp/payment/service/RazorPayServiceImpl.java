@@ -57,7 +57,7 @@ public class RazorPayServiceImpl implements RazorPayService {
         }
 		
 		JSONObject orderRequest = new JSONObject();
-		orderRequest.put(RazorPayConstant.AMOUNT,  orderRequestDto.getAmount().multiply(BigDecimal.valueOf(100)).intValue());
+		orderRequest.put(RazorPayConstant.AMOUNT,  orderRequestDto.getAmount().multiply(BigDecimal.valueOf(100L)).intValue());
 		orderRequest.put(RazorPayConstant.CURRENCY,orderRequestDto.getCurrency());
 		orderRequest.put(RazorPayConstant.RECEIPT, orderRequestDto.getReceipt());
 		orderRequest.put(RazorPayConstant.NOTES, orderRequestDto.getNotes() != null ? new JSONObject(orderRequestDto.getNotes()) : new JSONObject());
@@ -74,8 +74,7 @@ public class RazorPayServiceImpl implements RazorPayService {
 				throw new CustomException("Order not found", HttpStatus.NOT_FOUND);
 			}
 			dbOrder.setAggregatorOrderNumber(orderModel.getId());
-			OrderStatus status = OrderStatus.fromRazorpayStatus(orderModel.getStatus());
-			dbOrder.setStatus(status);
+			dbOrder.setStatus(OrderStatus.PAYMENT_PENDING);
 			dbOrder.setTotalAmount(orderRequestDto.getAmount());
 			dbOrder.setTaxes(orderRequestDto.getTaxes());
 			dbOrder.setCreatedAt(LocalDateTime.now());
@@ -115,7 +114,7 @@ public class RazorPayServiceImpl implements RazorPayService {
 				order = orderDao.saveOrder(order);
 				
 				// Generate invoice after successful database update
-				invoiceService.generateInvoiceAndSaveInS3(order.getOrderNumber());
+				invoiceService.generateInvoiceAndSaveInS3(order.getOrderNumber(), order.getUser().getUuid());
 				
 				return "Payment verified successfully";
 			} else {
@@ -126,6 +125,36 @@ public class RazorPayServiceImpl implements RazorPayService {
 				throw e;
 			}
 			throw new CustomException("Payment verification failed", HttpStatus.INTERNAL_SERVER_ERROR, e);
+		}
+	}
+
+	@Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)
+	public void handlePaymentTimeout(String orderId) {
+		try {
+			com.kittyp.order.entity.Order order = orderDao.orderByAggregatorOrderNumber(orderId);
+			if (order != null && order.getStatus() == OrderStatus.PAYMENT_PENDING) {
+				order.setStatus(OrderStatus.PAYMENT_TIMEOUT);
+				orderDao.saveOrder(order);
+				log.info("Order {} marked as timed out", orderId);
+			}
+		} catch (Exception e) {
+			log.error("Error handling payment timeout for order {}: {}", orderId, e.getMessage());
+			throw new CustomException("Failed to handle payment timeout", HttpStatus.INTERNAL_SERVER_ERROR, e);
+		}
+	}
+
+	@Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)
+	public void handlePaymentCancellation(String orderId) {
+		try {
+			com.kittyp.order.entity.Order order = orderDao.orderByAggregatorOrderNumber(orderId);
+			if (order != null && order.getStatus() == OrderStatus.PAYMENT_PENDING) {
+				order.setStatus(OrderStatus.PAYMENT_CANCELLED);
+				orderDao.saveOrder(order);
+				log.info("Order {} marked as cancelled", orderId);
+			}
+		} catch (Exception e) {
+			log.error("Error handling payment cancellation for order {}: {}", orderId, e.getMessage());
+			throw new CustomException("Failed to handle payment cancellation", HttpStatus.INTERNAL_SERVER_ERROR, e);
 		}
 	}
 

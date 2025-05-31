@@ -4,8 +4,11 @@
 package com.kittyp.payment.service;
 
 import org.hibernate.Hibernate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.util.Mapper;
 import com.kittyp.order.dao.OrderDao;
@@ -17,7 +20,6 @@ import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.model.RazorpayResponseModel.PaymentEntity;
 import com.kittyp.payment.repository.WebhookEventRepository;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -27,52 +29,80 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class WebhookServiceImpl implements WebhookService {
 
+	private static final Logger logger = LoggerFactory.getLogger(WebhookServiceImpl.class);
+
 	private final Mapper mapper;
 	private final WebhookEventRepository webhookEventRepository;
 	private final OrderDao orderDao;
+
 	/**
 	 * @author rrohan419@gmail.com
 	 */
 	@Async
-//	@Transactional
+	@Transactional
 	@Override
 	public void razorpayWebbhook(RazorpayResponseModel razorpayResponseModel) {
-		
-		WebhookEvent webhookEvent = new WebhookEvent();
-		
-		PaymentEntity paymentEntity = razorpayResponseModel.getPayload().getPayment().getEntity();
-		
-		webhookEvent.setSource(WebhookSource.RAZORPAY);
-		webhookEvent.setEventType(razorpayResponseModel.getEvent());
-		webhookEvent.setPayload(mapper.convertObjectToJson(razorpayResponseModel));
-		webhookEvent.setPaymentId(paymentEntity.getId());
-		webhookEvent.setStatus(paymentEntity.getStatus());
-		webhookEvent.setErrorMessage(paymentEntity.getError_reason());
-		webhookEvent.setRetryCount(0);
-		webhookEvent.setOrderId(paymentEntity.getOrder_id());
-		
-		webhookEventRepository.save(webhookEvent);
-		
 		try {
-			Order order = orderDao.orderByAggregatorOrderNumber(paymentEntity.getOrder_id());
-			if (order != null) {
-			    Hibernate.initialize(order.getUser());
-			}
-			OrderStatus status = OrderStatus.fromRazorpayStatus(paymentEntity.getStatus());
-			order.setStatus(status);
-			System.out.println("paymentEntity.getStatus() -----------------------------------"+paymentEntity.getStatus());
-			System.out.println("webhook updated order -----------------------------------"+order);
-			orderDao.saveOrder(order);
-		} catch (Exception e) {
-			System.out.println(e.getMessage());
-		}
-		
-		
-		
-		System.out.println(razorpayResponseModel);
-		
-		System.out.println("wqwwew");
+			PaymentEntity paymentEntity = razorpayResponseModel.getPayload().getPayment().getEntity();
+			String orderId = paymentEntity.getOrder_id();
+			
+			logger.info("Processing Razorpay webhook for order: {}", orderId);
 
+			// Save webhook event
+			WebhookEvent webhookEvent = new WebhookEvent();
+			webhookEvent.setSource(WebhookSource.RAZORPAY);
+			webhookEvent.setEventType(razorpayResponseModel.getEvent());
+			webhookEvent.setPayload(mapper.convertObjectToJson(razorpayResponseModel));
+			webhookEvent.setPaymentId(paymentEntity.getId());
+			webhookEvent.setStatus(paymentEntity.getStatus());
+			webhookEvent.setErrorMessage(paymentEntity.getError_reason());
+			webhookEvent.setRetryCount(0);
+			webhookEvent.setOrderId(orderId);
+			webhookEventRepository.save(webhookEvent);
+
+			// Update order status
+			Order order = orderDao.orderByAggregatorOrderNumber(orderId);
+			
+			if (order == null) {
+				logger.error("Order not found for orderId: {}", orderId);
+				throw new RuntimeException("Order not found: " + orderId);
+			}
+
+			try {
+				Hibernate.initialize(order.getUser());
+				OrderStatus status = OrderStatus.fromRazorpayStatus(paymentEntity.getStatus());
+				
+				// Handle specific payment statuses
+				switch (status) {
+					case PAYMENT_PENDING:
+						logger.info("Payment pending for order: {}", orderId);
+						break;
+					case PAYMENT_TIMEOUT:
+						logger.info("Payment timed out for order: {}", orderId);
+						break;
+					case PAYMENT_CANCELLED:
+						logger.info("Payment cancelled for order: {}", orderId);
+						break;
+					case SUCCESSFULL:
+						logger.info("Payment successful for order: {}", orderId);
+						break;
+					default:
+						logger.info("Payment status updated to {} for order: {}", status, orderId);
+				}
+
+				order.setStatus(status);
+				orderDao.saveOrder(order);
+				logger.info("Successfully updated order status to {} for order: {}", status, orderId);
+				
+			} catch (Exception e) {
+				logger.error("Failed to update order status for orderId: {}", orderId, e);
+				throw new RuntimeException("Failed to update order status", e);
+			}
+
+		} catch (Exception e) {
+			logger.error("Error processing Razorpay webhook: {}", e.getMessage(), e);
+			throw new RuntimeException("Failed to process webhook", e);
+		}
 	}
 
 }

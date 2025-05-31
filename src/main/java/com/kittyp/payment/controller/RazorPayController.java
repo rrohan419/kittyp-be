@@ -3,28 +3,19 @@
  */
 package com.kittyp.payment.controller;
 
-import java.net.URL;
-import java.time.Duration;
-
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
 
-import com.kittyp.common.constants.ApiUrl;
-import com.kittyp.common.constants.ResponseMessage;
-import com.kittyp.common.dto.ApiResponse;
-import com.kittyp.common.dto.SuccessResponse;
-import com.kittyp.common.service.S3StorageService;
+import com.kittyp.common.model.ApiResponse;
 import com.kittyp.payment.dto.RazorPayOrderRequestDto;
 import com.kittyp.payment.dto.RazorpayVerificationRequest;
 import com.kittyp.payment.model.CreateOrderModel;
-import com.kittyp.payment.service.InvoiceService;
 import com.kittyp.payment.service.RazorPayService;
+import com.razorpay.RazorpayException;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,30 +23,33 @@ import lombok.RequiredArgsConstructor;
  * @author rrohan419@gmail.com 
  */
 @RestController
-@RequestMapping(ApiUrl.BASE_URL)
+@RequestMapping("/api/v1/razorpay")
 @RequiredArgsConstructor
 public class RazorPayController {
 
-	private final ApiResponse responseBuilder;
 	private final RazorPayService razorPayService;
-	
-	
-	@PostMapping("/razorpay")
-//    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<CreateOrderModel>> createOrder(@RequestBody RazorPayOrderRequestDto orderRequestDto) {
-        
-//		String email = SecurityContextHolder.getContext().getAuthentication().getName();
-		
-		CreateOrderModel response = razorPayService.createOrder(orderRequestDto);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
 
-	@PostMapping("/razorpay/verify")
-	public ResponseEntity<SuccessResponse<String>> verifyPayment(@RequestBody RazorpayVerificationRequest body) throws Exception {
-	    
-		String response = razorPayService.verifyPayment(body);
-		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	@PostMapping("/create-order")
+	public ResponseEntity<ApiResponse<CreateOrderModel>> createOrder(@RequestBody RazorPayOrderRequestDto orderRequestDto) {
+		CreateOrderModel orderModel = razorPayService.createOrder(orderRequestDto);
+		return ResponseEntity.ok(new ApiResponse<>(true, "Order created successfully", orderModel));
 	}
 
-	
+	@PostMapping("/verify-payment")
+	public ResponseEntity<ApiResponse<String>> verifyPayment(@RequestBody RazorpayVerificationRequest verificationRequest) throws RazorpayException {
+		String response = razorPayService.verifyPayment(verificationRequest);
+		return ResponseEntity.ok(new ApiResponse<>(true, "Payment verification successful", response));
+	}
+
+	@PostMapping("/handle-timeout/{orderId}")
+	public ResponseEntity<ApiResponse<String>> handlePaymentTimeout(@PathVariable String orderId) {
+		razorPayService.handlePaymentTimeout(orderId);
+		return ResponseEntity.ok(new ApiResponse<>(true, "Payment timeout handled successfully", "Order marked as timed out"));
+	}
+
+	@PostMapping("/handle-cancellation/{orderId}")
+	public ResponseEntity<ApiResponse<String>> handlePaymentCancellation(@PathVariable String orderId) {
+		razorPayService.handlePaymentCancellation(orderId);
+		return ResponseEntity.ok(new ApiResponse<>(true, "Payment cancellation handled successfully", "Order marked as cancelled"));
+	}
 }

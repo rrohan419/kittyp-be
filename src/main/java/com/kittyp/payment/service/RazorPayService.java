@@ -16,4 +16,8 @@ public interface RazorPayService {
 	CreateOrderModel createOrder(RazorPayOrderRequestDto orderRequestDto);
 	
 	String verifyPayment(RazorpayVerificationRequest verificationRequest) throws RazorpayException;
+
+	void handlePaymentTimeout(String orderId);
+
+	void handlePaymentCancellation(String orderId);
 }
