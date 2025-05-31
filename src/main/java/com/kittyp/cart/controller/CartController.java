@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.kittyp.cart.dto.CartCheckoutRequest;
 import com.kittyp.cart.dto.CartItemRequest;
 import com.kittyp.cart.model.CartResponse;
 import com.kittyp.cart.service.CartService;
@@ -21,7 +20,6 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
-import com.kittyp.order.model.OrderModel;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -34,14 +32,14 @@ public class CartController {
     private final ApiResponse responseBuilder;
 
     @GetMapping(ApiUrl.GET_CART_BY_USER)
-    // @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<CartResponse>> getCart(@PathVariable String userUuid) {
         CartResponse response = cartService.getCartByUser(userUuid);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @PostMapping(ApiUrl.ADD_TO_CART)
-    // @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<CartResponse>> addToCart(
             @PathVariable String userUuid,
             @Valid @RequestBody CartItemRequest request) {
@@ -50,7 +48,7 @@ public class CartController {
     }
 
     @PutMapping(ApiUrl.UPDATE_CART_ITEM)
-    // @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<CartResponse>> updateCartItem(
             @PathVariable String userUuid,
             @Valid @RequestBody CartItemRequest request) {
@@ -59,7 +57,7 @@ public class CartController {
     }
 
     @DeleteMapping(ApiUrl.REMOVE_FROM_CART)
-    // @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<CartResponse>> removeFromCart(
             @PathVariable String userUuid,
             @PathVariable String productUuid) {
@@ -68,7 +66,7 @@ public class CartController {
     }
 
     @DeleteMapping(ApiUrl.CLEAR_CART)
-    // @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<Void>> clearCart(@PathVariable String userUuid) {
         cartService.clearCart(userUuid);
         return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
