@@ -7,11 +7,13 @@ import java.math.BigDecimal;
 import java.util.Set;
 
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.Type;
 import org.hibernate.type.SqlTypes;
 
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.product.enums.ProductStatus;
+import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -60,6 +62,7 @@ public class Product extends BaseEntity {
     private ProductStatus status;
     
     @Column(columnDefinition = "jsonb")
+    @Type(JsonBinaryType.class)
     private Set<String> productImageUrls;
 
     @Column(name = "stock_quantity", nullable = false)
