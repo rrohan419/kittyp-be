@@ -58,6 +58,12 @@
 			<version>1.4.8</version>
 		</dependency>
 		<dependency>
+    		<groupId>com.vladmihalcea</groupId>
+    		<artifactId>hibernate-types-60</artifactId>
+    			<version>2.21.1</version>
+		</dependency>
+
+		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-api</artifactId>
 			<version>0.11.5</version>
@@ -138,6 +144,13 @@
 		<dependency>
 			<groupId>org.thymeleaf</groupId>
 			<artifactId>thymeleaf-spring6</artifactId>
+		</dependency>
+
+		<!-- OpenAPI Documentation -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.4.0</version>
 		</dependency>
 
 	</dependencies>
