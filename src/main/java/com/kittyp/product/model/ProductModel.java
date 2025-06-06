@@ -27,4 +27,5 @@ public class ProductModel {
 	private Set<String> productImageUrls;
 	private String category;
 	private ProductAttributes attributes;
+	private Integer stockQuantity;
 }

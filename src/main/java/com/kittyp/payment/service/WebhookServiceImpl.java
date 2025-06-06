@@ -19,6 +19,7 @@ import com.kittyp.payment.enums.WebhookSource;
 import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.model.RazorpayResponseModel.PaymentEntity;
 import com.kittyp.payment.repository.WebhookEventRepository;
+import com.kittyp.product.service.ProductService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -34,6 +35,7 @@ public class WebhookServiceImpl implements WebhookService {
 	private final Mapper mapper;
 	private final WebhookEventRepository webhookEventRepository;
 	private final OrderDao orderDao;
+	private final ProductService productService;
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -79,9 +81,11 @@ public class WebhookServiceImpl implements WebhookService {
 						break;
 					case PAYMENT_TIMEOUT:
 						logger.info("Payment timed out for order: {}", orderId);
+						productService.cancelStockReservation(order.getOrderNumber());
 						break;
 					case PAYMENT_CANCELLED:
 						logger.info("Payment cancelled for order: {}", orderId);
+						productService.cancelStockReservation(order.getOrderNumber());
 						break;
 					case SUCCESSFULL:
 						logger.info("Payment successful for order: {}", orderId);

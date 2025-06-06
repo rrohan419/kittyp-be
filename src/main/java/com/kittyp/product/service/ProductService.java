@@ -21,4 +21,14 @@ public interface ProductService {
 			Integer pageSize);
 	
 	Integer productCount(Boolean isActive);
+
+	void updateProductStock(String productUuid, int quantityToReduce);
+
+	void validateProductStock(String productUuid, int requestedQuantity);
+
+	void reserveStock(String productUuid, int quantity, String orderNumber);
+
+	void confirmStockReservation(String orderNumber);
+
+	void cancelStockReservation(String orderNumber);
 }

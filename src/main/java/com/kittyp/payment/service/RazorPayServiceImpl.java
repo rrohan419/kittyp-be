@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,26 +24,27 @@ import com.kittyp.payment.constants.RazorPayConstant;
 import com.kittyp.payment.dto.RazorPayOrderRequestDto;
 import com.kittyp.payment.dto.RazorpayVerificationRequest;
 import com.kittyp.payment.model.CreateOrderModel;
+import com.kittyp.product.service.ProductService;
 import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import com.razorpay.Utils;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * @author rrohan419@gmail.com 
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RazorPayServiceImpl implements RazorPayService {
 
+	private static final Logger logger = LoggerFactory.getLogger(RazorPayServiceImpl.class);
 	private final Environment env;
 	private final Mapper mapper;
 	private final OrderDao orderDao;
 	private final InvoiceService invoiceService;
+	private final ProductService productService;
 	/**
 	 * @author rrohan419@gmail.com
 	 */
@@ -49,30 +52,47 @@ public class RazorPayServiceImpl implements RazorPayService {
 	@Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)
 	public CreateOrderModel createOrder(RazorPayOrderRequestDto orderRequestDto) {		
 		RazorpayClient razorpayClient;
-//		String email = SecurityContextHolder.getContext().getAuthentication().getName();
 		try {
 			razorpayClient = new RazorpayClient(env.getProperty(RazorPayConstant.KEY_ID), env.getProperty(RazorPayConstant.KEY_SECRET));
-        } catch (Exception e) {
-        	throw new CustomException("Error initializing razorpay client", HttpStatus.SERVICE_UNAVAILABLE , e);
-        }
+		} catch (Exception e) {
+			throw new CustomException("Error initializing razorpay client", HttpStatus.SERVICE_UNAVAILABLE , e);
+		}
+		
+		// First get our order and validate/reserve stock
+		com.kittyp.order.entity.Order dbOrder = orderDao.orderByOrderNumber(orderRequestDto.getReceipt());
+		if (dbOrder == null) {
+			throw new CustomException("Order not found", HttpStatus.NOT_FOUND);
+		}
+
+		try {
+			for (var orderItem : dbOrder.getOrderItems()) {
+				productService.validateProductStock(orderItem.getProduct().getUuid(), orderItem.getQuantity());
+				productService.reserveStock(orderItem.getProduct().getUuid(), orderItem.getQuantity(), dbOrder.getOrderNumber());
+			}
+			logger.info("Successfully reserved stock for order: {}", dbOrder.getOrderNumber());
+		} catch (Exception e) {
+			// If stock reservation fails, we need to cancel any reservations we've made
+			try {
+				productService.cancelStockReservation(dbOrder.getOrderNumber());
+			} catch (Exception ce) {
+				logger.error("Failed to cleanup stock reservations after failure for order: {}", dbOrder.getOrderNumber(), ce);
+			}
+			throw new CustomException("Failed to reserve stock: " + e.getMessage(), HttpStatus.BAD_REQUEST);
+		}
 		
 		JSONObject orderRequest = new JSONObject();
-		orderRequest.put(RazorPayConstant.AMOUNT,  orderRequestDto.getAmount().multiply(BigDecimal.valueOf(100L)).intValue());
-		orderRequest.put(RazorPayConstant.CURRENCY,orderRequestDto.getCurrency());
+		orderRequest.put(RazorPayConstant.AMOUNT, orderRequestDto.getAmount().multiply(BigDecimal.valueOf(100L)).intValue());
+		orderRequest.put(RazorPayConstant.CURRENCY, orderRequestDto.getCurrency());
 		orderRequest.put(RazorPayConstant.RECEIPT, orderRequestDto.getReceipt());
 		orderRequest.put(RazorPayConstant.NOTES, orderRequestDto.getNotes() != null ? new JSONObject(orderRequestDto.getNotes()) : new JSONObject());
 
 		try {
-			// First make the external API call
+			// Create Razorpay order
 			Order order = razorpayClient.orders.create(orderRequest);
-			log.info("Razorpay order created successfully with ID: " + order.get("id"));
+			logger.info("Razorpay order created successfully with ID: " + order.get("id"));
 			CreateOrderModel orderModel = mapper.convertJsonToObejct(order.toJson(), CreateOrderModel.class);
 			
-			// Then update our database within the transaction
-			com.kittyp.order.entity.Order dbOrder = orderDao.orderByOrderNumber(orderRequestDto.getReceipt());
-			if (dbOrder == null) {
-				throw new CustomException("Order not found", HttpStatus.NOT_FOUND);
-			}
+			// Update our order with Razorpay details
 			dbOrder.setAggregatorOrderNumber(orderModel.getId());
 			dbOrder.setStatus(OrderStatus.PAYMENT_PENDING);
 			dbOrder.setTotalAmount(orderRequestDto.getAmount());
@@ -82,7 +102,14 @@ public class RazorPayServiceImpl implements RazorPayService {
 			
 			return orderModel;
 		} catch (RazorpayException e) {
-			throw new CustomException("Failed to create Razorpay order", HttpStatus.BAD_REQUEST , e);
+			// If Razorpay order creation fails, cancel the stock reservations
+			try {
+				productService.cancelStockReservation(dbOrder.getOrderNumber());
+				logger.info("Cancelled stock reservations after Razorpay order creation failure for order: {}", dbOrder.getOrderNumber());
+			} catch (Exception ce) {
+				logger.error("Failed to cleanup stock reservations after Razorpay failure for order: {}", dbOrder.getOrderNumber(), ce);
+			}
+			throw new CustomException("Failed to create Razorpay order", HttpStatus.BAD_REQUEST, e);
 		}
 	}
 	/**
@@ -110,6 +137,18 @@ public class RazorPayServiceImpl implements RazorPayService {
 				if (order == null) {
 					throw new CustomException("Order not found", HttpStatus.NOT_FOUND);
 				}
+
+				// First confirm the stock reservation
+				try {
+					productService.confirmStockReservation(order.getOrderNumber());
+					logger.info("Successfully confirmed stock reservation for order: {}", order.getOrderNumber());
+				} catch (Exception e) {
+					logger.error("Failed to confirm stock reservation for order: {}", order.getOrderNumber(), e);
+					// We don't throw here as payment is already verified
+					// This needs manual intervention to resolve stock discrepancy
+				}
+
+				// Then update order status and generate invoice
 				order.setStatus(OrderStatus.SUCCESSFULL);
 				order = orderDao.saveOrder(order);
 				
@@ -133,12 +172,23 @@ public class RazorPayServiceImpl implements RazorPayService {
 		try {
 			com.kittyp.order.entity.Order order = orderDao.orderByAggregatorOrderNumber(orderId);
 			if (order != null && order.getStatus() == OrderStatus.PAYMENT_PENDING) {
+				// First cancel the stock reservation
+				try {
+					productService.cancelStockReservation(order.getOrderNumber());
+					logger.info("Successfully cancelled stock reservation for timed out order: {}", order.getOrderNumber());
+				} catch (Exception e) {
+					logger.error("Failed to cancel stock reservation for timed out order: {}", order.getOrderNumber(), e);
+					// Continue with order status update even if reservation cancellation fails
+					// This needs manual intervention to resolve stock discrepancy
+				}
+
+				// Then update order status
 				order.setStatus(OrderStatus.PAYMENT_TIMEOUT);
 				orderDao.saveOrder(order);
-				log.info("Order {} marked as timed out", orderId);
+				logger.info("Order {} marked as timed out", orderId);
 			}
 		} catch (Exception e) {
-			log.error("Error handling payment timeout for order {}: {}", orderId, e.getMessage());
+			logger.error("Error handling payment timeout for order {}: {}", orderId, e.getMessage());
 			throw new CustomException("Failed to handle payment timeout", HttpStatus.INTERNAL_SERVER_ERROR, e);
 		}
 	}
@@ -148,12 +198,23 @@ public class RazorPayServiceImpl implements RazorPayService {
 		try {
 			com.kittyp.order.entity.Order order = orderDao.orderByAggregatorOrderNumber(orderId);
 			if (order != null && order.getStatus() == OrderStatus.PAYMENT_PENDING) {
+				// First cancel the stock reservation
+				try {
+					productService.cancelStockReservation(order.getOrderNumber());
+					logger.info("Successfully cancelled stock reservation for cancelled order: {}", order.getOrderNumber());
+				} catch (Exception e) {
+					logger.error("Failed to cancel stock reservation for cancelled order: {}", order.getOrderNumber(), e);
+					// Continue with order status update even if reservation cancellation fails
+					// This needs manual intervention to resolve stock discrepancy
+				}
+
+				// Then update order status
 				order.setStatus(OrderStatus.PAYMENT_CANCELLED);
 				orderDao.saveOrder(order);
-				log.info("Order {} marked as cancelled", orderId);
+				logger.info("Order {} marked as cancelled", orderId);
 			}
 		} catch (Exception e) {
-			log.error("Error handling payment cancellation for order {}: {}", orderId, e.getMessage());
+			logger.error("Error handling payment cancellation for order {}: {}", orderId, e.getMessage());
 			throw new CustomException("Failed to handle payment cancellation", HttpStatus.INTERNAL_SERVER_ERROR, e);
 		}
 	}
