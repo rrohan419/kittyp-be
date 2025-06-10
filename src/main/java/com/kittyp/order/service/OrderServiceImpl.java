@@ -37,6 +37,7 @@ import com.kittyp.order.model.OrderModel;
 import com.kittyp.order.util.OrderNumberGenerator;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
+import com.kittyp.product.service.ProductService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -52,6 +53,7 @@ public class OrderServiceImpl implements OrderService {
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final UserDao userDao;
 	private final CartService cartService;
+	private final ProductService productService;
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -102,10 +104,17 @@ public class OrderServiceImpl implements OrderService {
 			throw new CustomException("Cart is empty", HttpStatus.BAD_REQUEST);
 		}
 
+		String orderNumber = orderNumberGenerator.generateInvoiceNumber();
+
+		// Validate and reserve stock for all items first
+		for (CartItem cartItem : cart.getCartItems()) {
+			productService.validateProductStock(cartItem.getProduct().getUuid(), cartItem.getQuantity());
+		}
+
 		// Create order
 		Order order = new Order();
 		order.setUser(user);
-		order.setOrderNumber(orderNumberGenerator.generateInvoiceNumber());
+		order.setOrderNumber(orderNumber);
 		order.setStatus(OrderStatus.CREATED);
 
 		// Set addresses
@@ -115,8 +124,12 @@ public class OrderServiceImpl implements OrderService {
 		// Convert cart items to order items
 		BigDecimal subTotal = BigDecimal.ZERO;
 		for (CartItem cartItem : cart.getCartItems()) {
-			OrderItem orderItem = OrderItem.builder().order(order).product(cartItem.getProduct())
-					.quantity(cartItem.getQuantity()).price(cartItem.getPrice()).build();
+			OrderItem orderItem = OrderItem.builder()
+				.order(order)
+				.product(cartItem.getProduct())
+				.quantity(cartItem.getQuantity())
+				.price(cartItem.getPrice())
+				.build();
 			order.addOrderItem(orderItem);
 			subTotal = subTotal.add(cartItem.getTotal());
 		}
@@ -127,21 +140,11 @@ public class OrderServiceImpl implements OrderService {
 		// Add shipping cost based on method
 		BigDecimal shippingCost = calculateShippingCost(request.getShippingMethod());
 
-
 		// Calculate tax
 		BigDecimal tax = calculateTax(subTotal);
 
 		// Calculate Service charge
 		BigDecimal serviceCharge = calculateServiceCharge(subTotal);
-
-//		Taxes taxes = new Taxes();
-//		taxes.setShippingCharges(shippingCost);
-//		taxes.setOtherTax(tax);
-//		taxes.setServiceCharge(serviceCharge);
-		
-//		Map<ChargeType, BigDecimal> charges = chargeService.chargeBreakdown(subTotal, List.of(ChargeType.GST, ChargeType.SERVICE_CHARGE));
-//		BigDecimal tax = charges.getOrDefault(ChargeType.GST, BigDecimal.ZERO);
-//		BigDecimal serviceCharge = charges.getOrDefault(ChargeType.SERVICE_CHARGE, BigDecimal.ZERO);
 
 		Taxes taxes = new Taxes();
 		taxes.setOtherTax(tax);
