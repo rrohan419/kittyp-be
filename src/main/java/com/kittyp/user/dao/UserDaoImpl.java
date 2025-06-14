@@ -4,6 +4,8 @@
 package com.kittyp.user.dao;
 
 import org.springframework.core.env.Environment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Repository;
 
@@ -65,6 +67,16 @@ public class UserDaoImpl implements UserDao {
 		return userRepository.findByUuid(uuid)
 				.orElseThrow(() -> new ResourceNotFoundException("uuid", "uuid", uuid));
 	
+	}
+
+	@Override
+	public Page<User> findAllUsers(Pageable pageable) {
+		try {
+			return userRepository.findAll(pageable);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
 	}
 
 }

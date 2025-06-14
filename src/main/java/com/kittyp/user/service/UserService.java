@@ -3,6 +3,7 @@
  */
 package com.kittyp.user.service;
 
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.models.UserDetailsModel;
@@ -23,4 +24,8 @@ public interface UserService {
 	boolean verifyResetPasswordCode(String code, String email);
 	
 	boolean updatePassword(UpdatePasswordDto updatePasswordDto);
+
+	// Updated admin methods
+	PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize);
+	UserDetailsModel updateUserStatus(String userUuid, boolean enabled);
 }

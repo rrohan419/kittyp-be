@@ -3,11 +3,17 @@
  */
 package com.kittyp.user.service;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.service.ZeptoMailService;
@@ -126,6 +132,58 @@ public class UserServiceImpl implements UserService {
 		return verificationCodeService.verifyCode(user.getUuid(), code, false);
 		
 
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Override
+	public PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize) {
+		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
+		Page<User> userPage = userDao.findAllUsers(pageable);
+		
+		List<UserDetailsModel> userModels = userPage.getContent().stream()
+			.map(user -> {
+				UserDetailsModel model = mapper.convert(user, UserDetailsModel.class);
+				model.setRoles(user.getUserRoles().stream()
+					.map(UserRole::getRole)
+					.map(role -> role.getName().name())
+					.collect(Collectors.toSet()));
+				return model;
+			})
+			.collect(Collectors.toList());
+		
+		return userPageToModel(new PageImpl<>(userModels, pageable, userPage.getTotalElements()));
+	}
+
+	private PaginationModel<UserDetailsModel> userPageToModel(Page<UserDetailsModel> userPage) {
+		PaginationModel<UserDetailsModel> paginationModel = new PaginationModel<>();
+		paginationModel.setModels(userPage.getContent());
+		paginationModel.setIsFirst(userPage.isFirst());
+		paginationModel.setIsLast(userPage.isLast());
+		paginationModel.setTotalElements(userPage.getTotalElements());
+		paginationModel.setTotalPages(userPage.getTotalPages());
+		return paginationModel;
+	}
+
+	/**
+	 * @author rrohan419@gmail.com
+	 */
+	@Transactional
+	@Override
+	public UserDetailsModel updateUserStatus(String userUuid, boolean enabled) {
+		User user = userDao.userByUuid(userUuid);
+		user.setEnabled(enabled);
+		user.setIsActive(enabled);
+		user = userDao.saveUser(user);
+		
+		UserDetailsModel userDetailsModel = mapper.convert(user, UserDetailsModel.class);
+		userDetailsModel.setRoles(user.getUserRoles().stream()
+				.map(UserRole::getRole)
+				.map(role -> role.getName().name())
+				.collect(Collectors.toSet()));
+		
+		return userDetailsModel;
 	}
 
 }
