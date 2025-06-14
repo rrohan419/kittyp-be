@@ -11,6 +11,7 @@ import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.entity.Address;
 import com.kittyp.order.entity.Taxes;
+import com.kittyp.user.models.UserDetailsModel;
 
 import lombok.Data;
 
@@ -41,4 +42,6 @@ public class OrderModel {
 	private Address billingAddress;
 	
 	private List<OrderItemModel> orderItems;
+
+	private UserDetailsModel user;
 }

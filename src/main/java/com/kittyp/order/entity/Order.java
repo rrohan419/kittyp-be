@@ -95,5 +95,11 @@ public class Order extends BaseEntity {
 	    item.setOrder(this);
 	}
 
+	public Integer getQuantity() {
+		return orderItems.stream()
+			.map(OrderItem::getQuantity)
+			.reduce(0, Integer::sum);
+	}
+
 
 }

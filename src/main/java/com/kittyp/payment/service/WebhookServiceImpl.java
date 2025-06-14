@@ -6,11 +6,11 @@ package com.kittyp.payment.service;
 import org.hibernate.Hibernate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.util.Mapper;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.order.dao.OrderDao;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.entity.Order;
@@ -24,7 +24,7 @@ import com.kittyp.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 @Service
 @RequiredArgsConstructor
@@ -36,18 +36,21 @@ public class WebhookServiceImpl implements WebhookService {
 	private final WebhookEventRepository webhookEventRepository;
 	private final OrderDao orderDao;
 	private final ProductService productService;
+	private final ZeptoMailService zeptoMailService;
 
 	/**
 	 * @author rrohan419@gmail.com
 	 */
-	@Async
+	// @Async+
 	@Transactional
 	@Override
 	public void razorpayWebbhook(RazorpayResponseModel razorpayResponseModel) {
 		try {
 			PaymentEntity paymentEntity = razorpayResponseModel.getPayload().getPayment().getEntity();
+			logger.info("Razorpay response model: {}", razorpayResponseModel);
+			logger.info("Payment entity: {}", paymentEntity);
 			String orderId = paymentEntity.getOrder_id();
-			
+
 			logger.info("Processing Razorpay webhook for order: {}", orderId);
 
 			// Save webhook event
@@ -64,7 +67,7 @@ public class WebhookServiceImpl implements WebhookService {
 
 			// Update order status
 			Order order = orderDao.orderByAggregatorOrderNumber(orderId);
-			
+
 			if (order == null) {
 				logger.error("Order not found for orderId: {}", orderId);
 				throw new RuntimeException("Order not found: " + orderId);
@@ -72,8 +75,12 @@ public class WebhookServiceImpl implements WebhookService {
 
 			try {
 				Hibernate.initialize(order.getUser());
-				OrderStatus status = OrderStatus.fromRazorpayStatus(paymentEntity.getStatus());
-				
+				OrderStatus status = OrderStatus.fromRazorpayStatus(razorpayResponseModel.getEvent());
+				if (status == OrderStatus.UNKNOWN) {
+					logger.warn("Unknown status: {} for order: {}", razorpayResponseModel.getEvent(), orderId);
+					return;
+				}
+
 				// Handle specific payment statuses
 				switch (status) {
 					case PAYMENT_PENDING:
@@ -86,18 +93,39 @@ public class WebhookServiceImpl implements WebhookService {
 					case PAYMENT_CANCELLED:
 						logger.info("Payment cancelled for order: {}", orderId);
 						productService.cancelStockReservation(order.getOrderNumber());
+						
 						break;
 					case SUCCESSFULL:
 						logger.info("Payment successful for order: {}", orderId);
+						if (order.getStatus() != OrderStatus.SUCCESSFULL) {
+							order.setStatus(OrderStatus.SUCCESSFULL);
+							orderDao.saveOrder(order);
+							try {
+								productService.confirmStockReservation(order.getOrderNumber());
+								logger.info("Successfully confirmed stock reservation for order: {}",
+										order.getOrderNumber());
+							} catch (Exception e) {
+								logger.error("Failed to confirm stock reservation for order: {}",
+										order.getOrderNumber(), e);
+							}
+							logger.info("Successfully updated order status to {} for order: {}", status, orderId);
+
+							zeptoMailService.sendOrderConfirmationEmail(order.getUser().getEmail(),
+									order.getOrderNumber());
+
+						} else {
+							logger.info("Order already in successfull status for order: {}", orderId);
+						}
+
 						break;
 					default:
-						logger.info("Payment status updated to {} for order: {}", status, orderId);
+						logger.warn("Payment status not handled for status: {} for order: {}", status, orderId);
 				}
 
 				order.setStatus(status);
 				orderDao.saveOrder(order);
 				logger.info("Successfully updated order status to {} for order: {}", status, orderId);
-				
+
 			} catch (Exception e) {
 				logger.error("Failed to update order status for orderId: {}", orderId, e);
 				throw new RuntimeException("Failed to update order status", e);

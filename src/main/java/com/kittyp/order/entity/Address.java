@@ -9,19 +9,27 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 @Getter
 @Setter
-public class Address  implements Serializable {
+public class Address implements Serializable {
 
 	/**
 	 * @author rrohan419@gmail.com
 	 */
 	private static final long serialVersionUID = 1L;
+
 	private String street;
-    private String city;
-    private String state;
-    private String postalCode;
-    private String country;
+	private String city;
+	private String state;
+	private String postalCode;
+	private String country;
+
+	@Override
+	public String toString() {
+		return String.format(
+				"%s<br>%s, %s - %s<br>%s",
+				street, city, state, postalCode, country);
+	}
 }
