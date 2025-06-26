@@ -40,7 +40,7 @@ import lombok.RequiredArgsConstructor;
 public class UserController {
 
 	private final UserService userService;
-	private final ApiResponse responseBuilder;
+    private final ApiResponse<?> responseBuilder;
 	private final Environment env;
 	
 	@GetMapping(ApiUrl.USER_DETAILS)

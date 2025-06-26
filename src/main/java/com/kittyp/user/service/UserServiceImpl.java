@@ -85,10 +85,15 @@ public class UserServiceImpl implements UserService {
 		if(userDetailDto.getFirstName() != null && !userDetailDto.getFirstName().isBlank()) {
 			user.setFirstName(userDetailDto.getFirstName());
 		}
+
 		if(userDetailDto.getLastName() != null && !userDetailDto.getLastName().isBlank()) {
 			user.setLastName(userDetailDto.getLastName());
 		}
-		
+
+		if(userDetailDto.getPhoneNumber() != null && !userDetailDto.getPhoneNumber().isBlank() && userDetailDto.getPhoneCountryCode() != null && !userDetailDto.getPhoneCountryCode().isBlank()) {
+			user.setPhoneCountryCode(userDetailDto.getPhoneCountryCode());
+			user.setPhoneNumber(userDetailDto.getPhoneNumber());
+		}		
 		
 		user = userDao.saveUser(user);
 		

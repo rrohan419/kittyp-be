@@ -7,8 +7,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import com.kittyp.order.emus.CurrencyType;
-import com.kittyp.order.entity.Address;
 import com.kittyp.order.entity.Taxes;
+import com.kittyp.user.entity.Address;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;

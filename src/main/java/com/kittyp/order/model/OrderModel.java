@@ -9,8 +9,8 @@ import java.util.List;
 
 import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.emus.OrderStatus;
-import com.kittyp.order.entity.Address;
 import com.kittyp.order.entity.Taxes;
+import com.kittyp.user.entity.Address;
 import com.kittyp.user.models.UserDetailsModel;
 
 import lombok.Data;

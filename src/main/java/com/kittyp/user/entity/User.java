@@ -64,6 +64,11 @@ public class User extends BaseEntity {
     @Builder.Default
     @ToString.Exclude
     private Set<UserRole> userRoles = new HashSet<>();
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    @ToString.Exclude
+    private Set<Address> addresses = new HashSet<>();
     
     // Helper method to add a role
     public void addRole(Role role) {
@@ -77,7 +82,6 @@ public class User extends BaseEntity {
     public void removeRole(Role role) {
         for (Iterator<UserRole> iterator = userRoles.iterator(); iterator.hasNext();) {
             UserRole userRole = iterator.next();
-            
             if (userRole.getUser().equals(this) && userRole.getRole().equals(role)) {
                 iterator.remove();
                 userRole.setUser(null);

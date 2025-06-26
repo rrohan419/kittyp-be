@@ -1,7 +1,8 @@
 package com.kittyp.cart.dto;
 
 import com.kittyp.order.emus.ShippingTypes;
-import com.kittyp.order.entity.Address;
+import com.kittyp.user.entity.Address;
+
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 

@@ -10,6 +10,7 @@ import org.hibernate.type.SqlTypes;
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.emus.OrderStatus;
+import com.kittyp.user.entity.Address;
 import com.kittyp.user.entity.User;
 
 import jakarta.persistence.CascadeType;
