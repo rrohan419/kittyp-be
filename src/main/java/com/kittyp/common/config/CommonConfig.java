@@ -24,7 +24,7 @@ public class CommonConfig {
 			@Override
 			public void addCorsMappings(CorsRegistry registry) {
 				registry.addMapping("/**") // Allow all endpoints
-						.allowedOrigins("http://localhost:8080", "https://kittyp.netlify.app", "https://kittyp.in") // Frontend URL
+						.allowedOrigins("http://localhost:8080", "https://kittyp.netlify.app", "https://kittyp.in", "https://www.kittyp.in") // Frontend URL
 						.allowedMethods("*") // Allow all HTTP methods
 						.allowedHeaders("*").allowCredentials(true);
 			}
