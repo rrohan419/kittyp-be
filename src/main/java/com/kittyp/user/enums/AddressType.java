@@ -1,9 +1,7 @@
 package com.kittyp.user.enums;
 
 public enum AddressType {
-    SHIPPING_ADDRESS,
-    BILLING_ADDRESS,
-    BOTH;
+    HOME, OFFICE, OTHERS;
 
     public static AddressType fromString(String type) {
         for (AddressType addressType : AddressType.values()) {

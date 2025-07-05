@@ -3,11 +3,17 @@ package com.kittyp.user.dto;
 import com.kittyp.user.enums.AddressType;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.Setter;
 
 @Getter
+@Setter
 public class AddressSaveDto {
     
+    @NotBlank
+    private String name;
+
     @NotBlank
     private String street;
 
@@ -23,8 +29,10 @@ public class AddressSaveDto {
     @NotBlank
     private String country;
 
-    @NotBlank
+    @NotNull
     private AddressType addressType;
 
-    private boolean isDefault;
+    private String formattedAddress;
+
+    private String phoneNumber;
 }

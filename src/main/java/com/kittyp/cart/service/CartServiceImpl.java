@@ -10,9 +10,9 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.cart.dto.CartItemRequest;
 import com.kittyp.cart.entity.Cart;
@@ -163,6 +163,9 @@ public class CartServiceImpl implements CartService {
                             .price(item.getPrice())
                             .quantity(item.getQuantity())
                             .totalPrice(item.getTotal())
+                            .productImageUrls(item.getProduct().getProductImageUrls() != null ? 
+                                item.getProduct().getProductImageUrls().toArray(new String[0]) : 
+                                new String[0])
                             .build())
                     .toList();
         }

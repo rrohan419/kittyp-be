@@ -2,12 +2,17 @@ package com.kittyp.user.dto;
 
 import com.kittyp.user.enums.AddressType;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 
 @Getter
 public class AddressUpdateDto {
     
+    @NotBlank
     private String uuid;
+
+    private String name;
     
     private String street;
 
@@ -21,5 +26,7 @@ public class AddressUpdateDto {
 
     private AddressType addressType;
 
-    private boolean isDefault;
+    private String formattedAddress;
+
+    private String phoneNumber;
 }

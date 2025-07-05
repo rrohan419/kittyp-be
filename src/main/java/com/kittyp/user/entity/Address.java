@@ -32,6 +32,8 @@ public class Address extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String uuid;
 
+    private String name;
+
     private String street;
 
     private String city;
@@ -44,10 +46,10 @@ public class Address extends BaseEntity {
 
     private String formattedAddress;
 
-    private boolean isDefault = false;
-
     @Column(nullable = false)
     private AddressType addressType;
+
+    private String phoneNumber;
 
     @ManyToOne
     @JoinColumn(name = "user_uuid", nullable = false, referencedColumnName = "uuid")

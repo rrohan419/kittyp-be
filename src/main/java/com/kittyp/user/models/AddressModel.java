@@ -7,6 +7,8 @@ public class AddressModel {
     
     private String uuid;
 
+    private String name;
+
     private String street;
 
     private String city;
@@ -19,7 +21,7 @@ public class AddressModel {
 
     private String formattedAddress;
 
-    private boolean isDefault = false;
+    private String phoneNumber;
 
     private UserDetailsModel user;
 }

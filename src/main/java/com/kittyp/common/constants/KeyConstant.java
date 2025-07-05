@@ -14,6 +14,7 @@ public class KeyConstant {
 	public static final String IS_AUTHENTICATED = "isAuthenticated()";
 	public static final String SECRET_KEY = "secret.key";
 	public static final String IS_ROLE_ADMIN = "hasRole('ROLE_ADMIN')";
+	public static final String IS_ROLE_USER = "hasRole('ROLE_USER')";
 	public static final String PAGE_NUMBER = "1";
 	public static final String PAGE_SIZE = "10";
 	
