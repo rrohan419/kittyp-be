@@ -7,15 +7,26 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * @author rrohan419@gmail.com 
  */
-@Component
+@Data
 @Builder
-public class ApiResponse {
+@NoArgsConstructor
+@AllArgsConstructor
+@Component
+public class ApiResponse<T> {
     
+    private boolean success;
+    private String message;
+    private T data;
+    private String error;
+
     /**
      * @author rrohan419@gmail.com 
      * 
@@ -61,4 +72,18 @@ public class ApiResponse {
 
 		return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
 	}
+
+    public static <T> ApiResponse<T> success(T data) {
+        return ApiResponse.<T>builder()
+            .success(true)
+            .data(data)
+            .build();
+    }
+
+    public static <T> ApiResponse<T> error(String error) {
+        return ApiResponse.<T>builder()
+            .success(false)
+            .error(error)
+            .build();
+    }
 }

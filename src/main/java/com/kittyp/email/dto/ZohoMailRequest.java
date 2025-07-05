@@ -29,7 +29,7 @@ public class ZohoMailRequest implements IEmailDto {
     private List<Recipient> bcc;
 
     @JsonProperty("merge_info")
-    private Map<String, String> mergeInfo;
+    private Map<String, Object> mergeInfo;
 
     @JsonProperty("reply_to")
     private List<EmailAddress> replyTo;

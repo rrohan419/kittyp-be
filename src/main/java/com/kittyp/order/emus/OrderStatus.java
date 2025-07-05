@@ -18,6 +18,8 @@ public enum OrderStatus{
     PROCESSING,
     PAYMENT_PENDING,
     PAYMENT_TIMEOUT,
+    UNKNOWN,
+    IN_TRANSIT,
     PAYMENT_CANCELLED;
     
     public static OrderStatus fromRazorpayStatus(String status) {
@@ -31,7 +33,12 @@ public enum OrderStatus{
             case "PAYMENT_PENDING" -> PAYMENT_PENDING;
             case "PAYMENT_TIMEOUT" -> PAYMENT_TIMEOUT;
             case "PAYMENT_CANCELLED" -> PAYMENT_CANCELLED;
-            default -> throw new IllegalArgumentException("Unknown status: " + status);
+
+            case "PAYMENT.CAPTURED" -> SUCCESSFULL;
+            case "PAYMENT.AUTHORIZED" -> SUCCESSFULL;
+            case "ORDER.PAID" -> SUCCESSFULL;
+            default -> UNKNOWN;
+            // default -> throw new IllegalArgumentException("Unknown status: " + status);
         };
     }
 }

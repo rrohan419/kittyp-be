@@ -10,6 +10,7 @@ import org.hibernate.type.SqlTypes;
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.order.emus.CurrencyType;
 import com.kittyp.order.emus.OrderStatus;
+import com.kittyp.user.entity.Address;
 import com.kittyp.user.entity.User;
 
 import jakarta.persistence.CascadeType;
@@ -93,6 +94,12 @@ public class Order extends BaseEntity {
 	   }
 	    orderItems.add(item);
 	    item.setOrder(this);
+	}
+
+	public Integer getQuantity() {
+		return orderItems.stream()
+			.map(OrderItem::getQuantity)
+			.reduce(0, Integer::sum);
 	}
 
 

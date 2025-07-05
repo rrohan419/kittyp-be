@@ -2,15 +2,17 @@ package com.kittyp.cart.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.cart.dto.CartItemRequest;
 import com.kittyp.cart.entity.Cart;
@@ -41,10 +43,10 @@ public class CartServiceImpl implements CartService {
         if (user == null) {
             throw new CustomException("User not found", HttpStatus.NOT_FOUND);
         }
-        
+
         Cart cart = getOrCreateCart(user);
         // No need to force initialization as we ensure list is never null
-        
+
         return convertToCartModel(cart);
     }
 
@@ -53,13 +55,13 @@ public class CartServiceImpl implements CartService {
     public CartResponse addToCart(String userUuid, CartItemRequest request) {
         User user = userDao.userByUuid(userUuid);
         Product product = productDao.productUuid(request.getProductUuid());
-        
+
         if (product == null) {
             throw new CustomException("Product not found", HttpStatus.NOT_FOUND);
         }
 
         Cart cart = getOrCreateCart(user);
-        
+
         // Check if product already exists in cart
         Optional<CartItem> existingItem = cart.getCartItems().stream()
                 .filter(item -> item.getProduct().getUuid().equals(request.getProductUuid()))
@@ -83,7 +85,7 @@ public class CartServiceImpl implements CartService {
         }
 
         cart = cartRepository.save(cart);
-        
+
         return convertToCartModel(cart);
     }
 
@@ -92,7 +94,7 @@ public class CartServiceImpl implements CartService {
     public CartResponse updateCartItem(String userUuid, CartItemRequest request) {
         User user = userDao.userByUuid(userUuid);
         Cart cart = getOrCreateCart(user);
-        
+
         CartItem item = cart.getCartItems().stream()
                 .filter(i -> i.getProduct().getUuid().equals(request.getProductUuid()))
                 .findFirst()
@@ -114,7 +116,7 @@ public class CartServiceImpl implements CartService {
     public CartResponse removeFromCart(String userUuid, String productUuid) {
         User user = userDao.userByUuid(userUuid);
         Cart cart = getOrCreateCart(user);
-        
+
         CartItem item = cart.getCartItems().stream()
                 .filter(i -> i.getProduct().getUuid().equals(productUuid))
                 .findFirst()
@@ -148,33 +150,35 @@ public class CartServiceImpl implements CartService {
                 });
     }
 
-    
-    
     private CartResponse convertToCartModel(Cart cart) {
         List<CartItemResponse> cartItemResponses = null;
+
         if (cart.getCartItems() != null) {
             cartItemResponses = cart.getCartItems().stream()
-                .map(item -> CartItemResponse.builder()
-                    .productUuid(item.getProduct().getUuid())
-                    .productName(item.getProduct().getName())
-                    .price(item.getPrice())
-                    .quantity(item.getQuantity())
-                    .totalPrice(item.getTotal())
-                    .build())
-                .toList();
+                    .sorted(Comparator.comparing(CartItem::getCreatedAt,
+                            Comparator.nullsLast(Comparator.reverseOrder())))
+                    .map(item -> CartItemResponse.builder()
+                            .productUuid(item.getProduct().getUuid())
+                            .productName(item.getProduct().getName())
+                            .price(item.getPrice())
+                            .quantity(item.getQuantity())
+                            .totalPrice(item.getTotal())
+                            .productImageUrls(item.getProduct().getProductImageUrls() != null ? 
+                                item.getProduct().getProductImageUrls().toArray(new String[0]) : 
+                                new String[0])
+                            .build())
+                    .toList();
         }
 
-        BigDecimal totalAmount = cartItemResponses != null ? 
-            cartItemResponses.stream()
+        BigDecimal totalAmount = cartItemResponses != null ? cartItemResponses.stream()
                 .map(CartItemResponse::getTotalPrice)
-                .filter(price -> price != null)
-                .reduce(BigDecimal.ZERO, BigDecimal::add) : 
-            BigDecimal.ZERO;
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add) : BigDecimal.ZERO;
 
         return CartResponse.builder()
-            .uuid(cart.getUuid())
-            .items(cartItemResponses)
-            .totalAmount(totalAmount)
-            .build();
+                .uuid(cart.getUuid())
+                .items(cartItemResponses)
+                .totalAmount(totalAmount)
+                .build();
     }
 }

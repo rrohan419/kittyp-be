@@ -23,6 +23,8 @@ public class ApiUrl {
 	// User controller
 	public static final String USER_BASE_URL = "/user";
 	public static final String USER_DETAILS = USER_BASE_URL + "/me";
+	public static final String USER_ADDRESS = USER_BASE_URL + "/address";
+	public static final String USER_ADDRESS_DETAIL = USER_BASE_URL + "/address/detail";
 	
 	// Article controller
 	public static final String ARTICLE_BASE_URL = "/article";

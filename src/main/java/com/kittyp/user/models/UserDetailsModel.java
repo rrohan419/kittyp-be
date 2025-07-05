@@ -28,4 +28,5 @@ public class UserDetailsModel {
     private LocalDateTime createdAt;
     private String phoneNumber;
     private String phoneCountryCode;
+    private boolean enabled;
 }

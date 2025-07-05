@@ -44,7 +44,6 @@ public class SecurityConfig {
 				.exceptionHandling(exception -> exception.authenticationEntryPoint(authEntryPointJwt)
 						.accessDeniedHandler(accessDeniedHandler))
 				.authorizeHttpRequests(auth -> auth
-//						.requestMatchers("/api/v1/article/**","/api/v1/auth/**","/api/v1/webhook/**", "/api/v1/product/**", "/api/v1/public/**", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/**")
 						.requestMatchers("/api/v1/**")
 						.permitAll().anyRequest().authenticated());
 

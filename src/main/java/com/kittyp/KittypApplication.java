@@ -7,16 +7,14 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
-
 @SpringBootApplication
 @EnableAsync
 @EnableScheduling
 @EnableTransactionManagement
 @PropertySource("classpath:exception.properties")
-@PropertySource("classpath:profiles/${spring.profiles.active}/application.properties")
 public class KittypApplication {
 
-	public static void main(String[] args) {
+	public static void main(String[] args){
 		SpringApplication.run(KittypApplication.class, args);
 	}
 

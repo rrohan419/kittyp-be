@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.util.Mapper;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.order.dao.OrderDao;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.payment.constants.RazorPayConstant;
@@ -45,6 +46,8 @@ public class RazorPayServiceImpl implements RazorPayService {
 	private final OrderDao orderDao;
 	private final InvoiceService invoiceService;
 	private final ProductService productService;
+	private final ZeptoMailService zeptoMailService;
+
 	/**
 	 * @author rrohan419@gmail.com
 	 */
@@ -154,7 +157,8 @@ public class RazorPayServiceImpl implements RazorPayService {
 				
 				// Generate invoice after successful database update
 				invoiceService.generateInvoiceAndSaveInS3(order.getOrderNumber(), order.getUser().getUuid());
-				
+				zeptoMailService.sendOrderConfirmationEmail(order.getUser().getEmail(), order.getOrderNumber());
+				logger.info("Order {} marked as successful and invoice generated", order.getOrderNumber());
 				return "Payment verified successfully";
 			} else {
 				throw new CustomException("Invalid payment signature", HttpStatus.BAD_REQUEST);
