@@ -14,8 +14,7 @@ import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kittyp.common.constants.AppConstant;
 import com.kittyp.common.constants.TemplateConstant;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.dto.EmailAuditDto;
@@ -55,7 +54,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		User user = userDao.userByEmail(recipientEmail);
 
 		ZeptoMailDto mailDto = new ZeptoMailDto();
-		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName()));
+		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName(), "logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
 		mailDto.setRecipientEmail(recipientEmail);
 		mailDto.setRecipientName(user.getFirstName());
 		mailDto.setTemplateKey(TemplateConstant.ZEPTO_WELCOME_EMAIL_TEMPLATE_ID);
@@ -76,7 +75,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 		ZeptoMailDto mailDto = new ZeptoMailDto();
 		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName(), "RESET_CODE",
-				verificationCodeService.generateCode(user.getUuid())));
+				verificationCodeService.generateCode(user.getUuid()), "logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
 		mailDto.setRecipientEmail(email);
 		mailDto.setRecipientName(user.getFirstName());
 		mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
@@ -130,16 +129,17 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		root.put("logo_url", "logo_url_value");
 		root.put("order_number", order.getOrderNumber());
 		root.put("tax", order.getTaxes().getOtherTax().add(order.getTaxes().getServiceCharge()).toString());
-		root.put("billing_address", order.getBillingAddress().toString());
+		root.put("billing_address", order.getBillingAddress().getFormattedAddress());
 		root.put("products", productsList); // Pass the list directly
 		root.put("total", order.getTotalAmount().toString());
 		root.put("shipping", order.getTaxes().getShippingCharges().toString());
 		root.put("instagram_url", "instagram_url_value");
 		root.put("subtotal", order.getSubTotal().toString());
 		root.put("customer_name", user.getFirstName());
-		root.put("shipping_address", order.getShippingAddress().toString());
+		root.put("shipping_address", order.getShippingAddress().getFormattedAddress());
 		root.put("tracking_url", "tracking_url_value");
 		root.put("twitter_url", "twitter_url_value");
+		root.put("logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO);
 
 		// Set merge info directly as a map (no JSON serialization/deserialization)
 		mailDto.setMergeInfo(root);

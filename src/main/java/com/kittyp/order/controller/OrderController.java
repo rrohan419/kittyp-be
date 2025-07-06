@@ -23,9 +23,7 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.PaginationModel;
-import com.kittyp.order.dto.OrderDto;
 import com.kittyp.order.dto.OrderFilterDto;
-import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.model.OrderModel;
 import com.kittyp.order.service.OrderService;
 import com.kittyp.payment.service.InvoiceService;
@@ -40,7 +38,7 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping(ApiUrl.BASE_URL)
 @RequiredArgsConstructor
 public class OrderController {
-	private final ApiResponse responseBuilder;
+	private final ApiResponse<?> responseBuilder;
 	private final OrderService orderService;
 	private final InvoiceService invoiceService;
 

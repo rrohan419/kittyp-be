@@ -9,8 +9,9 @@ package com.kittyp.common.constants;
 public class AppConstant {
 	private AppConstant() {}
 	
+	public static final String KITTYP_EMAIL_TEMPLATE_LOGO= "https://www.kittyp.in/android-chrome-512x512.png";
+
 		//AWS KEYS
-		
 		public static final String AWS_INVOICE_BUCKET_NAME="aws.invoice.bucket.name";
 		public static final String S3_REGION="amazon.s3.region";
 		public static final String AWS_ACCESS_KEY_ID="aws.access.key.id";

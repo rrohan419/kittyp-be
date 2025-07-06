@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.auth.dto.SocialSso;
 import com.kittyp.auth.service.AuthService;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.ResponseMessage;
@@ -36,7 +37,7 @@ import lombok.RequiredArgsConstructor;
 public class AuthController {
 
 	private final AuthService authService;
-	private final ApiResponse responseBuilder;
+	private final ApiResponse<?> responseBuilder;
 	private final UserService userService;
 
 	@PostMapping(ApiUrl.SIGNIN)
@@ -53,6 +54,12 @@ public class AuthController {
 			@Valid @RequestBody SignupRequestDto signUpRequest) {
 		MessageResponse response = authService.registerUser(signUpRequest);
 
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.SOCIAL_SSO)
+	public ResponseEntity<SuccessResponse<JwtResponseModel>> socialSso(@RequestBody SocialSso socialSso) {
+		JwtResponseModel response = authService.googleUserSignin(socialSso);
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 

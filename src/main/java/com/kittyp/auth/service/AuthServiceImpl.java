@@ -14,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.kittyp.auth.config.UserDetailsImpl;
+import com.kittyp.auth.dto.GoogleUserInfo;
+import com.kittyp.auth.dto.SocialSso;
 import com.kittyp.auth.util.JwtUtils;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.LoginRequestDto;
@@ -42,6 +44,7 @@ public class AuthServiceImpl implements AuthService {
 	private final AuthenticationManager authenticationManager;
 	private final JwtUtils jwtUtils;
 	private final ZeptoMailService zeptoMailService;
+	private final GoogleOAuth2Service googleOAuth2Service;
 
 	@Transactional
 	@Override
@@ -109,6 +112,65 @@ public class AuthServiceImpl implements AuthService {
 		List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
 
 		return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUsername(), userDetails.getEmail(), roles);
+	}
+
+	@Override
+	@Transactional
+	public JwtResponseModel googleUserSignin(SocialSso socialSso) {
+		try {
+			// Get user info directly from Google using access token
+			GoogleUserInfo googleUserInfo = googleOAuth2Service.getUserInfo(socialSso.getToken());
+			
+			// Check if user exists by email
+			User existingUser = null;
+			try {
+				existingUser = userDao.userByEmail(googleUserInfo.getEmail());
+			} catch (Exception e) {
+				// User doesn't exist, will create new one
+			}
+			
+			if (existingUser == null) {
+				// Create new user
+				existingUser = User.builder()
+						.uuid(UUID.randomUUID().toString())
+						.email(googleUserInfo.getEmail())
+						.firstName(googleUserInfo.getGivenName())
+						.lastName(googleUserInfo.getFamilyName())
+						.password(encoder.encode(UUID.randomUUID().toString())) // Generate random password
+						.enabled(true)
+						.build();
+				
+				// Assign default role
+				Role userRole = roleDao.roleByName(ERole.ROLE_USER);
+				if (userRole == null) {
+					throw new RuntimeException("Error: Default ROLE_USER not found.");
+				}
+				
+				existingUser.addRole(userRole);
+				existingUser = userDao.saveUser(existingUser);
+				
+				// Send welcome email
+				zeptoMailService.sendWelcomeEmail(existingUser.getEmail());
+			}
+			
+			// Create authentication token
+			UserDetailsImpl userDetails = (UserDetailsImpl) UserDetailsImpl.build(existingUser);
+			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+					userDetails, null, userDetails.getAuthorities());
+			
+			SecurityContextHolder.getContext().setAuthentication(authentication);
+			String jwt = jwtUtils.generateJwtToken(authentication);
+			
+			List<String> roles = userDetails.getAuthorities().stream()
+					.map(GrantedAuthority::getAuthority)
+					.toList();
+			
+			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUsername(), 
+					userDetails.getEmail(), roles);
+			
+		} catch (Exception e) {
+			throw new RuntimeException("Google authentication failed: " + e.getMessage(), e);
+		}
 	}
 
 }
