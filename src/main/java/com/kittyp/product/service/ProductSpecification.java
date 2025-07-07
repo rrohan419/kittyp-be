@@ -36,7 +36,7 @@ public class ProductSpecification {
 			}
 			
 			if(productFilterDto.getCategory() != null && !productFilterDto.getCategory().isEmpty()) {
-				predicates.add(builder.equal(builder.lower(root.get(KeyConstant.PRODUCT_CATEGORY)), productFilterDto.getCategory()));
+				predicates.add(builder.equal(builder.lower(root.get(KeyConstant.PRODUCT_CATEGORY)), productFilterDto.getCategory().toLowerCase()));
 			}
 			
 			if(productFilterDto.getMinPrice() != null) {
