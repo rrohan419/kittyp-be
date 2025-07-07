@@ -36,7 +36,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ProductController {
 
-	private final ApiResponse responseBuilder;
+	private final ApiResponse<?> responseBuilder;
 	private final ProductService productService;
 
 	@PostMapping(ApiUrl.PRODUCT_BASE_URL)

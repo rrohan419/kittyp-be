@@ -55,4 +55,8 @@ public class ApiUrl {
 	public static final String CLEAR_CART = CART_BASE_URL+"/clear/{userUuid}";
 
     public static final String UPDATE_CART_ITEM = CART_BASE_URL+"/update/{userUuid}";
+
+	// public controller
+	public static final String PUBLIC_BASE_URL = "/public";
+	public static final String SITEMAP = PUBLIC_BASE_URL + "/sitemap.xml";
 }
