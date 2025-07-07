@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.kittyp.article.entity.Article;
+import com.kittyp.article.enums.ArticleStatus;
 
 /**
  * @author rrohan419@gmail.com 
@@ -14,4 +15,5 @@ import com.kittyp.article.entity.Article;
 public interface ArticleRepository extends JpaRepository<Article, Long>, JpaSpecificationExecutor<Article> {
 
 	Article findBySlug(String slug);
+	Article findByStatus(ArticleStatus status);
 }
