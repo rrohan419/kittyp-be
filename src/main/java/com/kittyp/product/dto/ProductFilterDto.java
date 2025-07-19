@@ -3,6 +3,8 @@
  */
 package com.kittyp.product.dto;
 
+import java.util.Set;
+
 import com.kittyp.product.enums.ProductStatus;
 
 import lombok.Getter;
@@ -21,7 +23,7 @@ public class ProductFilterDto {
 	
 	private Integer maxPrice;
 	
-	private ProductStatus status;
+	private Set<ProductStatus> status;
 	
 	private Boolean isRandom;
 }

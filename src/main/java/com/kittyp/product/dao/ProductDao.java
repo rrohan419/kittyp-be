@@ -18,9 +18,10 @@ public interface ProductDao {
 	
 	Page<Product> productsByFilter(Pageable pageable, Specification<Product> specification);
 
-	Product productUuid(String uuid);
+	Product productByUuid(String uuid);
 	
 	boolean productExistsByName(String name);
 	
 	Integer productCount(Boolean isActive);
+	
 }

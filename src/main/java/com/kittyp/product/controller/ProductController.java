@@ -6,9 +6,11 @@ package com.kittyp.product.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,6 +28,7 @@ import com.kittyp.product.model.ProductModel;
 import com.kittyp.product.service.ProductService;
 
 import jakarta.validation.Valid;
+import jakarta.websocket.server.PathParam;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -67,6 +70,22 @@ public class ProductController {
 			@RequestParam(defaultValue = KeyConstant.PAGE_SIZE) int size, @Valid @RequestBody  ProductFilterDto productFilterDto) {
 		PaginationModel<ProductModel> response = productService.productsByFilter(productFilterDto, page, size);
 		
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+	@DeleteMapping(ApiUrl.DELETE_PRODUCT)
+	public ResponseEntity<SuccessResponse<String>> deleteProduct(@PathParam(value= "productUuid") String productUuid) {
+		productService.deleteProduct(productUuid);
+
+		return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PutMapping(ApiUrl.UPDATE_PRODUCT)
+	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+	public ResponseEntity<SuccessResponse<ProductModel>> updateProduct(@RequestParam(required= true) String productUuid,  @Valid @RequestBody ProductSaveDto productSaveDto) {
+		ProductModel response = productService.updateProduct(productUuid, productSaveDto);
+
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 

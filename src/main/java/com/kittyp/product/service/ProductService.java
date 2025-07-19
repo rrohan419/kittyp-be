@@ -31,4 +31,8 @@ public interface ProductService {
 	void confirmStockReservation(String orderNumber);
 
 	void cancelStockReservation(String orderNumber);
+
+	ProductModel updateProduct(String productUuid, ProductSaveDto productSaveDto);
+
+	void deleteProduct(String productUuid);
 }

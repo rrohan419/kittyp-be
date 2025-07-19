@@ -28,6 +28,7 @@ import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.order.dao.OrderDao;
 import com.kittyp.order.dto.OrderFilterDto;
+import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.emus.ShippingTypes;
 import com.kittyp.order.entity.Order;
@@ -72,7 +73,7 @@ public class OrderServiceImpl implements OrderService {
 	@Transactional(readOnly = true)
 	public PaginationModel<OrderModel> allOrderByFilter(OrderFilterDto orderFilterDto, Integer pageNumber,
 			Integer pageSize) {
-		Sort sort = Sort.by(Direction.DESC, KeyConstant.UPDATED_AT);
+		Sort sort = Sort.by(Direction.DESC, KeyConstant.CREATED_AT);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
 
 		Specification<Order> orderSpecification = OrderSpecification.articlesByFilters(orderFilterDto);
@@ -177,5 +178,12 @@ public class OrderServiceImpl implements OrderService {
 
 	private BigDecimal calculateServiceCharge(BigDecimal amount) {
 		return amount.multiply(new BigDecimal("0.05")); // 5%
+	}
+
+	@Override
+	public OrderModel updateOrderStatus(OrderStatusUpdateDto orderQuantityUpdateDto) {
+		Order order = orderDao.orderByOrderNumber(orderQuantityUpdateDto.getOrderNumber());
+		order.setStatus(orderQuantityUpdateDto.getOrderStatus());
+		return mapper.convert(orderDao.saveOrder(order), OrderModel.class);
 	}
 }

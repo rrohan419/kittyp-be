@@ -51,6 +51,14 @@ public class ProductSpecification {
 	            Expression<Double> randomFunction = builder.function("RANDOM", Double.class);
 	            query.orderBy(builder.asc(randomFunction));
 	        }
+
+			if(productFilterDto.getStatus() != null && !productFilterDto.getStatus().isEmpty()) {
+				predicates.add(root.get(KeyConstant.PRODUCT_STATUS).in(productFilterDto.getStatus()));
+			}
+			
+			// if(productFilterDto.getIsActive() != null) {
+			// 	predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), productFilterDto.getIsActive()));
+			// }
 			
 			return builder.and(predicates.toArray(new Predicate[0]));
 		};

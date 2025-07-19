@@ -39,7 +39,7 @@ import lombok.RequiredArgsConstructor;
 public class ArticleController {
 
 	private final ArticleService articleService;
-	private final ApiResponse responseBuilder;
+	private final ApiResponse<?> responseBuilder;
 	
 	@PostMapping(ApiUrl.ALL_ARTICLES)
     public ResponseEntity<SuccessResponse<PaginationModel<ArticleListModel>>> allArticlesByFilter(
