@@ -31,7 +31,7 @@ public class ArticleSpecification {
 			List<Predicate> predicates = new ArrayList<>();
 			
 			predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), true));
-			predicates.add(builder.equal(root.get(KeyConstant.ARTICLE_STATUS), ArticleStatus.PUBLISHED));
+			
 			
 			if(articleFilterDto.getName() != null && !articleFilterDto.getName().isEmpty()) {
 				predicates.add(builder.like(builder.lower(root.get(KeyConstant.TITLE)), "%" + articleFilterDto.getName().toLowerCase() + "%"));
@@ -41,6 +41,10 @@ public class ArticleSpecification {
 	            Expression<Double> randomFunction = builder.function("RANDOM", Double.class);
 	            query.orderBy(builder.asc(randomFunction));
 	        }
+
+			if(articleFilterDto.getArticleStatus() != null) {
+				predicates.add(builder.equal(root.get(KeyConstant.ARTICLE_STATUS), articleFilterDto.getArticleStatus()));
+			} 
 			
 			return builder.and(predicates.toArray(new Predicate[0]));
 		};

@@ -18,4 +18,6 @@ public class OrderFilterDto {
 	private String orderNumber;
 	
 	private String userUuid;
+
+	private String searchText;
 }

@@ -54,7 +54,7 @@ public class CartServiceImpl implements CartService {
     @Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)
     public CartResponse addToCart(String userUuid, CartItemRequest request) {
         User user = userDao.userByUuid(userUuid);
-        Product product = productDao.productUuid(request.getProductUuid());
+        Product product = productDao.productByUuid(request.getProductUuid());
 
         if (product == null) {
             throw new CustomException("Product not found", HttpStatus.NOT_FOUND);

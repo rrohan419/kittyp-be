@@ -15,46 +15,62 @@ import com.kittyp.user.entity.User;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 public class OrderSpecification {
 
-	private OrderSpecification() {}
-	
+	private OrderSpecification() {
+	}
+
 	public static Specification<Order> articlesByFilters(OrderFilterDto orderFilterDto) {
 		return (Root<Order> root, CriteriaQuery<?> query, CriteriaBuilder builder) -> {
 			List<Predicate> predicates = new ArrayList<>();
-			
+
 			// Filter for active orders
-	        predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), true));
-	        predicates.add(builder.notEqual(root.get("status"), OrderStatus.CREATED));
-			
-			 // Join with the User entity to filter by user UUID
-	        if (orderFilterDto.getUserUuid() != null) {
-	            Join<Order, User> userJoin = root.join("user");
-	            predicates.add(builder.equal(userJoin.get("uuid"), orderFilterDto.getUserUuid()));
-	        }
+			predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), true));
+			predicates.add(builder.notEqual(root.get("status"), OrderStatus.CREATED));
 
-	        // Filter by orderStatus
-	        if (orderFilterDto.getOrderStatus() != null) {
-	            predicates.add(builder.equal(root.get("status"), orderFilterDto.getOrderStatus()));
-	        }
-	        
-	        // Filter by orderNumber
-	        if (orderFilterDto.getOrderNumber() != null && !orderFilterDto.getOrderNumber().isEmpty()) {
-//	            predicates.add(builder.equal(root.get("orderNumber"), orderFilterDto.getOrderNumber()));
-	            predicates.add(builder.like(builder.lower(root.get("orderNumber")), "%" + orderFilterDto.getOrderNumber().toLowerCase() + "%"));
-	        }
-	        
-	        
+			// Join with the User entity to filter by user UUID
+			if (orderFilterDto.getUserUuid() != null) {
+				Join<Order, User> userJoin = root.join("user");
+				predicates.add(builder.equal(userJoin.get("uuid"), orderFilterDto.getUserUuid()));
+			}
 
-	        return builder.and(predicates.toArray(new Predicate[0]));
+			// Filter by orderStatus
+			if (orderFilterDto.getOrderStatus() != null) {
+				predicates.add(builder.equal(root.get("status"), orderFilterDto.getOrderStatus()));
+			}
+
+			// Filter by orderNumber
+			if (orderFilterDto.getOrderNumber() != null && !orderFilterDto.getOrderNumber().isEmpty()) {
+				// predicates.add(builder.equal(root.get("orderNumber"),
+				// orderFilterDto.getOrderNumber()));
+				predicates.add(builder.like(builder.lower(root.get("orderNumber")),
+						"%" + orderFilterDto.getOrderNumber().toLowerCase() + "%"));
+			}
+
+			if (orderFilterDto.getSearchText() != null && !orderFilterDto.getSearchText().isEmpty()) {
+				String searchText = "%" + orderFilterDto.getSearchText().toLowerCase() + "%";
+
+				// JSON field access: billing_address ->> 'fullName'
+				Expression<String> billingName = builder.function(
+						"LOWER", String.class,
+						builder.function("json_extract_path_text", String.class, root.get("billingAddress"),
+								builder.literal("name")));
+
+				predicates.add(builder.or(
+						builder.like(builder.lower(root.get("orderNumber")), searchText),
+						builder.like(billingName, searchText)));
+			}
+
+			return builder.and(predicates.toArray(new Predicate[0]));
 		};
-	
+
 	}
 }

@@ -28,4 +28,5 @@ public class ProductModel {
 	private String category;
 	private ProductAttributes attributes;
 	private Integer stockQuantity;
+	private String sku;
 }

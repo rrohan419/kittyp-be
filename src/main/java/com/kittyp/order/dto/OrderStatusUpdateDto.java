@@ -7,6 +7,7 @@ import java.util.Map;
 
 import com.kittyp.order.emus.OrderStatus;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 
 /**
@@ -15,6 +16,9 @@ import lombok.Getter;
 @Getter
 public class OrderStatusUpdateDto {
 
+	@NotNull
 	private String orderNumber;
+	
+	@NotNull
 	private OrderStatus orderStatus;
 }

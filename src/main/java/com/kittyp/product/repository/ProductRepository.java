@@ -23,4 +23,6 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 	Integer countByIsActive(Boolean isActive);
 
 	List<Product> findAllByUuidIn(List<String> uuids);
+
+	void deleteByUuid(String uuid);
 }

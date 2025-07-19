@@ -24,6 +24,7 @@ import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.order.dto.OrderFilterDto;
+import com.kittyp.order.dto.OrderStatusUpdateDto;
 import com.kittyp.order.model.OrderModel;
 import com.kittyp.order.service.OrderService;
 import com.kittyp.payment.service.InvoiceService;
@@ -60,16 +61,15 @@ public class OrderController {
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
-	// @PostMapping(ApiUrl.ORDER_STATUS_UPDATE)
-	// @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	// public ResponseEntity<SuccessResponse<OrderModel>>
-	// orderStatusyUpdate(@RequestBody OrderStatusUpdateDto orderQuantityUpdateDto)
-	// {
+	@PostMapping(ApiUrl.ORDER_STATUS_UPDATE)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<OrderModel>> orderStatusyUpdate(
+			@RequestBody OrderStatusUpdateDto orderQuantityUpdateDto) {
 
-	// OrderModel response = orderService.updateOrderStatus(orderQuantityUpdateDto);
-	// return responseBuilder.buildSuccessResponse(response,
-	// ResponseMessage.SUCCESS, HttpStatus.OK);
-	// }
+		OrderModel response = orderService.updateOrderStatus(orderQuantityUpdateDto);
+		return responseBuilder.buildSuccessResponse(response,
+				ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
 
 	// @GetMapping(ApiUrl.CREATED_ORDER_BY_USER)
 	// @PreAuthorize(KeyConstant.IS_AUTHENTICATED)

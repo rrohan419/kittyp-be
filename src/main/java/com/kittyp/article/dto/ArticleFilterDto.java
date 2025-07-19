@@ -3,6 +3,8 @@
  */
 package com.kittyp.article.dto;
 
+import com.kittyp.article.enums.ArticleStatus;
+
 import lombok.Data;
 
 /**
@@ -14,4 +16,6 @@ public class ArticleFilterDto {
 	private String name;
 	
 	private Boolean isRandom;
+
+	private ArticleStatus articleStatus;
 }

@@ -41,6 +41,7 @@ public class ProductSaveDto {
 	@NotNull
 	private Integer stockQuantity;
 	
+	@NotBlank
 	private String sku;
 	
 	@NotBlank

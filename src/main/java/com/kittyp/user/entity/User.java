@@ -1,7 +1,9 @@
 package com.kittyp.user.entity;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 import org.hibernate.annotations.DynamicUpdate;
@@ -12,6 +14,7 @@ import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -28,38 +31,38 @@ import lombok.ToString;
 @AllArgsConstructor
 @Builder
 @DynamicUpdate
-@EqualsAndHashCode(callSuper = true, exclude = {"userRoles"})
+@EqualsAndHashCode(callSuper = true, exclude = { "userRoles" })
 public class User extends BaseEntity {
-    
-    /**
-	 * @author rrohan419@gmail.com
-	 */
-	private static final long serialVersionUID = 1L;
-	
-	@Column
-	private String firstName;
-	
-	@Column
-	private String lastName;
 
-	@Column(nullable = false, unique = true)
+    /**
+     * @author rrohan419@gmail.com
+     */
+    private static final long serialVersionUID = 1L;
+
+    @Column
+    private String firstName;
+
+    @Column
+    private String lastName;
+
+    @Column(nullable = false, unique = true)
     private String uuid;
-    
+
     @Column(nullable = false, unique = true)
     private String email;
-    
+
     @Column
     private String phoneCountryCode;
-    
+
     @Column
     private String phoneNumber;
-    
+
     @Column(nullable = false)
     private String password;
-    
+
     @Builder.Default
     private boolean enabled = true;
-    
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     @ToString.Exclude
@@ -69,7 +72,17 @@ public class User extends BaseEntity {
     @Builder.Default
     @ToString.Exclude
     private Set<Address> addresses = new HashSet<>();
-    
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ToString.Exclude
+    private Set<UserIdentity> userIdentities;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "user_uuid", referencedColumnName = "uuid")
+    @ToString.Exclude
+    @Builder.Default
+    private List<Pet> pets = new ArrayList<>();
+
     // Helper method to add a role
     public void addRole(Role role) {
         UserRole userRole = new UserRole(this, role);
@@ -77,7 +90,7 @@ public class User extends BaseEntity {
             userRoles.add(userRole);
         }
     }
-    
+
     // Helper method to remove a role
     public void removeRole(Role role) {
         for (Iterator<UserRole> iterator = userRoles.iterator(); iterator.hasNext();) {
@@ -89,4 +102,11 @@ public class User extends BaseEntity {
             }
         }
     }
+
+    public void addPet(Pet pet) {
+        if (pet != null) {
+            this.pets.add(pet);
+        }
+    }
+
 }

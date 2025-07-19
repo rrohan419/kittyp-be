@@ -4,6 +4,7 @@
 package com.kittyp.user.service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -28,13 +29,14 @@ import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserRole;
 import com.kittyp.user.enums.ERole;
+import com.kittyp.user.models.PetModel;
 import com.kittyp.user.models.UserDetailsModel;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 @Service
 @RequiredArgsConstructor
@@ -49,6 +51,7 @@ public class UserServiceImpl implements UserService {
 	private final PasswordEncoder encoder;
 	private final ZeptoMailService zeptoMailService;
 
+	@Transactional
 	@Override
 	public UserDetailsModel userDetailsByEmail(String email) {
 		logger.info("Fetching user details for email: {}", email);
@@ -64,6 +67,13 @@ public class UserServiceImpl implements UserService {
 				.map(UserRole::getRole)
 				.map(role -> role.getName().name())
 				.collect(Collectors.toSet()));
+
+		if (user.getPets() != null && !user.getPets().isEmpty()) {
+			Set<PetModel> petModels = user.getPets().stream()
+					.map(pet -> mapper.convert(pet, PetModel.class))
+					.collect(Collectors.toSet());
+			userDetailsModel.setOwnerPets(petModels);
+		}
 
 		logger.info("User details retrieved successfully for email: {}", email);
 		return userDetailsModel;
@@ -111,7 +121,8 @@ public class UserServiceImpl implements UserService {
 				&& userDetailDto.getPhoneCountryCode() != null && !userDetailDto.getPhoneCountryCode().isBlank()) {
 			user.setPhoneCountryCode(userDetailDto.getPhoneCountryCode());
 			user.setPhoneNumber(userDetailDto.getPhoneNumber());
-			logger.debug("Updated phone number to: {}{}", userDetailDto.getPhoneCountryCode(), userDetailDto.getPhoneNumber());
+			logger.debug("Updated phone number to: {}{}", userDetailDto.getPhoneCountryCode(),
+					userDetailDto.getPhoneNumber());
 		}
 
 		user = userDao.saveUser(user);
@@ -185,15 +196,15 @@ public class UserServiceImpl implements UserService {
 		Page<User> userPage = userDao.findAllUsers(pageable);
 
 		List<UserDetailsModel> userModels = userPage.getContent().stream()
-			.map(user -> {
-				UserDetailsModel model = mapper.convert(user, UserDetailsModel.class);
-				model.setRoles(user.getUserRoles().stream()
-					.map(UserRole::getRole)
-					.map(role -> role.getName().name())
-					.collect(Collectors.toSet()));
-				return model;
-			})
-			.collect(Collectors.toList());
+				.map(user -> {
+					UserDetailsModel model = mapper.convert(user, UserDetailsModel.class);
+					model.setRoles(user.getUserRoles().stream()
+							.map(UserRole::getRole)
+							.map(role -> role.getName().name())
+							.collect(Collectors.toSet()));
+					return model;
+				})
+				.collect(Collectors.toList());
 
 		logger.info("Total users fetched: {}", userModels.size());
 		return userPageToModel(new PageImpl<>(userModels, pageable, userPage.getTotalElements()));
@@ -234,4 +245,3 @@ public class UserServiceImpl implements UserService {
 		return userDetailsModel;
 	}
 }
-
