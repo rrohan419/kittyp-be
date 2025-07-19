@@ -186,4 +186,9 @@ public class OrderServiceImpl implements OrderService {
 		order.setStatus(orderQuantityUpdateDto.getOrderStatus());
 		return mapper.convert(orderDao.saveOrder(order), OrderModel.class);
 	}
+
+	@Override
+	public Integer countOfSuccessfullOrderByUser(String email) {
+		return orderDao.countOfSuccessfullOrderByUser(email);
+	}
 }

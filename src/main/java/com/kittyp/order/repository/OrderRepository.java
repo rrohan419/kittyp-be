@@ -29,4 +29,6 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     Long findMaxOrderNumber();
 	
 	Order findByAggregatorOrderNumber(String aggregatorOrderNumber);
+
+	Integer countByUser_EmailAndStatusIn(String email, List<OrderStatus> status);
 }

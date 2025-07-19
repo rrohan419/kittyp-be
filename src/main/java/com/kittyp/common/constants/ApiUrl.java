@@ -48,6 +48,7 @@ public class ApiUrl {
 	public static final String CREATED_ORDER_BY_USER = ORDER_BASE_URL + "/created/{userUuid}";
 	public static final String ORDER_INVOICE_BY_USER = ORDER_BASE_URL + "/invoice/{orderNumber}";
 	public static final String ORDER_CHECKOUT = ORDER_BASE_URL + "/checkout/{userUuid}";
+	public static final String SUCCESSFULL_ORDERS_BY_USER = ORDER_BASE_URL + "/count";
 
 	// cart controller
 	public static final String CART_BASE_URL = "/cart";

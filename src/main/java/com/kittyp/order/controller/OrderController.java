@@ -8,6 +8,7 @@ import java.net.URL;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -97,4 +98,15 @@ public class OrderController {
 		OrderModel response = orderService.createOrderFromCart(userUuid, request);
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
+
+	@GetMapping(ApiUrl.SUCCESSFULL_ORDERS_BY_USER)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<Integer>> orderCount() {
+
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+		Integer response = orderService.countOfSuccessfullOrderByUser(email);
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
 }
