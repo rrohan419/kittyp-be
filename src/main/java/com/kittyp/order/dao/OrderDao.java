@@ -23,4 +23,6 @@ public interface OrderDao {
 	Order getLastCreatedOrder(String userUuid);
 	
 	Page<Order> findAllOrders(Pageable pageable, Specification<Order> specification);
+
+	Integer countOfSuccessfullOrderByUser(String email);
 }

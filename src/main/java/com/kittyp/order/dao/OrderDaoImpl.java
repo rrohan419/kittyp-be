@@ -3,6 +3,8 @@
  */
 package com.kittyp.order.dao;
 
+import java.util.List;
+
 import org.springframework.core.env.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -85,6 +87,16 @@ public class OrderDaoImpl implements OrderDao {
 	public Page<Order> findAllOrders(Pageable pageable, Specification<Order> specification) {
 		try {
 			return orderRepository.findAll(specification, pageable);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Integer countOfSuccessfullOrderByUser(String email) {
+		try {
+			return orderRepository.countByUser_EmailAndStatusIn(email, List.of(OrderStatus.SUCCESSFULL, OrderStatus.IN_TRANSIT, OrderStatus.DELIVERED));
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
 					HttpStatus.INTERNAL_SERVER_ERROR);

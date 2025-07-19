@@ -30,4 +30,6 @@ public interface OrderService {
      * @return Created order details
      */
     OrderModel createOrderFromCart(String userUuid, CartCheckoutRequest request);
+
+    Integer countOfSuccessfullOrderByUser(String email);
 }
