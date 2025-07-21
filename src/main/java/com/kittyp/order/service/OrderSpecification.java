@@ -37,7 +37,7 @@ public class OrderSpecification {
 			predicates.add(builder.notEqual(root.get("status"), OrderStatus.CREATED));
 
 			// Join with the User entity to filter by user UUID
-			if (orderFilterDto.getUserUuid() != null) {
+			if (orderFilterDto.getUserUuid() != null && !orderFilterDto.getUserUuid().isEmpty()) {
 				Join<Order, User> userJoin = root.join("user");
 				predicates.add(builder.equal(userJoin.get("uuid"), orderFilterDto.getUserUuid()));
 			}

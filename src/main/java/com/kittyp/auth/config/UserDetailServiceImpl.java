@@ -1,5 +1,6 @@
 package com.kittyp.auth.config;
 
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -21,6 +22,10 @@ public class UserDetailServiceImpl implements UserDetailsService {
 		User user = userRepository.findByEmail(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User Not Found with username: " + username));
         
+		if (!user.getIsActive()) {
+        throw new DisabledException("User account is not active. Please contact support.");
+    }
+
         return UserDetailsImpl.build(user);
 	}
 

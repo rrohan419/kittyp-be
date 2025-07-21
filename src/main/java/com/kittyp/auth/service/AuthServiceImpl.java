@@ -111,7 +111,7 @@ public class AuthServiceImpl implements AuthService {
 		UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
 		List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
 
-		return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUsername(), userDetails.getEmail(), roles);
+		return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
 	}
 
 	@Override
@@ -165,8 +165,7 @@ public class AuthServiceImpl implements AuthService {
 					.map(GrantedAuthority::getAuthority)
 					.toList();
 			
-			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUsername(), 
-					userDetails.getEmail(), roles);
+			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
 			
 		} catch (Exception e) {
 			throw new RuntimeException("Google authentication failed: " + e.getMessage(), e);

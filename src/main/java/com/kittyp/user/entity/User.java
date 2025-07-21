@@ -63,6 +63,9 @@ public class User extends BaseEntity {
     @Builder.Default
     private boolean enabled = true;
 
+    @Column(columnDefinition = "TEXT")
+    private String profilePictureUrl;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     @ToString.Exclude

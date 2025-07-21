@@ -29,5 +29,6 @@ public class UserDetailsModel {
     private String phoneNumber;
     private String phoneCountryCode;
     private boolean enabled;
+    private String profilePictureUrl;
     private Set<PetModel> ownerPets;
 }

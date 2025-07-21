@@ -17,5 +17,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	Optional<User> findByUuid(String uuid);
 	
 	Page<User> findAll(Pageable pageable);
+
+	Integer countByIsActiveTrue();
 	
 }

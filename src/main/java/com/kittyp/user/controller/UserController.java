@@ -24,6 +24,7 @@ import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.model.PaginationModel;
+import com.kittyp.user.dto.ProfilePictureUpdateDto;
 import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.dto.UserStatusUpdateDto;
 import com.kittyp.user.models.UserDetailsModel;
@@ -106,4 +107,14 @@ public class UserController {
         UserDetailsModel updatedUser = userService.updateUserStatus(userUuid, statusUpdateDto.isEnabled());
         return responseBuilder.buildSuccessResponse(updatedUser, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
+
+    @PatchMapping("/user/profile-picture")
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<UserDetailsModel>> updateUserProfilePicture(
+            @RequestParam String userUuid,
+            @RequestBody ProfilePictureUpdateDto profilePictureUpdateDto) {
+        UserDetailsModel updatedUser = userService.updateUserProfile(userUuid, profilePictureUpdateDto.getProfilePictureUrl());
+        return responseBuilder.buildSuccessResponse(updatedUser, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }   
+
 }

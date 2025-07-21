@@ -16,4 +16,6 @@ public interface UserDao {
 	User userByUuid(String uuid);
 	
 	Page<User> findAllUsers(Pageable pageable);
+
+	Integer countActiveUsers();
 }

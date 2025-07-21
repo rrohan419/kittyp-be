@@ -74,11 +74,11 @@ public class Order extends BaseEntity {
 	
 	@Column(name = "shipping_address", columnDefinition = "json")
     @JdbcTypeCode(SqlTypes.JSON)
-   private  Address shippingAddress;
+   private  AddressInfo shippingAddress;
 
    @Column(name = "billing_address", columnDefinition = "json")
    @JdbcTypeCode(SqlTypes.JSON)
-   private Address billingAddress;
+   private AddressInfo billingAddress;
 
    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
    private List<OrderItem> orderItems;
