@@ -69,7 +69,7 @@ public class ArticleController {
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 	
-	@PatchMapping(ApiUrl.ARTICLE_BY_SLUG)
+	@PatchMapping(ApiUrl.ARTICLE_EDIT_BY_SLUG)
 	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
     public ResponseEntity<SuccessResponse<ArticleModel>> editArticles(
 			@RequestBody ArticleEditDto articleEditDto, @PathVariable String slug) {
