@@ -1,5 +1,7 @@
 package com.kittyp.user.entity;
 
+import java.util.Set;
+
 import org.hibernate.annotations.DynamicUpdate;
 
 import com.kittyp.common.entity.BaseEntity;
@@ -34,6 +36,7 @@ public class Pet extends BaseEntity {
     private String weight;
     private String activityLevel;
     private String gender;
+    private Set<String> photos;
     private boolean isNeutered;
     private String currentFoodBrand;
     @Column(columnDefinition = "TEXT")

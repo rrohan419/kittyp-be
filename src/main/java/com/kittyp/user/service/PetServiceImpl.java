@@ -1,6 +1,7 @@
 package com.kittyp.user.service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,7 @@ import com.kittyp.common.util.Mapper;
 import com.kittyp.user.dao.PetDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.dto.PetDetailDto;
+import com.kittyp.user.dto.PetPhotosDto;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.models.PetModel;
@@ -122,14 +124,16 @@ public class PetServiceImpl implements PetService {
     }
 
     @Override
-    public PetModel updatePetProfilePicture(String petUuid, String profilePictureUrl) {
+    public PetModel updatePetProfilePicture(String petUuid, PetPhotosDto petPhotosDto) {
         Pet pet = petDao.petByUuid(petUuid);
         if (pet == null) {
             throw new CustomException("Pet not found by uuid: " + petUuid, HttpStatus.NOT_FOUND);
         }
 
         log.info("Updating profile picture for pet with uuid={}", petUuid);
-        pet.setProfilePicture(profilePictureUrl);
+        pet.setProfilePicture(petPhotosDto.getPhotos().get(0));
+
+        pet.setPhotos(Set.copyOf(petPhotosDto.getPhotos()));
         Pet updatedPet = petDao.savePets(pet);
         
         log.info("Successfully updated profile picture for pet with uuid={}", updatedPet.getUuid());
