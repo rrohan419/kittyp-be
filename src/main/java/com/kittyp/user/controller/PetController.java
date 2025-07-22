@@ -77,7 +77,7 @@ public class PetController {
         return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
-    @PatchMapping(ApiUrl.PET_BASE_URL + "/photoss")
+    @PatchMapping(ApiUrl.PET_BASE_URL + "/photos")
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<PetModel>> updatePetProfilePicture(@RequestParam String petUuid, @RequestParam String profilePictureUrl) {
         
