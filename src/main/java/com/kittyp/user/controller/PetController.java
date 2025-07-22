@@ -21,6 +21,7 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.user.dto.PetDetailDto;
+import com.kittyp.user.dto.PetPhotosDto;
 import com.kittyp.user.models.PetModel;
 import com.kittyp.user.service.PetService;
 
@@ -79,10 +80,10 @@ public class PetController {
 
     @PatchMapping(ApiUrl.PET_BASE_URL + "/photos")
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<PetModel>> updatePetProfilePicture(@RequestParam String petUuid, @RequestParam String profilePictureUrl) {
+    public ResponseEntity<SuccessResponse<PetModel>> updatePetProfilePicture(@RequestParam String uuid,@RequestBody PetPhotosDto petPhotosDto) {
         
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        PetModel response = petService.updatePetProfilePicture(petUuid, profilePictureUrl);
+        PetModel response = petService.updatePetProfilePicture(uuid, petPhotosDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 }

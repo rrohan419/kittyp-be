@@ -3,6 +3,7 @@ package com.kittyp.user.service;
 import java.util.List;
 
 import com.kittyp.user.dto.PetDetailDto;
+import com.kittyp.user.dto.PetPhotosDto;
 import com.kittyp.user.models.PetModel;
 
 public interface PetService {
@@ -15,5 +16,5 @@ public interface PetService {
 
     void deletePetByUuid(String uuid, String email);
 
-    PetModel updatePetProfilePicture(String petUuid, String profilePictureUrl);
+    PetModel updatePetProfilePicture(String petUuid, PetPhotosDto petPhotosDto);
 }
