@@ -79,4 +79,14 @@ public class UserDaoImpl implements UserDao {
 		}
 	}
 
+	@Override
+	public Integer countActiveUsers() {
+		try {
+			return userRepository.countByIsActiveTrue();
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 }

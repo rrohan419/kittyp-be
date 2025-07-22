@@ -99,9 +99,9 @@ public class ArticleServiceImpl implements ArticleService {
 		
 		article.setAuthor(author);
 		
-		article = articleDao.saveArticle(article);
+		Article savedArticle = articleDao.saveArticle(article);
 		
-		return mapper.convert(article, ArticleModel.class);
+		return mapper.convert(savedArticle, ArticleModel.class);
 	}
 
 	/**
@@ -119,9 +119,41 @@ public class ArticleServiceImpl implements ArticleService {
 			throw new CustomException(String.format(env.getProperty(ExceptionConstant.ARTICLE_NOT_FOUND), slug), HttpStatus.NOT_FOUND);
 		}
 		
-		article = mapper.convert(articleEditDto, Article.class);
+		if(articleEditDto.getTitle() != null && !articleEditDto.getTitle().isEmpty()){
+			article.setTitle(articleEditDto.getTitle());
+		}
+
+		if(articleEditDto.getExcerpt() != null && !articleEditDto.getExcerpt().isEmpty()){
+			article.setExcerpt(articleEditDto.getExcerpt());
+		}
+
+		if(articleEditDto.getContent() != null && !articleEditDto.getContent().isEmpty()){
+			article.setContent(articleEditDto.getContent());
+		}
+
+		if(articleEditDto.getCoverImage() != null && !articleEditDto.getCoverImage().isEmpty()){
+			article.setCoverImage(articleEditDto.getCoverImage());
+		}
+
+		if(articleEditDto.getCategory() != null && !articleEditDto.getCategory().isEmpty()){
+			article.setCategory(articleEditDto.getCategory());
+		}
+
+		if(articleEditDto.getTags() != null && !articleEditDto.getTags().isEmpty()){
+			article.setTags(articleEditDto.getTags());
+		}
+
+		if(articleEditDto.getReadTime() != null){
+			article.setReadTime(articleEditDto.getReadTime());
+		}
+
+		if(articleEditDto.getStatus() != null){
+			article.setStatus(articleEditDto.getStatus());
+		}
 		
-		return mapper.convert(article, ArticleModel.class);
+		Article savedArticle = articleDao.saveArticle(article);
+		
+		return mapper.convert(savedArticle, ArticleModel.class);
 	}
 
 }

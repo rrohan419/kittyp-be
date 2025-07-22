@@ -244,4 +244,25 @@ public class UserServiceImpl implements UserService {
 		logger.info("User status updated for UUID: {} to enabled: {}", userUuid, enabled);
 		return userDetailsModel;
 	}
+
+	@Override
+	public UserDetailsModel updateUserProfile(String userUuid, String profilePictureUrl) {
+		User user = userDao.userByUuid(userUuid);
+		if (user == null) {
+			logger.warn("User not found with UUID: {}", userUuid);
+			throw new CustomException("User not found", HttpStatus.NOT_FOUND);
+		}
+
+		user.setProfilePictureUrl(profilePictureUrl);
+		user = userDao.saveUser(user);
+
+		UserDetailsModel userDetailsModel = mapper.convert(user, UserDetailsModel.class);
+		userDetailsModel.setRoles(user.getUserRoles().stream()
+				.map(UserRole::getRole)
+				.map(role -> role.getName().name())
+				.collect(Collectors.toSet()));
+
+		logger.info("User profile updated for UUID: {}", userUuid);
+		return userDetailsModel;
+	}
 }

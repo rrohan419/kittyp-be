@@ -46,11 +46,13 @@ public class Article extends BaseEntity {
 	@Column(unique = true)
 	private String slug;
     
+    @Column(columnDefinition = "TEXT")
     private String excerpt;
 
     @Column(columnDefinition = "TEXT")
     private String content;
     
+    @Column(columnDefinition = "TEXT")
     private String coverImage;
     
     private String category;

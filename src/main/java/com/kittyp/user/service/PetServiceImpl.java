@@ -120,4 +120,20 @@ public class PetServiceImpl implements PetService {
 
         return mapper.convert(updatedPet, PetModel.class);
     }
+
+    @Override
+    public PetModel updatePetProfilePicture(String petUuid, String profilePictureUrl) {
+        Pet pet = petDao.petByUuid(petUuid);
+        if (pet == null) {
+            throw new CustomException("Pet not found by uuid: " + petUuid, HttpStatus.NOT_FOUND);
+        }
+
+        log.info("Updating profile picture for pet with uuid={}", petUuid);
+        pet.setProfilePicture(profilePictureUrl);
+        Pet updatedPet = petDao.savePets(pet);
+        
+        log.info("Successfully updated profile picture for pet with uuid={}", updatedPet.getUuid());
+
+        return mapper.convert(updatedPet, PetModel.class);
+    }
 }

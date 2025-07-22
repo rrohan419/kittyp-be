@@ -14,4 +14,6 @@ public interface PetService {
     PetModel updatePet(PetDetailDto petDetailDto, String uuid, String email);
 
     void deletePetByUuid(String uuid, String email);
+
+    PetModel updatePetProfilePicture(String petUuid, String profilePictureUrl);
 }

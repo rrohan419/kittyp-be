@@ -31,4 +31,6 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
 	Order findByAggregatorOrderNumber(String aggregatorOrderNumber);
 
 	Integer countByUser_EmailAndStatusIn(String email, List<OrderStatus> status);
+
+	Integer countByIsActiveAndStatusIn(boolean isActive, List<OrderStatus> status);
 }

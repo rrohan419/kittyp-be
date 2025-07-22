@@ -28,4 +28,6 @@ public interface UserService {
 	// Updated admin methods
 	PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize);
 	UserDetailsModel updateUserStatus(String userUuid, boolean enabled);
+
+	UserDetailsModel updateUserProfile(String userUuid, String profilePictureUrl);
 }

@@ -16,4 +16,5 @@ public class UserDetailDto {
     private String email;
     private String phoneNumber;
     private String phoneCountryCode;
+    private String profilePictureUrl;
 }

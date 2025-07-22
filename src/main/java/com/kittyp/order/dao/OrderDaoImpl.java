@@ -103,4 +103,14 @@ public class OrderDaoImpl implements OrderDao {
 		}
 	}
 
+	@Override
+	public Integer countOfOrderByStatus(boolean isActive, List<OrderStatus> status) {
+		try {
+			return orderRepository.countByIsActiveAndStatusIn(isActive, status);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 }

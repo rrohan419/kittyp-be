@@ -3,6 +3,7 @@ package com.kittyp.common.exception;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import javax.naming.AuthenticationException;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -58,6 +60,12 @@ public class GlobalExceptionHandler {
 		log.error("Resource not found exception: {}", ex.getMessage());
 		return new ResponseEntity<>(apiError, HttpStatus.NOT_FOUND);
 	}
+
+	 @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<?> handleDisabledUser(DisabledException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "Account disabled", "message", ex.getMessage()));
+    }
 
 	@ExceptionHandler(ResourceAlreadyExistsException.class)
 	public ResponseEntity<ApiError> handleResourceAlreadyExistsException(ResourceAlreadyExistsException ex,

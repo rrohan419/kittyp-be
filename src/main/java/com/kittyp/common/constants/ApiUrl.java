@@ -32,6 +32,7 @@ public class ApiUrl {
 	public static final String ARTICLE_BASE_URL = "/article";
 	public static final String ALL_ARTICLES = ARTICLE_BASE_URL + "/all";
 	public static final String ARTICLE_BY_SLUG = ARTICLE_BASE_URL + "/{slug}";
+	public static final String ARTICLE_EDIT_BY_SLUG = "/admin" + ARTICLE_BASE_URL + "/edit/{slug}";
 
 	// Product controller
 	public static final String PRODUCT_BASE_URL = "/product";

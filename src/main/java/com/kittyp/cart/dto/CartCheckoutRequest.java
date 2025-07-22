@@ -1,7 +1,7 @@
 package com.kittyp.cart.dto;
 
 import com.kittyp.order.emus.ShippingTypes;
-import com.kittyp.user.entity.Address;
+import com.kittyp.order.entity.AddressInfo;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -9,10 +9,10 @@ import lombok.Data;
 @Data
 public class CartCheckoutRequest {
     @NotNull(message = "Billing address is required")
-    private Address billingAddress;
+    private AddressInfo billingAddress;
     
     @NotNull(message = "Shipping address is required")
-    private Address shippingAddress;
+    private AddressInfo shippingAddress;
         
     private String notes;
     
