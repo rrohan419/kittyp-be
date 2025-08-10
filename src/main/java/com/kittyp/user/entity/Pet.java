@@ -31,6 +31,7 @@ public class Pet extends BaseEntity {
     private String name;
     @Column(columnDefinition = "TEXT")
     private String profilePicture;
+    private String type;
     private String breed;
     private String age;
     private String weight;

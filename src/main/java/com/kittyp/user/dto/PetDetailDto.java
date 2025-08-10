@@ -8,6 +8,7 @@ public class PetDetailDto {
     @NotBlank
     private String name;
     private String profilePicture;
+    private String type;
     private String breed;
     private String age;
     private String weight;
