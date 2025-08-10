@@ -62,11 +62,11 @@ public class GlobalExceptionHandler {
 		return new ResponseEntity<>(apiError, HttpStatus.NOT_FOUND);
 	}
 
-	 @ExceptionHandler(DisabledException.class)
-    public ResponseEntity<?> handleDisabledUser(DisabledException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Account disabled", "message", ex.getMessage()));
-    }
+	@ExceptionHandler(DisabledException.class)
+	public ResponseEntity<?> handleDisabledUser(DisabledException ex) {
+		return ResponseEntity.status(HttpStatus.FORBIDDEN)
+				.body(Map.of("error", "Account disabled", "message", ex.getMessage()));
+	}
 
 	@ExceptionHandler(ResourceAlreadyExistsException.class)
 	public ResponseEntity<ApiError> handleResourceAlreadyExistsException(ResourceAlreadyExistsException ex,
@@ -77,6 +77,13 @@ public class GlobalExceptionHandler {
 
 		log.error("Resource already exists exception: {}", ex.getMessage());
 		return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ApiError> handleMaxSizeException(MaxUploadSizeExceededException ex) {
+		ApiError response = new ApiError(HttpStatus.INTERNAL_SERVER_ERROR.value(),
+				"File size exceeds the maximum allowed limit.", ex.getMessage(), ex.getLocalizedMessage());
+		return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
 	}
 
 	@ExceptionHandler(AuthException.class)
@@ -225,7 +232,7 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(CustomException.class)
 	public ResponseEntity<ErrorResponse<Void>> handleCustomException(CustomException ex, WebRequest request) {
-//        String path = extractPath(request);
+		// String path = extractPath(request);
 		
 		return responseBuilder.buildErrorResponse(ex.getMessage(), ex.getLocalizedMessage(),
 				ex.getHttpStatus(), null);
@@ -250,12 +257,5 @@ public class GlobalExceptionHandler {
 		
 		return responseBuilder.buildErrorResponse("Invalid username or password", ex.getLocalizedMessage(),
 				HttpStatus.UNAUTHORIZED, null);
-	}
-
-	@ExceptionHandler(MaxUploadSizeExceededException.class)
-	public ResponseEntity<ApiError> handleMaxSizeException(MaxUploadSizeExceededException ex) {
-		ApiError response = new ApiError(HttpStatus.INTERNAL_SERVER_ERROR.value(),
-				"File size exceeds the maximum allowed limit.", ex.getMessage(), ex.getLocalizedMessage());
-		return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
 	}
 }

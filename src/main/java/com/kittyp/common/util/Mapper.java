@@ -3,6 +3,8 @@
  */
 package com.kittyp.common.util;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -22,6 +24,7 @@ import org.modelmapper.config.Configuration;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kittyp.ai.prompts.SystemPrompt;
 import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.exception.CustomException;
 
@@ -56,6 +59,20 @@ public class Mapper {
 	public <T> T convert(Object srcObj, Class<T> targetClass) {
 		try {
 			return modelMapper.map(srcObj, targetClass);
+
+		} catch (IllegalArgumentException argumentException) {
+
+			throw new CustomException(env.getProperty(ExceptionConstant.SOURCE_OR_DESTINATION_IS_NULL));
+
+		} catch (MappingException | ConfigurationException eRuntimeException) {
+
+			throw new CustomException(eRuntimeException.getMessage());
+		}
+	}
+
+	public void map(Object srcObj, Object destObj) {
+		try {
+			modelMapper.map(srcObj, destObj);
 
 		} catch (IllegalArgumentException argumentException) {
 
@@ -108,5 +125,38 @@ public class Mapper {
 			throw new CustomException("Error converting object to JSON string: " + e.getMessage());
 		}
 	}
+
+	public <T> T readValueFromStream(InputStream inputStream, Class<T> targetClass) {
+		try {
+			return objectMapper.readValue(inputStream, targetClass);
+		} catch (IOException ex) {
+			throw new CustomException(ex.getMessage());
+		}
+	}
+
+	public <T> T readValueFromString(String inputString, Class<T> targetClass) {
+		try {
+			return objectMapper.readValue(inputString, targetClass);
+		} catch (IOException ex) {
+			throw new CustomException(ex.getMessage());
+		}
+	}
+
+	public String writeValueAsString(Map<String, Object> mapData) {
+		try {
+			return objectMapper.writeValueAsString(mapData);
+		} catch (IOException ex) {
+			throw new CustomException(ex.getMessage());
+		}
+	}
+
+	public void validateStringJson(String jsonData) {
+		try {
+			objectMapper.readTree(jsonData);
+		} catch (Exception ex) {
+			throw new CustomException(ex.getMessage());
+		}
+	}
+
 
 }
