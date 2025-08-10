@@ -258,11 +258,4 @@ public class GlobalExceptionHandler {
 		return responseBuilder.buildErrorResponse("Invalid username or password", ex.getLocalizedMessage(),
 				HttpStatus.UNAUTHORIZED, null);
 	}
-
-	@ExceptionHandler(MaxUploadSizeExceededException.class)
-	public ResponseEntity<ApiError> handleMaxSizeException(MaxUploadSizeExceededException ex) {
-		ApiError response = new ApiError(HttpStatus.INTERNAL_SERVER_ERROR.value(),
-				"File size exceeds the maximum allowed limit.", ex.getMessage(), ex.getLocalizedMessage());
-		return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
-	}
 }
