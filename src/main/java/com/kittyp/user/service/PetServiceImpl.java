@@ -72,21 +72,14 @@ public class PetServiceImpl implements PetService {
 
         User petOwner = userDao.userByEmail(email);
 
-        Boolean isOwnerPet = petOwner.getPets().stream().anyMatch(pet -> pet.getUuid().equals(uuid));
-
-        if(!isOwnerPet) {
+        Pet petToDelete = petOwner.getPets().stream().filter(pet -> pet.getUuid().equals(uuid)).findFirst().orElseThrow(() -> {
             log.info("Pet not found with uuid={}, for owner email {}", uuid, petOwner.getEmail());
             throw new CustomException("pet not found by uuid : "+uuid, HttpStatus.NOT_FOUND);
-        }
-
-        // Pet pet = petDao.petByUuid(uuid);
-
-        // if(pet == null) {
-        //     throw new CustomException("pet not found by uuid : "+uuid, HttpStatus.NOT_FOUND);
-        // }
+        });
 
         log.info("Deleting pet with uuid={}", uuid);
-        petDao.deleteByUuid(uuid);
+        petOwner.getPets().remove(petToDelete);
+        userDao.saveUser(petOwner);
         log.info("Deleted pet with uuid={}", uuid);
     }
 
@@ -107,6 +100,7 @@ public class PetServiceImpl implements PetService {
         existingPet.setName(petDetailDto.getName());
         existingPet.setProfilePicture(petDetailDto.getProfilePicture());
         existingPet.setBreed(petDetailDto.getBreed());
+        existingPet.setType(petDetailDto.getType());
         existingPet.setAge(petDetailDto.getAge());
         existingPet.setWeight(petDetailDto.getWeight());
         existingPet.setActivityLevel(petDetailDto.getActivityLevel());

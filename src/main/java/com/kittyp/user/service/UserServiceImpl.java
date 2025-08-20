@@ -3,6 +3,7 @@
  */
 package com.kittyp.user.service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -73,6 +74,8 @@ public class UserServiceImpl implements UserService {
 					.map(pet -> mapper.convert(pet, PetModel.class))
 					.collect(Collectors.toSet());
 			userDetailsModel.setOwnerPets(petModels);
+		} else {
+			userDetailsModel.setOwnerPets(new HashSet<>());
 		}
 
 		logger.info("User details retrieved successfully for email: {}", email);
