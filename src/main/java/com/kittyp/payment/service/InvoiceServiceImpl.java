@@ -85,7 +85,7 @@ public class InvoiceServiceImpl implements InvoiceService {
 			throw new CustomException("Not Authorized to access this invoice", HttpStatus.FORBIDDEN);
 		}
 		String orderId = orderNumber + "-" + userUuid;
-		return s3Service.presignedUrl(orderId, Duration.ofMinutes(10L));
+		return s3Service.presignedInvoiceUrl(orderId, Duration.ofMinutes(10L));
 
 	}
 

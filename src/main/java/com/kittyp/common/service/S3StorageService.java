@@ -79,7 +79,7 @@ public class S3StorageService {
     // return presignedRequest.url();
     // }
 
-    public URL presignedUrl(String orderId, Duration ttl) {
+    public URL presignedInvoiceUrl(String orderId, Duration ttl) {
         String key = "invoices/" + orderId + ".pdf";
 
         // Check if object exists
@@ -118,8 +118,11 @@ public class S3StorageService {
 
         try {
             s3Client.putObject(putRequest, RequestBody.fromBytes(fileData));
-            // return key; // or generate S3 URL if needed
-            return getPublicUrl(key);
+
+            // generate S3 URL if needed
+            return s3Client.utilities()
+                .getUrl(b -> b.bucket(userBucket).key(key))
+                .toExternalForm();
         } catch (Exception e) {
             throw new RuntimeException("Failed to upload file to S3: " + e.getMessage(), e);
         }
