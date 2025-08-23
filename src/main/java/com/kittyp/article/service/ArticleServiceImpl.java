@@ -10,6 +10,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ import com.kittyp.article.entity.Author;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
 import com.kittyp.common.constants.ExceptionConstant;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
@@ -63,8 +66,9 @@ public class ArticleServiceImpl implements ArticleService {
 	@Override
 	public PaginationModel<ArticleListModel> allArticlesByFilter(ArticleFilterDto articleFilterModel, Integer pageNumber,
 			Integer pageSize) {
-		
-		Pageable pageable = PageRequest.of(pageNumber-1, pageSize);
+	
+		Sort sort = Sort.by(Direction.DESC, KeyConstant.CREATED_AT);
+		Pageable pageable = PageRequest.of(pageNumber-1, pageSize, sort);
 		
 		Specification<Article> articleSpecification = ArticleSpecification.articlesByFilters(articleFilterModel);
 		
