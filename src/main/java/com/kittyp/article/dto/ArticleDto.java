@@ -42,7 +42,7 @@ public class ArticleDto {
     private Integer readTime;
     
     @Valid
-    private AuthorDto author;
+    private Long authorId;
     
     @NotNull
     private ArticleStatus status;

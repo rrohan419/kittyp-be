@@ -12,6 +12,8 @@ public class ApiUrl {
 	}
 
 	public static final String BASE_URL = "api/v1";
+	public static final String ADMIN = "/admin";
+	public static final String PATH_VARIABLE_UUID = "/{uuid}";
 
 	// Auth controller
 	public static final String AUTH_BASE_URL = "/auth";
@@ -32,15 +34,25 @@ public class ApiUrl {
 	public static final String ARTICLE_BASE_URL = "/article";
 	public static final String ALL_ARTICLES = ARTICLE_BASE_URL + "/all";
 	public static final String ARTICLE_BY_SLUG = ARTICLE_BASE_URL + "/{slug}";
-	public static final String ARTICLE_EDIT_BY_SLUG = "/admin" + ARTICLE_BASE_URL + "/edit/{slug}";
+	public static final String ARTICLE_EDIT_BY_SLUG = ADMIN + ARTICLE_BASE_URL + "/edit/{slug}";
+	public static final String ARTICLE_COMMENTS =  "/comments";
+	public static final String ADD_COMMENT =  "/comment/add";
+	public static final String ADD_ARTICLE_LIKE =   "/like/add/{articleId}";
+	public static final String ARTICLE_LIKE_COUNT =   "/like/count";
+
+	// Author controller
+	public static final String AUTHOR_BASE_URL = "/author";
+	public static final String ALL_AUTHORS = ARTICLE_BASE_URL + AUTHOR_BASE_URL + "/all";
+	public static final String AUTHOR_BY_ID = AUTHOR_BASE_URL + "/{id}";
+	public static final String CREATE_AUTHOR = ADMIN + AUTHOR_BASE_URL + "/create";
 
 	// Product controller
 	public static final String PRODUCT_BASE_URL = "/product";
 	public static final String ALL_PRODUCT = PRODUCT_BASE_URL + "/all";
-	public static final String PRODUCT_BY_UUID = PRODUCT_BASE_URL + "/{uuid}";
-	public static final String PRODUCT_COUNT = "/admin" + PRODUCT_BASE_URL + "/count";
-	public static final String DELETE_PRODUCT = "/admin" + PRODUCT_BASE_URL + "/{productUuid}";
-	public static final String UPDATE_PRODUCT = "/admin" + PRODUCT_BASE_URL + "/update";
+	public static final String PRODUCT_BY_UUID = PRODUCT_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String PRODUCT_COUNT = ADMIN + PRODUCT_BASE_URL + "/count";
+	public static final String DELETE_PRODUCT = ADMIN + PRODUCT_BASE_URL + "/{productUuid}";
+	public static final String UPDATE_PRODUCT = ADMIN + PRODUCT_BASE_URL + "/update";
 	// Order controller
 	public static final String ORDER_BASE_URL = "/order";
 	public static final String ORDER_CREATE = ORDER_BASE_URL + "/create";
@@ -66,5 +78,5 @@ public class ApiUrl {
 
 	// pet controller
 	public static final String PET_BASE_URL = "/pet";
-	public static final String PET_BY_UUID = "/{uuid}";
+	public static final String PET_BY_UUID = PET_BASE_URL + PATH_VARIABLE_UUID;
 }

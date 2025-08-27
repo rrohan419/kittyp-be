@@ -26,4 +26,6 @@ public class ArticleListModel {
     private AuthorModel author;
     private String category;
     private String coverImage;
+    private Long commentCount;
+    private Long likeCount;
 }

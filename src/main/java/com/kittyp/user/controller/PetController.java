@@ -68,7 +68,7 @@ public class PetController {
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
-    @DeleteMapping(ApiUrl.PET_BASE_URL + ApiUrl.PET_BY_UUID)
+    @DeleteMapping(ApiUrl.PET_BY_UUID)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<String>> removePet(@PathVariable String uuid) {
         
@@ -82,7 +82,7 @@ public class PetController {
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<PetModel>> updatePetProfilePicture(@RequestParam String uuid,@RequestBody PetPhotosDto petPhotosDto) {
         
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        // String email = SecurityContextHolder.getContext().getAuthentication().getName();
         PetModel response = petService.updatePetProfilePicture(uuid, petPhotosDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }

@@ -3,9 +3,11 @@
  */
 package com.kittyp.article.service;
 
+import com.kittyp.article.dto.ArticleCommentsDto;
 import com.kittyp.article.dto.ArticleDto;
 import com.kittyp.article.dto.ArticleEditDto;
 import com.kittyp.article.dto.ArticleFilterDto;
+import com.kittyp.article.model.ArticleCommentsModel;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
 import com.kittyp.common.model.PaginationModel;
@@ -48,4 +50,14 @@ public interface ArticleService {
 	 * @return
 	 */
 	ArticleModel editArticle(String slug, ArticleEditDto articleEditDto);
+
+	ArticleCommentsModel saveComment(ArticleCommentsDto articleCommentsDto);
+
+	PaginationModel<ArticleCommentsModel> allCommentsByFilter(Long articleId, Integer pageNumber, Integer pageSize);
+
+	Long countCommentsByArticleId(Long articleId);
+
+	Long countLikesByArticleId(Long articleId);
+
+	Long addLikeToArticle(Long articleId, String email);
 }

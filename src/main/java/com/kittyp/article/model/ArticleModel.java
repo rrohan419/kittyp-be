@@ -28,5 +28,6 @@ public class ArticleModel {
     private List<String> tags;
     private Integer readTime;
     private AuthorModel author;
-    private List<CommentModel> comments;
+     private Long commentCount;
+    private Long likeCount;
 }

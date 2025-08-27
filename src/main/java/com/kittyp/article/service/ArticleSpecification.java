@@ -10,7 +10,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import com.kittyp.article.dto.ArticleFilterDto;
 import com.kittyp.article.entity.Article;
-import com.kittyp.article.enums.ArticleStatus;
+import com.kittyp.article.entity.ArticleComments;
 import com.kittyp.common.constants.KeyConstant;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -45,6 +45,21 @@ public class ArticleSpecification {
 			if(articleFilterDto.getArticleStatus() != null) {
 				predicates.add(builder.equal(root.get(KeyConstant.ARTICLE_STATUS), articleFilterDto.getArticleStatus()));
 			} 
+			
+			return builder.and(predicates.toArray(new Predicate[0]));
+		};
+	
+	}
+
+	public static Specification<ArticleComments> articleCommentsByFilter(Long articleId) {
+		return (Root<ArticleComments> root, CriteriaQuery<?> query, CriteriaBuilder builder) -> {
+			List<Predicate> predicates = new ArrayList<>();
+			
+			predicates.add(builder.equal(root.get(KeyConstant.IS_ACTIVE), true));
+			
+			if(articleId != null) {
+				predicates.add(builder.equal(root.get(KeyConstant.ARTICLE_ID), articleId));
+			}
 			
 			return builder.and(predicates.toArray(new Predicate[0]));
 		};
