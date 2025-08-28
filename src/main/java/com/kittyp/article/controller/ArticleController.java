@@ -113,12 +113,41 @@ public class ArticleController {
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
+	@PatchMapping(ApiUrl.REMOVE_ARTICLE_LIKE)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<Long>> removeLike(
+			@PathVariable Long articleId) {
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		Long response = articleService.removeLikeFromArticle(articleId, email);
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
 	@GetMapping(ApiUrl.ARTICLE_LIKE_COUNT)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
 	public ResponseEntity<SuccessResponse<Long>> articleLikeCount(
 			@RequestParam(required = true) Long articleId) {
 
 		Long response = articleService.countLikesByArticleId(articleId);
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.LIKE_COMMENT)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<Long>> likeComment(
+			@PathVariable Long commentId) {
+
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+		Long response = articleService.addLikeToComment(commentId, email);
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.ARTICLE_LIKED)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<Boolean>> isArticleLikedByUser(
+			@PathVariable Long articleId) {
+
+		Boolean response = articleService.isArticleLikedByUser(articleId);
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 }

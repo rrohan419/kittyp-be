@@ -60,4 +60,10 @@ public interface ArticleService {
 	Long countLikesByArticleId(Long articleId);
 
 	Long addLikeToArticle(Long articleId, String email);
+
+	Long removeLikeFromArticle(Long articleId, String email);
+
+	Long addLikeToComment(Long commentId, String email);
+
+	Boolean isArticleLikedByUser(Long articleId);
 }

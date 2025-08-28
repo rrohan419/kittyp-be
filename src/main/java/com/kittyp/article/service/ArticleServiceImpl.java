@@ -4,6 +4,7 @@
 package com.kittyp.article.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.core.env.Environment;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import com.kittyp.article.dao.ArticleCommentLikesDao;
 import com.kittyp.article.dao.ArticleCommentsDao;
 import com.kittyp.article.dao.ArticleDao;
 import com.kittyp.article.dao.ArticlesLikesDao;
@@ -27,6 +29,7 @@ import com.kittyp.article.dto.ArticleDto;
 import com.kittyp.article.dto.ArticleEditDto;
 import com.kittyp.article.dto.ArticleFilterDto;
 import com.kittyp.article.entity.Article;
+import com.kittyp.article.entity.ArticleCommentLikes;
 import com.kittyp.article.entity.ArticleComments;
 import com.kittyp.article.entity.ArticlesLikes;
 import com.kittyp.article.entity.Author;
@@ -59,6 +62,7 @@ public class ArticleServiceImpl implements ArticleService {
 	private final UserDao userDao;
 	private final ArticleCommentsDao articleCommentsDao;
 	private final ArticlesLikesDao articlesLikesDao;
+	private final ArticleCommentLikesDao articleCommentLikesDao;
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -196,6 +200,7 @@ public class ArticleServiceImpl implements ArticleService {
 		articleComments.setUuid(UUID.randomUUID().toString());
 		articleComments.setIsApproved(Boolean.FALSE);
 		articleComments.setCommenterUuid(user.getUuid());
+		
 
 		ArticleComments savedComment = articleCommentsDao.saveComment(articleComments);
 
@@ -284,6 +289,47 @@ public class ArticleServiceImpl implements ArticleService {
 
 		return articlesLikesDao.countArticleLikes(articleId);
 
+	}
+
+	@Override
+	public Long removeLikeFromArticle(Long articleId, String email) {
+		User user = userDao.userByEmail(email);
+
+		Optional<ArticlesLikes> articlesLikes = articlesLikesDao.findByArtileIdAndUserUuid(articleId,
+				user.getUuid());
+		if(!articlesLikes.isPresent()){
+			throw new CustomException("like not found", HttpStatus.NOT_FOUND);
+		}
+		if (!articlesLikes.get().getLikerUuid().equals(user.getUuid())) {
+			throw new CustomException("you are not authorized to delete this like", HttpStatus.UNAUTHORIZED);
+		}
+		articlesLikesDao.deleteLike(articlesLikes.get());
+
+		return articlesLikesDao.countArticleLikes(articlesLikes.get().getArticleId());
+	}
+
+	@Override
+	public Long addLikeToComment(Long commentId, String email) {
+		User user = userDao.userByEmail(email);
+		ArticleCommentLikes articleCommentLikes = new com.kittyp.article.entity.ArticleCommentLikes();
+		articleCommentLikes.setCommentId(commentId);
+		articleCommentLikes.setUserUuid(user.getUuid());
+		articleCommentLikesDao.saveArticleCommentLike(articleCommentLikes);
+
+		return articleCommentLikesDao.countLikesByCommentId(commentId);
+	}
+
+	@Override
+	public Boolean isArticleLikedByUser(Long articleId) {
+		
+		// Check if the user is authenticated
+	    String email = SecurityContextHolder.getContext().getAuthentication().getName();
+	    if (email != null && !email.equals("anonymousUser")) {
+	        User user = userDao.userByEmail(email);
+	        return articlesLikesDao.isArticleLikedByUser(articleId, user.getUuid());
+	    } else {
+	        return Boolean.FALSE;
+	    }
 	}
 
 }
