@@ -19,6 +19,7 @@ public class KeyConstant {
 	public static final String PAGE_SIZE = "10";
 	
 	public static final String IS_ACTIVE = "isActive";
+	public static final String ARTICLE_ID = "articleId";
 	public static final String TITLE = "title";
 	public static final String ARTICLE_STATUS = "status";
 	public static final String PRODUCT_STATUS = "status";

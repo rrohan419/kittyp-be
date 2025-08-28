@@ -3,7 +3,7 @@
  */
 package com.kittyp.article.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 
 /**
@@ -12,7 +12,7 @@ import lombok.Getter;
 @Getter
 public class AuthorDto {
 
-	@NotBlank
+    @NotNull
 	private String name;
     private String avatar;
     private String role;

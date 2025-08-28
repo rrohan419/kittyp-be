@@ -1,16 +1,9 @@
-/**
- * @author rrohan419@gmail.com
- */
 package com.kittyp.article.entity;
-
-
-import java.util.List;
 
 import com.kittyp.common.entity.BaseEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,24 +15,25 @@ import lombok.NoArgsConstructor;
  * @author rrohan419@gmail.com 
  */
 @Entity
-@Table(name = "authors")
+@Table(name = "article_comments")
 @Data
 @EqualsAndHashCode(callSuper=false)
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Author extends BaseEntity {
-	
-	private static final long serialVersionUID = 1L;
-	
-	private String name;
-	
-	@Column(columnDefinition = "TEXT")
-    private String avatar;
+public class ArticleComments extends BaseEntity {
     
-    private String role;
+    private static final long serialVersionUID = 1L;
+    
+    @Column(unique = true, nullable = false)
+    private String uuid;
 
-	@OneToMany(mappedBy = "author")
-	private List<Article> articles;
+    @Column(columnDefinition = "TEXT")
+    private String comment;
+    
+    private String commenterUuid;
+    
+    private Boolean isApproved;
 
+    private Long articleId;
 }
