@@ -83,7 +83,6 @@ public class ArticleController {
 	}
 
 	@GetMapping(ApiUrl.ARTICLE_COMMENTS)
-	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
 	public ResponseEntity<SuccessResponse<PaginationModel<ArticleCommentsModel>>> articleCommentsByFilter(
 			@RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) int page,
 			@RequestParam(defaultValue = KeyConstant.PAGE_SIZE) int size,

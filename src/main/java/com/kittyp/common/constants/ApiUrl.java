@@ -35,7 +35,7 @@ public class ApiUrl {
 	public static final String ALL_ARTICLES = ARTICLE_BASE_URL + "/all";
 	public static final String ARTICLE_BY_SLUG = ARTICLE_BASE_URL + "/{slug}";
 	public static final String ARTICLE_EDIT_BY_SLUG = ADMIN + ARTICLE_BASE_URL + "/edit/{slug}";
-	public static final String ARTICLE_COMMENTS = "/comments";
+	public static final String ARTICLE_COMMENTS = ARTICLE_BASE_URL + "/comments";
 	public static final String ADD_COMMENT = "/comment/add";
 	public static final String ADD_ARTICLE_LIKE = "/like/add/{articleId}";
 	public static final String REMOVE_ARTICLE_LIKE = "/like/remove/{articleId}";
