@@ -3,6 +3,8 @@ package com.kittyp.user.dao;
 import java.util.List;
 
 import org.springframework.core.env.Environment;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Repository;
 
@@ -52,8 +54,9 @@ public class AddressDaoImpl implements AddressDao {
 
     @Override
     public List<Address> getAllAddresses(String userUuid) {
-        try {
-			return addressRepository.findByUserUuid(userUuid);
+        Sort sort = Sort.by(Direction.DESC, "createdAt");
+		try {
+			return addressRepository.findByUserUuid(userUuid, sort);
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
 					HttpStatus.INTERNAL_SERVER_ERROR);
