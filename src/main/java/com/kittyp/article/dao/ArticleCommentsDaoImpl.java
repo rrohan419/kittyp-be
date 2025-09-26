@@ -1,5 +1,9 @@
 package com.kittyp.article.dao;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.core.env.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -52,6 +56,21 @@ public class ArticleCommentsDaoImpl implements ArticleCommentsDao {
 	public Long countCommentsByArticleId(Long articleId) {
 		try {
 			return articleCommentsRepository.countByArticleId(articleId);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Map<Long, Long> countCommentsByArticleIds(List<Long> articleIds) {
+		try {
+			var rows = articleCommentsRepository.countByArticleIds(articleIds);
+			Map<Long, Long> result = new HashMap<>();
+			for (var row : rows) {
+				result.put(row.getArticleId(), row.getCnt());
+			}
+			return result;
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
 					HttpStatus.INTERNAL_SERVER_ERROR);

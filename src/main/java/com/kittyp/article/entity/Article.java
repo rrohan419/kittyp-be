@@ -5,6 +5,8 @@ package com.kittyp.article.entity;
 
 import java.util.List;
 
+import org.hibernate.annotations.BatchSize;
+
 import com.kittyp.article.enums.ArticleStatus;
 import com.kittyp.common.entity.BaseEntity;
 
@@ -65,6 +67,7 @@ public class Article extends BaseEntity {
     @ElementCollection
     @CollectionTable(name = "article_tags", joinColumns = @JoinColumn(name = "article_id"))
     @Column(name = "tag")
+    @BatchSize(size = 50)
     private List<String> tags;
 
     private Integer readTime;

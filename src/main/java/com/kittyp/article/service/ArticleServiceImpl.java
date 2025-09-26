@@ -4,6 +4,7 @@
 package com.kittyp.article.service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -97,11 +98,15 @@ public class ArticleServiceImpl implements ArticleService {
 
 		Page<Article> articlePage = articleDao.findAllArticles(pageable, articleSpecification);
 
+		List<Long> articleIds = articlePage.getContent().stream().map(Article::getId).toList();
+		Map<Long, Long> likeCounts = articlesLikesDao.countArticleLikesByIds(articleIds);
+		Map<Long, Long> commentCounts = articleCommentsDao.countCommentsByArticleIds(articleIds);
+
 		List<ArticleListModel> articleListModels = articlePage.getContent().stream().map(article -> {
 			ArticleListModel model = mapper.convert(article, ArticleListModel.class);
 			Long articleId = article.getId();
-			model.setLikeCount(articlesLikesDao.countArticleLikes(articleId));
-			model.setCommentCount(articleCommentsDao.countCommentsByArticleId(articleId));
+			model.setLikeCount(likeCounts.getOrDefault(articleId, 0L));
+			model.setCommentCount(commentCounts.getOrDefault(articleId, 0L));
 			return model;
 		}).toList();
 

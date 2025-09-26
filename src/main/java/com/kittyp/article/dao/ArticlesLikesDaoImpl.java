@@ -1,5 +1,8 @@
 package com.kittyp.article.dao;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.core.env.Environment;
@@ -34,6 +37,20 @@ public class ArticlesLikesDaoImpl implements ArticlesLikesDao {
   public Long countArticleLikes(Long articleId) {
     try {
       return articlesLikesRepository.countByArticleId(articleId);
+    } catch (Exception e) {
+      throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+          HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  public Map<Long, Long> countArticleLikesByIds(List<Long> articleIds) {
+    try {
+      var rows = articlesLikesRepository.countByArticleIds(articleIds);
+      Map<Long, Long> result = new HashMap<>();
+      for (var row : rows) {
+        result.put(row.getArticleId(), row.getCnt());
+      }
+      return result;
     } catch (Exception e) {
       throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
           HttpStatus.INTERNAL_SERVER_ERROR);

@@ -3,14 +3,15 @@
  */
 package com.kittyp.common.config;
 
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
  * @author rrohan419@gmail.com
@@ -24,10 +25,25 @@ public class CommonConfig {
 			@Override
 			public void addCorsMappings(CorsRegistry registry) {
 				registry.addMapping("/**") // Allow all endpoints
-						.allowedOrigins("http://localhost:8080", "https://kittyp.netlify.app", "https://kittyp.in", "https://www.kittyp.in") // Frontend URL
+						.allowedOrigins("http://localhost:8080", "https://kittyp.netlify.app", "https://kittyp.in",
+								"https://www.kittyp.in") // Frontend URL
 						.allowedMethods("*") // Allow all HTTP methods
 						.allowedHeaders("*").allowCredentials(true);
 			}
 		};
 	}
+
+	@Bean
+	CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration config = new CorsConfiguration();
+		config.setAllowedOrigins(List.of("http://localhost:8080", "https://kittyp.netlify.app", "https://kittyp.in",
+				"https://www.kittyp.in"));
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+		config.setAllowedHeaders(List.of("*"));
+		config.setAllowCredentials(true);
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", config);
+		return source;
+	}
+
 }
