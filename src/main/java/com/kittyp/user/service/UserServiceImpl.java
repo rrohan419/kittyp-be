@@ -23,16 +23,22 @@ import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.service.ZeptoMailService;
+import com.kittyp.notification.FcmPushNotificationService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
+import com.kittyp.user.dao.UserFcmTokenDao;
 import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.entity.UserFcmToken;
 import com.kittyp.user.entity.UserRole;
 import com.kittyp.user.enums.ERole;
+import com.kittyp.user.models.FcmTokenModel;
 import com.kittyp.user.models.PetModel;
 import com.kittyp.user.models.UserDetailsModel;
 
+import eu.bitwalker.useragentutils.UserAgent;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
@@ -51,6 +57,8 @@ public class UserServiceImpl implements UserService {
 	private final VerificationCodeService verificationCodeService;
 	private final PasswordEncoder encoder;
 	private final ZeptoMailService zeptoMailService;
+	private final FcmPushNotificationService fcmPushNotificationService;
+	private final UserFcmTokenDao fcmTokenDao;
 
 	@Transactional
 	@Override
@@ -267,5 +275,72 @@ public class UserServiceImpl implements UserService {
 
 		logger.info("User profile updated for UUID: {}", userUuid);
 		return userDetailsModel;
+	}
+
+	@Override
+	public FcmTokenModel updateUserFcmToken(String email, String fcmToken, HttpServletRequest request) {
+    User user = userDao.userByEmail(email);
+    if (user == null) {
+        logger.warn("User not found with email: {}", email);
+        throw new CustomException("User not found", HttpStatus.NOT_FOUND);
+    }
+
+    // Fetch all tokens for user
+    List<UserFcmToken> userTokens = fcmTokenDao.findByUser(user);
+
+    UserFcmToken currentToken = null;
+
+    // Check if token already exists
+    for (UserFcmToken token : userTokens) {
+        if (token.getToken().equals(fcmToken)) {
+            currentToken = token;
+        }
+
+        // Deactivate all tokens
+        if (Boolean.TRUE.equals(token.getIsActive())) {
+            token.setActive(Boolean.FALSE);
+            fcmTokenDao.savFcmToken(token);
+        }
+    }
+
+    // If token exists, just mark it active
+    if (currentToken != null) {
+        currentToken.setActive(Boolean.TRUE);
+        fcmTokenDao.savFcmToken(currentToken);
+        logger.info("Activated existing FCM token for user: {}", email);
+        return new FcmTokenModel(currentToken.getToken());
+    }
+
+    // If token does not exist, create new
+    UserAgent ua = UserAgent.parseUserAgentString(request.getHeader("User-Agent"));
+    String browser = ua.getBrowser().getName();
+    String os = ua.getOperatingSystem().getName();
+    String deviceType = ua.getOperatingSystem().getDeviceType().getName();
+
+    UserFcmToken newToken = UserFcmToken.builder()
+            .user(user)
+            .token(fcmToken)
+            .active(Boolean.TRUE)
+            .deviceType(deviceType)
+            .deviceInfo(os + "-" + browser)
+            .build();
+
+    UserFcmToken savedToken = fcmTokenDao.savFcmToken(newToken);
+
+    logger.info("Device Info: Browser={}, OS={}, DeviceType={}", browser, os, deviceType);
+    logger.info("User FCM token saved and activated for email: {}", email);
+
+    return new FcmTokenModel(savedToken.getToken());
+}
+
+
+	@Override
+	public void sendPushNotification(String email, String title, String body) {
+		User user = userDao.userByEmail(email);
+		List<UserFcmToken> fcmTokens = fcmTokenDao.findByUser(user);
+		if (fcmTokens != null && !fcmTokens.isEmpty()) {
+			List<String> fcmTokensList = fcmTokens.stream().map(UserFcmToken::getToken).toList();
+			fcmPushNotificationService.sendNotificationToUser(fcmTokensList, title, body);
+		}
 	}
 }
