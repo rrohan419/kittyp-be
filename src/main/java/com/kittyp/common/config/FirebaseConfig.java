@@ -17,7 +17,7 @@ import jakarta.annotation.PostConstruct;
 @Configuration
 public class FirebaseConfig {
 
-    @Value("${firebase.service.account}")
+    @Value("${FIREBASE_SERVICE_ACCOUNT}")
     private String firebaseServiceAccountInfoJson;
 
     @PostConstruct
