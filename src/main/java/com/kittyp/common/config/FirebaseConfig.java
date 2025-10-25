@@ -1,9 +1,9 @@
 package com.kittyp.common.config;
 
 import java.io.ByteArrayInputStream;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -17,18 +17,28 @@ import jakarta.annotation.PostConstruct;
 @Configuration
 public class FirebaseConfig {
 
-    @Value("${FIREBASE_SERVICE_ACCOUNT}")
+    @Value("${firebase.service.account}")
     private String firebaseServiceAccountInfoJson;
 
     @PostConstruct
-    public void initialize() throws IOException {
-        if (FirebaseApp.getApps().isEmpty()) {
-            try (InputStream serviceAccount = new ByteArrayInputStream(firebaseServiceAccountInfoJson.getBytes())) {
-                FirebaseOptions options = FirebaseOptions.builder()
-                        .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                        .build();
-                FirebaseApp.initializeApp(options);
-            }
-        }
+public void initialize() throws IOException {
+
+    if (firebaseServiceAccountInfoJson == null || firebaseServiceAccountInfoJson.isEmpty()) {
+        throw new IllegalStateException("Missing FIREBASE_CONFIG environment variable");
     }
+
+    // Replace escaped \n with real newlines
+    firebaseServiceAccountInfoJson = firebaseServiceAccountInfoJson.replace("\\n", "\n");
+
+    InputStream serviceAccount = new ByteArrayInputStream(firebaseServiceAccountInfoJson.getBytes(StandardCharsets.UTF_8));
+
+    FirebaseOptions options = FirebaseOptions.builder()
+            .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+            .build();
+
+    if (FirebaseApp.getApps().isEmpty()) {
+        FirebaseApp.initializeApp(options);
+    }
+}
+
 }
