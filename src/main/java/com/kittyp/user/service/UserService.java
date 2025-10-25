@@ -6,7 +6,10 @@ package com.kittyp.user.service;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.dto.UserDetailDto;
+import com.kittyp.user.models.FcmTokenModel;
 import com.kittyp.user.models.UserDetailsModel;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * @author rrohan419@gmail.com 
@@ -30,4 +33,8 @@ public interface UserService {
 	UserDetailsModel updateUserStatus(String userUuid, boolean enabled);
 
 	UserDetailsModel updateUserProfile(String userUuid, String profilePictureUrl);
+
+	FcmTokenModel updateUserFcmToken(String email, String fcmToken, HttpServletRequest request);
+
+	void sendPushNotification(String email, String title, String body);
 }

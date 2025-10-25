@@ -82,6 +82,11 @@ public class User extends BaseEntity {
     @Builder.Default
     private List<Pet> pets = new ArrayList<>();
 
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @Builder.Default
+    private Set<UserFcmToken> fcmTokens = new HashSet<>();
+
     // Helper method to add a role
     public void addRole(Role role) {
         UserRole userRole = new UserRole(this, role);

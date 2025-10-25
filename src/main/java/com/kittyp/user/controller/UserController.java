@@ -27,69 +27,64 @@ import com.kittyp.common.model.PaginationModel;
 import com.kittyp.user.dto.ProfilePictureUpdateDto;
 import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.dto.UserStatusUpdateDto;
+import com.kittyp.user.models.FcmTokenModel;
 import com.kittyp.user.models.UserDetailsModel;
 import com.kittyp.user.service.UserService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 @RestController
 @RequestMapping(ApiUrl.BASE_URL)
 @RequiredArgsConstructor
 public class UserController {
 
-	private final UserService userService;
+    private final UserService userService;
     private final ApiResponse<?> responseBuilder;
-	private final Environment env;
-	
-	@GetMapping(ApiUrl.USER_DETAILS)
+    private final Environment env;
+
+    @GetMapping(ApiUrl.USER_DETAILS)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<UserDetailsModel>> getUserDetails() {
-        
-		String email = SecurityContextHolder.getContext().getAuthentication().getName();
-		
+
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
         UserDetailsModel response = userService.userDetailsByEmail(email);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
-	
-	@PostMapping(ApiUrl.USER_BASE_URL)
+
+    @PostMapping(ApiUrl.USER_BASE_URL)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<UserDetailsModel>> updateUserDetails(@RequestParam(required = false) String userUuid, @RequestBody UserDetailDto userDetailDto) {
-        
-		String email = SecurityContextHolder.getContext().getAuthentication().getName();
-		
+    public ResponseEntity<SuccessResponse<UserDetailsModel>> updateUserDetails(
+            @RequestParam(required = false) String userUuid, @RequestBody UserDetailDto userDetailDto) {
+
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
         UserDetailsModel response = userService.updateUserDetail(email, userDetailDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
-	
-	@GetMapping("/test")
-    @PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
-    public ResponseEntity<SuccessResponse<UserDetailsModel>> test() {
-        
-		String email = SecurityContextHolder.getContext().getAuthentication().getName();
-		
-        UserDetailsModel response = userService.userDetailsByEmail(email);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
-	
-	@PatchMapping("/user/admin")
+
+    @PatchMapping("/user/admin")
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<String>> assignRoleAdmin(@RequestParam String key, @RequestParam String userUuid) {
-        
-		if(!key.equals(env.getProperty(KeyConstant.SECRET_KEY))) {
-			throw new CustomException("secret key did not match", HttpStatus.UNAUTHORIZED);
-		}
-		
-//		String email = SecurityContextHolder.getContext().getAuthentication().getName();
-		
+    public ResponseEntity<SuccessResponse<String>> assignRoleAdmin(@RequestParam String key,
+            @RequestParam String userUuid) {
+
+        if (!key.equals(env.getProperty(KeyConstant.SECRET_KEY))) {
+            throw new CustomException("secret key did not match", HttpStatus.UNAUTHORIZED);
+        }
+
+        // String email =
+        // SecurityContextHolder.getContext().getAuthentication().getName();
+
         userService.addRoleAdminToUser(userUuid);
         return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     // Updated admin endpoints
-    
+
     @GetMapping("/admin/users")
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
     public ResponseEntity<SuccessResponse<PaginationModel<UserDetailsModel>>> getAllUsers(
@@ -113,8 +108,32 @@ public class UserController {
     public ResponseEntity<SuccessResponse<UserDetailsModel>> updateUserProfilePicture(
             @RequestParam String userUuid,
             @RequestBody ProfilePictureUpdateDto profilePictureUpdateDto) {
-        UserDetailsModel updatedUser = userService.updateUserProfile(userUuid, profilePictureUpdateDto.getProfilePictureUrl());
+        UserDetailsModel updatedUser = userService.updateUserProfile(userUuid,
+                profilePictureUpdateDto.getProfilePictureUrl());
         return responseBuilder.buildSuccessResponse(updatedUser, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }   
+    }
+
+    @PatchMapping("/user/{fcmToken}")
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<FcmTokenModel>> addFcmToken(
+            @PathVariable String fcmToken,
+            HttpServletRequest request) {
+
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        FcmTokenModel response = userService.updateUserFcmToken(email, fcmToken, request);
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PatchMapping("/user/test/push")
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<String>> testPushNotification(
+            @RequestParam String title,
+            @RequestParam String body,
+            @RequestParam String email) {
+
+        // String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        userService.sendPushNotification(email, title, body);
+        return responseBuilder.buildSuccessResponse("", ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
 
 }
