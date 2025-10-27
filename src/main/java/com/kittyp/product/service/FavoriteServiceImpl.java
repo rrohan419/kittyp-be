@@ -58,9 +58,9 @@ public class FavoriteServiceImpl implements FavoriteService {
                 dto.setPrice(product.getPrice().doubleValue());
                 dto.setCategory(product.getCategory());
                 dto.setImageUrls(new ArrayList<>(product.getProductImageUrls()));
+                dto.setStatus(product.getStatus());
                 return dto;
-            })
-            .collect(Collectors.toList());
+            }).toList();
 
         Page<FavoriteProductDTO> page = new PageImpl<>(favoriteProducts, pageable, favoriteProducts.size());
         return convertToPaginationModel(page);
