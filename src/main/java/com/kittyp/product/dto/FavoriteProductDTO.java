@@ -2,6 +2,8 @@ package com.kittyp.product.dto;
 
 import java.util.List;
 
+import com.kittyp.product.enums.ProductStatus;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,4 +23,5 @@ public class FavoriteProductDTO {
     private Double price;
     private String category;
     private List<String> imageUrls;
+    private ProductStatus status;
 } 

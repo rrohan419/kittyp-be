@@ -10,6 +10,7 @@ import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
+import com.kittyp.common.constants.AppConstant;
 import com.kittyp.user.dao.UserFcmTokenDao;
 
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class FcmPushNotificationServiceImpl implements FcmPushNotificationServic
                     .setNotification(Notification.builder()
                             .setTitle(title)
                             .setBody(body)
+                            .setImage(AppConstant.KITTYP_PUSH_NOTIFICATION_LOGO)
                             .build())
                     .build();
 
