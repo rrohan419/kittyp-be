@@ -110,8 +110,8 @@ public class WebhookServiceImpl implements WebhookService {
 							}
 							logger.info("Successfully updated order status to {} for order: {}", status, orderId);
 
-							zeptoMailService.sendOrderConfirmationEmail(order.getUser().getEmail(),
-									order.getOrderNumber());
+							// zeptoMailService.sendOrderConfirmationEmail(order.getUser().getEmail(),
+							// 		order.getOrderNumber());
 
 						} else {
 							logger.info("Order already in successfull status for order: {}", orderId);
