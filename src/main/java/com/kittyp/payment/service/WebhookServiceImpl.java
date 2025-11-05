@@ -6,11 +6,10 @@ package com.kittyp.payment.service;
 import org.hibernate.Hibernate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.util.Mapper;
-import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.order.dao.OrderDao;
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.entity.Order;
@@ -36,13 +35,11 @@ public class WebhookServiceImpl implements WebhookService {
 	private final WebhookEventRepository webhookEventRepository;
 	private final OrderDao orderDao;
 	private final ProductService productService;
-	private final ZeptoMailService zeptoMailService;
 
 	/**
 	 * @author rrohan419@gmail.com
 	 */
-	// @Async+
-	@Transactional
+	@Async
 	@Override
 	public void razorpayWebbhook(RazorpayResponseModel razorpayResponseModel) {
 		try {
@@ -70,10 +67,29 @@ public class WebhookServiceImpl implements WebhookService {
 
 			if (order == null) {
 				logger.error("Order not found for orderId: {}", orderId);
-				throw new RuntimeException("Order not found: " + orderId);
+				return;
 			}
 
-			try {
+			handleOrderStatus(order, orderId, razorpayResponseModel);
+
+		} catch (Exception e) {
+			logger.error("Error processing Razorpay webhook: {}", e.getMessage(), e);
+		}
+	}
+
+	private void confirmStockReservation(String orderNumber) {
+		try {
+			productService.confirmStockReservation(orderNumber);
+			logger.info("Successfully confirmed stock reservation for order: {}",
+					orderNumber);
+		} catch (Exception e) {
+			logger.error("Failed to confirm stock reservation for order: {}",
+					orderNumber, e);
+		}
+	}
+
+	private void handleOrderStatus(Order order, String orderId, RazorpayResponseModel razorpayResponseModel){
+		try {
 				Hibernate.initialize(order.getUser());
 				OrderStatus status = OrderStatus.fromRazorpayStatus(razorpayResponseModel.getEvent());
 				if (status == OrderStatus.UNKNOWN) {
@@ -93,25 +109,15 @@ public class WebhookServiceImpl implements WebhookService {
 					case PAYMENT_CANCELLED:
 						logger.info("Payment cancelled for order: {}", orderId);
 						productService.cancelStockReservation(order.getOrderNumber());
-						
+
 						break;
 					case SUCCESSFULL:
 						logger.info("Payment successful for order: {}", orderId);
 						if (order.getStatus() != OrderStatus.SUCCESSFULL) {
 							order.setStatus(OrderStatus.SUCCESSFULL);
 							orderDao.saveOrder(order);
-							try {
-								productService.confirmStockReservation(order.getOrderNumber());
-								logger.info("Successfully confirmed stock reservation for order: {}",
-										order.getOrderNumber());
-							} catch (Exception e) {
-								logger.error("Failed to confirm stock reservation for order: {}",
-										order.getOrderNumber(), e);
-							}
+							confirmStockReservation(order.getOrderNumber());
 							logger.info("Successfully updated order status to {} for order: {}", status, orderId);
-
-							// zeptoMailService.sendOrderConfirmationEmail(order.getUser().getEmail(),
-							// 		order.getOrderNumber());
 
 						} else {
 							logger.info("Order already in successfull status for order: {}", orderId);
@@ -128,13 +134,6 @@ public class WebhookServiceImpl implements WebhookService {
 
 			} catch (Exception e) {
 				logger.error("Failed to update order status for orderId: {}", orderId, e);
-				throw new RuntimeException("Failed to update order status", e);
 			}
-
-		} catch (Exception e) {
-			logger.error("Error processing Razorpay webhook: {}", e.getMessage(), e);
-			throw new RuntimeException("Failed to process webhook", e);
-		}
 	}
-
 }
