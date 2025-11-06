@@ -18,4 +18,5 @@ public class PetNutritionRecommendationDto {
     private String currentFoodBrand;
     private String healthConditions;
     private String allergies;
+    private Boolean isSpayedOrNeutered;
 }

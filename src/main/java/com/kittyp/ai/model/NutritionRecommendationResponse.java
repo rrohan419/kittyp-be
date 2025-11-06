@@ -16,7 +16,7 @@ public class NutritionRecommendationResponse {
     private Environment environment;
 
     @Data
-    public class Environment {
+    public static class Environment {
         private double temperature;
         private String unit;
         private int humidity;
