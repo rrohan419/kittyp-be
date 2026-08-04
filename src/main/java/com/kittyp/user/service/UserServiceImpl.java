@@ -143,12 +143,16 @@ public class UserServiceImpl implements UserService {
 
 	@Override
 	public boolean updatePassword(UpdatePasswordDto updatePasswordDto) {
-		logger.info("Updating password for email: {}", updatePasswordDto.getEmail());
-		User user = userDao.userByEmail(updatePasswordDto.getEmail());
+		User user;
+		try {
+			user = userDao.userByEmail(updatePasswordDto.getEmail());
+		} catch (Exception e) {
+			user = null;
+		}
 
 		if (user == null) {
-			logger.warn("No user found with email: {}", updatePasswordDto.getEmail());
-			throw new CustomException("User not found", HttpStatus.NOT_FOUND);
+			// Uniform response — do not reveal whether the email exists
+			throw new CustomException("Invalid or expired reset code", HttpStatus.BAD_REQUEST);
 		}
 
 		boolean verified = verificationCodeService.verifyCode(user.getUuid(), updatePasswordDto.getCode(), true);
@@ -160,44 +164,37 @@ public class UserServiceImpl implements UserService {
 			return true;
 		}
 
-		logger.warn("Verification code invalid or expired for user UUID: {}", user.getUuid());
-		return false;
+		throw new CustomException("Invalid or expired reset code", HttpStatus.BAD_REQUEST);
 	}
 
 	@Override
 	public boolean sendResetPasswordCode(String email) {
-		logger.info("Sending password reset code to email: {}", email);
-		User user = userDao.userByEmail(email);
-
-		if (user == null) {
-			logger.warn("No user found with email: {}", email);
-			throw new CustomException("User not found", HttpStatus.NOT_FOUND);
+		// Anti-enumeration: always succeed from the caller's perspective
+		try {
+			User user = userDao.userByEmail(email);
+			if (user != null) {
+				zeptoMailService.sendPasswordResetCode(user.getEmail());
+			}
+		} catch (Exception e) {
+			logger.debug("Password reset requested for non-existent or invalid email");
 		}
-
-		zeptoMailService.sendPasswordResetCode(user.getEmail());
-		logger.info("Password reset code sent to email: {}", email);
 		return true;
 	}
 
 	@Override
 	public boolean verifyResetPasswordCode(String code, String email) {
-		logger.info("Verifying reset password code for email: {}", email);
-		User user = userDao.userByEmail(email);
+		User user;
+		try {
+			user = userDao.userByEmail(email);
+		} catch (Exception e) {
+			user = null;
+		}
 
 		if (user == null) {
-			logger.warn("No user found with email: {}", email);
-			throw new CustomException("User not found", HttpStatus.NOT_FOUND);
+			return false;
 		}
 
-		boolean result = verificationCodeService.verifyCode(user.getUuid(), code, false);
-
-		if (result) {
-			logger.info("Reset password code verified successfully for email: {}", email);
-		} else {
-			logger.warn("Invalid reset code for email: {}", email);
-		}
-
-		return result;
+		return verificationCodeService.verifyCode(user.getUuid(), code, false);
 	}
 
 	@Override

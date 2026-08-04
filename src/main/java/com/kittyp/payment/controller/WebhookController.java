@@ -1,12 +1,12 @@
-/**
- * @author rrohan419@gmail.com
- */
 package com.kittyp.payment.controller;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -14,14 +14,15 @@ import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.util.Mapper;
+import com.kittyp.payment.constants.RazorPayConstant;
 import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.service.WebhookService;
+import com.razorpay.Utils;
 
 import lombok.RequiredArgsConstructor;
 
-/**
- * @author rrohan419@gmail.com 
- */
 @RestController
 @RequestMapping(ApiUrl.BASE_URL)
 @RequiredArgsConstructor
@@ -29,11 +30,32 @@ public class WebhookController {
 
 	private final ApiResponse<?> responseBuilder;
 	private final WebhookService webhookService;
-	
+	private final Mapper mapper;
+	private final Environment env;
+
+	@Value("${razorpay.webhook.secret:}")
+	private String webhookSecret;
+
 	@PostMapping("/webhook/razorpay")
-  public ResponseEntity<SuccessResponse<String>> createOrder(@RequestBody RazorpayResponseModel razorpayResponseModel) {
-      		
-		webhookService.razorpayWebbhook(razorpayResponseModel);
-      return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
-  }
+	public ResponseEntity<SuccessResponse<String>> razorpayWebhook(
+			@RequestHeader(value = "X-Razorpay-Signature", required = false) String signature,
+			@RequestBody String rawPayload) {
+
+		String secret = (webhookSecret != null && !webhookSecret.isBlank())
+				? webhookSecret
+				: env.getProperty(RazorPayConstant.KEY_SECRET);
+
+		if (signature == null || signature.isBlank() || secret == null || secret.isBlank()) {
+			throw new CustomException("Missing webhook signature", HttpStatus.UNAUTHORIZED);
+		}
+
+		try {
+			Utils.verifyWebhookSignature(rawPayload, signature, secret);
+		} catch (Exception e) {
+			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
+		}
+
+		webhookService.razorpayWebbhook(mapper.readValueFromString(rawPayload, RazorpayResponseModel.class));
+		return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
 }

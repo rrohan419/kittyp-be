@@ -28,7 +28,6 @@ import com.kittyp.product.model.ProductModel;
 import com.kittyp.product.service.ProductService;
 
 import jakarta.validation.Valid;
-import jakarta.websocket.server.PathParam;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -56,7 +55,7 @@ public class ProductController {
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
-	
+
 	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
 	@GetMapping(ApiUrl.PRODUCT_COUNT)
 	public ResponseEntity<SuccessResponse<Integer>> productCount(@RequestParam(required = false) Boolean isActive) {
@@ -66,16 +65,18 @@ public class ProductController {
 	}
 
 	@PostMapping(ApiUrl.ALL_PRODUCT)
-    public ResponseEntity<SuccessResponse<PaginationModel<ProductModel>>> getAllProducts(@RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) int page,
-			@RequestParam(defaultValue = KeyConstant.PAGE_SIZE) int size, @Valid @RequestBody  ProductFilterDto productFilterDto) {
+	public ResponseEntity<SuccessResponse<PaginationModel<ProductModel>>> getAllProducts(
+			@RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) int page,
+			@RequestParam(defaultValue = KeyConstant.PAGE_SIZE) int size,
+			@Valid @RequestBody ProductFilterDto productFilterDto) {
 		PaginationModel<ProductModel> response = productService.productsByFilter(productFilterDto, page, size);
-		
+
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
 	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
 	@DeleteMapping(ApiUrl.DELETE_PRODUCT)
-	public ResponseEntity<SuccessResponse<String>> deleteProduct(@PathParam(value= "productUuid") String productUuid) {
+	public ResponseEntity<SuccessResponse<String>> deleteProduct(@PathVariable("productUuid") String productUuid) {
 		productService.deleteProduct(productUuid);
 
 		return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -83,7 +84,8 @@ public class ProductController {
 
 	@PutMapping(ApiUrl.UPDATE_PRODUCT)
 	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
-	public ResponseEntity<SuccessResponse<ProductModel>> updateProduct(@RequestParam(required= true) String productUuid,  @Valid @RequestBody ProductSaveDto productSaveDto) {
+	public ResponseEntity<SuccessResponse<ProductModel>> updateProduct(
+			@RequestParam(required = true) String productUuid, @Valid @RequestBody ProductSaveDto productSaveDto) {
 		ProductModel response = productService.updateProduct(productUuid, productSaveDto);
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);

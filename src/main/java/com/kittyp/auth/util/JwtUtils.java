@@ -69,10 +69,18 @@ public class JwtUtils {
     
     public boolean validateJwtToken(String authToken) {
         try {
-            Jwts.parserBuilder()
+            var claims = Jwts.parserBuilder()
                 .setSigningKey(key())
                 .build()
-                .parseClaimsJws(authToken);
+                .parseClaimsJws(authToken)
+                .getBody();
+            if (audience != null && !audience.isBlank()) {
+                String tokenAudience = claims.getAudience();
+                if (tokenAudience == null || !audience.equals(tokenAudience)) {
+                    logger.error("JWT audience mismatch");
+                    throw new TokenException("Invalid JWT audience");
+                }
+            }
             return true;
         } catch (MalformedJwtException e) {
             logger.error("Invalid JWT token: {}", e.getMessage());
@@ -86,6 +94,9 @@ public class JwtUtils {
         } catch (IllegalArgumentException e) {
             logger.error("JWT claims string is empty: {}", e.getMessage());
             throw new TokenException("JWT claims string is empty", e);
+        } catch (io.jsonwebtoken.security.SecurityException e) {
+            logger.error("Invalid JWT signature: {}", e.getMessage());
+            throw new TokenException("Invalid JWT signature", e);
         }
     }
 }
