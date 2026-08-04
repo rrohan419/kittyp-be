@@ -13,4 +13,7 @@ public interface ZeptoMailService {
 	void sendPasswordResetCode(String email);
 
 	void sendOrderConfirmationEmail(String recipientEmail, String orderNumber);
+
+	/** Sends a signup OTP email. purpose e.g. "email" or "phone". */
+	void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint);
 }

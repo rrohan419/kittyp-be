@@ -27,6 +27,10 @@ public class NutritionPlanDaoImpl implements NutritionPlanDao {
     @Override
     public NutritionPlan saveNutritionPlan(NutritionPlan nutritionPlan) {
         try {
+
+            if(nutritionPlan.getIsActive().equals(Boolean.TRUE)) {
+                deactivatePlansForMonth(nutritionPlan.getPetUuid(), nutritionPlan.getPlanMonth(), nutritionPlan.getPlanYear());
+            }
             return nutritionPlanRepository.save(nutritionPlan);
         } catch (Exception e) {
             throw new CustomException(HttpStatus.INTERNAL_SERVER_ERROR.name(),
@@ -64,13 +68,29 @@ public class NutritionPlanDaoImpl implements NutritionPlanDao {
 
     @Override
     public Optional<NutritionPlan> getNutritionPlansByPetUuidAndIsActiveTrue(String petUuid) {
-        throw new UnsupportedOperationException("Unimplemented method 'getNutritionPlansByPetUuidAndIsActiveTrue'");
+        try {
+            return nutritionPlanRepository.findActivePlanByPetUuid(petUuid);
+        } catch (Exception e) {
+            throw new CustomException(HttpStatus.INTERNAL_SERVER_ERROR.name(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @Override
     public Page<NutritionPlan> findAllByFilter(Specification<NutritionPlan> specification, Pageable pageable) {
         try {
             return nutritionPlanRepository.findAll(specification, pageable);
+        } catch (Exception e) {
+            throw new CustomException(HttpStatus.INTERNAL_SERVER_ERROR.name(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Override
+    public int deactivatePlansForMonth(String petUuid, int month, int year) {
+    
+        try {
+            return nutritionPlanRepository.deactivatePlansForMonth(petUuid, month, year);
         } catch (Exception e) {
             throw new CustomException(HttpStatus.INTERNAL_SERVER_ERROR.name(),
                     HttpStatus.INTERNAL_SERVER_ERROR);

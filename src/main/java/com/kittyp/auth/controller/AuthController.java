@@ -12,12 +12,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
+import com.kittyp.auth.dto.SignupOtpSendRequest;
+import com.kittyp.auth.dto.SignupOtpVerifyRequest;
 import com.kittyp.auth.dto.SocialSso;
 import com.kittyp.auth.service.AuthService;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.LoginRequestDto;
+import com.kittyp.common.dto.SignupClinicRequestDto;
+import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.dto.SignupRequestDto;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.JwtResponseModel;
@@ -55,6 +61,36 @@ public class AuthController {
 		MessageResponse response = authService.registerUser(signUpRequest);
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.SIGNUP_DOCTOR)
+	public ResponseEntity<SuccessResponse<MessageResponse>> registerDoctor(
+			@Valid @RequestBody SignupDoctorRequestDto signUpRequest) {
+		MessageResponse response = authService.registerDoctor(signUpRequest);
+
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.SIGNUP_CLINIC)
+	public ResponseEntity<SuccessResponse<MessageResponse>> registerClinic(
+			@Valid @RequestBody SignupClinicRequestDto signUpRequest) {
+		MessageResponse response = authService.registerClinic(signUpRequest);
+
+		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.SIGNUP_OTP_SEND)
+	public ResponseEntity<SuccessResponse<MessageResponse>> sendSignupOtp(
+			@Valid @RequestBody SignupOtpSendRequest request) {
+		return responseBuilder.buildSuccessResponse(authService.sendSignupOtp(request), ResponseMessage.SUCCESS,
+				HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.SIGNUP_OTP_VERIFY)
+	public ResponseEntity<SuccessResponse<Map<String, Boolean>>> verifySignupOtp(
+			@Valid @RequestBody SignupOtpVerifyRequest request) {
+		return responseBuilder.buildSuccessResponse(authService.verifySignupOtp(request), ResponseMessage.SUCCESS,
+				HttpStatus.OK);
 	}
 
 	@PostMapping(ApiUrl.SOCIAL_SSO)

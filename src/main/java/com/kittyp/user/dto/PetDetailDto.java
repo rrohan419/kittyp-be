@@ -1,5 +1,7 @@
 package com.kittyp.user.dto;
 
+import java.time.LocalDate;
+
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 
@@ -10,7 +12,7 @@ public class PetDetailDto {
     private String profilePicture;
     private String type;
     private String breed;
-    private String age;
+    private LocalDate dateOfBirth;
     private String weight;
     private String activityLevel;
     private String gender;

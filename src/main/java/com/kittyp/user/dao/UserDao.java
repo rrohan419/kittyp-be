@@ -14,6 +14,8 @@ public interface UserDao {
 	User userByEmail(String email);
 	
 	User userByUuid(String uuid);
+
+	User userByPetUuid(String petUuid);
 	
 	Page<User> findAllUsers(Pageable pageable);
 

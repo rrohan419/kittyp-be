@@ -6,6 +6,7 @@ import lombok.Data;
 @Data
 public class NutritionRecommendationResponse {
 
+    private String uuid;
     private PetProfileSummary petProfileSummary;
     private EnvironmentalImpact environmentalImpact;
     private DailyFeedingPlan dailyFeedingPlan;

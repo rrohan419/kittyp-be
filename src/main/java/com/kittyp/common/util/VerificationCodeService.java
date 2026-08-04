@@ -1,20 +1,18 @@
-/**
- * @author rrohan419@gmail.com
- */
 package com.kittyp.common.util;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 
 import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.stereotype.Service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 @Service
 public class VerificationCodeService {
 
     private final Cache<String, String> codeCache;
+    private final Cache<String, Boolean> verifiedCache;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public VerificationCodeService() {
@@ -22,38 +20,55 @@ public class VerificationCodeService {
                 .expireAfterWrite(10, TimeUnit.MINUTES)
                 .maximumSize(10_000)
                 .build();
+        this.verifiedCache = Caffeine.newBuilder()
+                .expireAfterWrite(30, TimeUnit.MINUTES)
+                .maximumSize(10_000)
+                .build();
     }
 
-    /**
-     * Generates a 6-digit verification code for the given user ID and stores it in the cache.
-     *
-     * @param userId The unique identifier for the user.
-     * @return The generated 6-digit code.
-     */
-    public String generateCode(String userUuid) {
-        int code = 100_000 + secureRandom.nextInt(900_000); // Generates a number between 100000 and 999999
+    public String generateCode(String key) {
+        int code = 100_000 + secureRandom.nextInt(900_000);
         String codeStr = String.valueOf(code);
-        codeCache.put(userUuid, codeStr);
+        codeCache.put(key, codeStr);
         return codeStr;
     }
 
-    /**
-     * Verifies the provided code against the stored code for the given user ID.
-     *
-     * @param userId The unique identifier for the user.
-     * @param code   The code to verify.
-     * @return True if the code matches and is valid; false otherwise.
-     */
-    public boolean verifyCode(String userUuid, String code, boolean deactivateCode) {
-        String cachedCode = codeCache.getIfPresent(userUuid);
+    public boolean verifyCode(String key, String code, boolean deactivateCode) {
+        String cachedCode = codeCache.getIfPresent(key);
         if (cachedCode != null && cachedCode.equals(code)) {
-        	if(deactivateCode) {
-        		codeCache.invalidate(userUuid); // Invalidate the code after successful verification
-        	}
+            if (deactivateCode) {
+                codeCache.invalidate(key);
+            }
             return true;
         }
         return false;
     }
+
+    public void markVerified(String key) {
+        verifiedCache.put(key, Boolean.TRUE);
+    }
+
+    public boolean isVerified(String key) {
+        return Boolean.TRUE.equals(verifiedCache.getIfPresent(key));
+    }
+
+    public void clearVerified(String key) {
+        verifiedCache.invalidate(key);
+    }
+
+    public static String emailOtpKey(String email) {
+        return "signup-email:" + email.trim().toLowerCase();
+    }
+
+    public static String phoneOtpKey(String phone) {
+        return "signup-phone:" + phone.trim();
+    }
+
+    public static String emailVerifiedKey(String email) {
+        return "signup-email-ok:" + email.trim().toLowerCase();
+    }
+
+    public static String phoneVerifiedKey(String phone) {
+        return "signup-phone-ok:" + phone.trim();
+    }
 }
-
-

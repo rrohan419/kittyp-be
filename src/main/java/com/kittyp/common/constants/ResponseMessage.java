@@ -13,4 +13,6 @@ public class ResponseMessage {
 	public static final String SUCCESS = "success";
 	
 	public static final String USER_REGISTERED_SUCCESSFULLY = "User registered successfully!";
+
+	public static final String PET_PLAN_SAVED_SUCCESSFULLY = "Pet plan saved successfully!";
 }

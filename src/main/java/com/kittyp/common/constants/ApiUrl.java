@@ -18,11 +18,25 @@ public class ApiUrl {
 	// Auth controller
 	public static final String AUTH_BASE_URL = "/auth";
 	public static final String SIGNUP = AUTH_BASE_URL + "/signup";
+	public static final String SIGNUP_DOCTOR = SIGNUP + "/doctor";
+	public static final String SIGNUP_CLINIC = SIGNUP + "/clinic";
+	public static final String SIGNUP_OTP_SEND = SIGNUP + "/otp/send";
+	public static final String SIGNUP_OTP_VERIFY = SIGNUP + "/otp/verify";
 	public static final String SIGNIN = AUTH_BASE_URL + "/signin";
 	public static final String SOCIAL_SSO = AUTH_BASE_URL + "/social-sso";
 	public static final String SEND_CODE = AUTH_BASE_URL + "/send-code";
 	public static final String VERIFY_CODE = AUTH_BASE_URL + "/verify-code";
 	public static final String USER_PASSWORD_RESET = AUTH_BASE_URL + "/password-reset";
+
+	public static final String ADMIN_DOCTORS = ADMIN + "/doctors";
+	public static final String ADMIN_DOCTOR_BY_UUID = ADMIN_DOCTORS + PATH_VARIABLE_UUID;
+	public static final String ADMIN_DOCTOR_STATUS = ADMIN_DOCTOR_BY_UUID + "/status";
+	public static final String ADMIN_DOCTOR_CHECKLIST = ADMIN_DOCTOR_BY_UUID + "/checklist";
+
+	public static final String DOCTOR_BASE_URL = "/doctor";
+	public static final String DOCTOR_ME = DOCTOR_BASE_URL + "/me";
+
+	public static final String UPLOAD_SIGNUP_DOCUMENTS = "/upload/signup-documents";
 
 	// User controller
 	public static final String USER_BASE_URL = "/user";
@@ -82,4 +96,35 @@ public class ApiUrl {
 	// pet controller
 	public static final String PET_BASE_URL = "/pet";
 	public static final String PET_BY_UUID = PET_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String PET_WEIGHT = PET_BY_UUID + "/weight";
+	public static final String PET_WEIGHT_HISTORY = PET_BY_UUID + "/weight-history";
+	public static final String PET_DASHBOARD = PET_BY_UUID + "/dashboard";
+
+	// nutrition controller
+	public static final String NUTRITION_PET_BASE_URL = "/nutrition/pets";
+	public static final String PET_FEEDING_LOGS = NUTRITION_PET_BASE_URL + "/{petUuid}/feeding-logs";
+
+	// AI controller
+	public static final String AI_TIP_OF_THE_DAY = "/ai/tip-of-the-day";
+	public static final String NUTRITION_PLAN_BASE_URL = "/ai/nutrition/plans";
+	public static final String NUTRITION_PLAN_APPROVE = NUTRITION_PLAN_BASE_URL + "/{uuid}/approve";
+	public static final String NUTRITION_PLAN_SEND = NUTRITION_PLAN_BASE_URL + "/{uuid}/send";
+	public static final String NUTRITION_PLAN_ACTIVE = NUTRITION_PLAN_BASE_URL + "/active";
+
+	public static final String CLINIC_BASE_URL = "/clinic";
+	public static final String CLINIC_MINE = CLINIC_BASE_URL + "/mine";
+	public static final String CLINIC_BY_UUID = CLINIC_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
+	public static final String CLINIC_PATIENTS = CLINIC_BY_UUID + "/patients";
+	public static final String CLINIC_PATIENT_DETAIL = CLINIC_PATIENTS + "/{petUuid}";
+	public static final String CLINIC_BOOKINGS = CLINIC_BY_UUID + "/bookings";
+	public static final String CLINIC_RETENTION_ALERTS = CLINIC_BY_UUID + "/retention-alerts";
+	public static final String CLINIC_RETENTION_ALERT_NOTIFY = CLINIC_RETENTION_ALERTS + "/{alertId}/notify";
+	public static final String CLINIC_PATIENT_HEALTH_EVENTS = CLINIC_PATIENT_DETAIL + "/health-events";
+
+	// Consultation invoice controller
+	public static final String CONSULTATION_INVOICE_BASE_URL = "/invoice";
+	public static final String CONSULTATION_INVOICE_MINE = CONSULTATION_INVOICE_BASE_URL + "/mine";
+	public static final String CONSULTATION_INVOICE_BY_UUID = CONSULTATION_INVOICE_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String CONSULTATION_INVOICE_STATUS = CONSULTATION_INVOICE_BY_UUID + "/status";
 }

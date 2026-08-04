@@ -23,4 +23,5 @@ public interface NutritionPlanDao {
 
     Page<NutritionPlan> findAllByFilter(Specification<NutritionPlan> specification, Pageable pageable);
     
+    int deactivatePlansForMonth(String petUuid, int month, int year);
 }

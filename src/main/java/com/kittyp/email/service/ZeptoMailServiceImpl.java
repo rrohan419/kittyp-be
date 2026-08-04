@@ -88,6 +88,29 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	}
 
+	@Override
+	public void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint) {
+		log.info("Signup OTP [{}] for email={} phoneHint={} code={}", purpose, recipientEmail, phoneHint, code);
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			String name = "PHONE".equalsIgnoreCase(purpose) && phoneHint != null
+					? "Phone verify (" + phoneHint + ")"
+					: "Doctor Applicant";
+			mailDto.setMergeInfo(Map.of(
+					"Customer_Name", name,
+					"RESET_CODE", code,
+					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			// OTP is still in cache / logs — don't fail signup OTP in local if mail provider is down
+			log.warn("Failed to send signup OTP email to {}: {}", recipientEmail, e.getMessage());
+		}
+	}
+
 	@Transactional
 	@Override
 	public void sendOrderConfirmationEmail(String recipientEmail, String orderNumber) {

@@ -3,10 +3,13 @@ package com.kittyp.ai.entity;
 import java.time.LocalDateTime;
 import org.hibernate.annotations.DynamicUpdate;
 
+import com.kittyp.ai.enums.NutritionPlanStatus;
 import com.kittyp.common.entity.BaseEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -32,6 +35,23 @@ public class NutritionPlan extends BaseEntity {
 
     @Column(name = "user_uuid", nullable = false)
     private String userUuid;
+
+    @Column(name = "parent_user_uuid")
+    private String parentUserUuid;
+
+    @Column(name = "doctor_user_uuid")
+    private String doctorUserUuid;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private NutritionPlanStatus status = NutritionPlanStatus.DRAFT;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    @Column(name = "sent_at")
+    private LocalDateTime sentAt;
 
     @Column(name = "plan_name", nullable = false)
     private String planName;
@@ -66,4 +86,11 @@ public class NutritionPlan extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    @Column
+    private int planMonth; // e.g. 11 for November
+
+    @Column
+    private int planYear;
+
 }

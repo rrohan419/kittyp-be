@@ -1,7 +1,8 @@
 package com.kittyp.user.models;
 
+import java.time.LocalDate;
+
 import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -17,7 +18,7 @@ public class PetModel {
     private String profilePicture;
     private String type;
     private String breed;
-    private String age;
+    private LocalDate dateOfBirth;
     private String weight;
     private String activityLevel;
     private String gender;

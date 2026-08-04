@@ -2,10 +2,16 @@ package com.kittyp.ai.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONObject;
 import org.springframework.data.domain.Page;
@@ -21,6 +27,7 @@ import com.kittyp.ai.dao.NutritionPlanDao;
 import com.kittyp.ai.dto.EnvironmentDataDto;
 import com.kittyp.ai.dto.NutritionPlanFilter;
 import com.kittyp.ai.entity.NutritionPlan;
+import com.kittyp.ai.enums.NutritionPlanStatus;
 import com.kittyp.ai.model.NutritionPlanModel;
 import com.kittyp.ai.model.NutritionRecommendationResponse;
 import com.kittyp.ai.model.NutritionRecommendationResponse.DailyFeedingPlan;
@@ -33,6 +40,9 @@ import com.kittyp.ai.repository.NutritionPlanRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
+import com.kittyp.nutrition.entity.PetDailyPlan;
+import com.kittyp.nutrition.enums.ItemType;
+import com.kittyp.nutrition.service.PetDailyPlanService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,9 +55,9 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     private final NutritionPlanRepository nutritionPlanRepository;
     private final NutritionPlanDao nutritionPlanDao;
     private final Mapper mapper;
+    private final PetDailyPlanService petDailyPlanService;
 
     @Async("taskExecutor")
-    @Transactional
     @Override
     public CompletableFuture<NutritionPlan> saveNutritionPlanAsync(
             String petUuid,
@@ -59,12 +69,18 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         log.info("Saving nutrition plan asynchronously for pet: {} and user: {}", petUuid, userUuid);
 
         try {
+            LocalDate today = LocalDate.now();
+            int month = today.getMonthValue();
+            int year = today.getYear();
 
+            nutritionPlanDao.deactivatePlansForMonth(petUuid, month, year);
+            
             // Create nutrition plan entity
             NutritionPlan nutritionPlan = NutritionPlan.builder()
-                    .uuid(UUID.randomUUID().toString())
+                    .uuid(nutritionResponse.getUuid())
                     .petUuid(petUuid)
                     .userUuid(userUuid)
+                    .parentUserUuid(userUuid)
                     .planName(planName != null ? planName : generateDefaultPlanName())
                     .petProfileSummary(mapper.convertObjectToJson(nutritionResponse.getPetProfileSummary()))
                     .environmentalImpact(mapper.convertObjectToJson(nutritionResponse.getEnvironmentalImpact()))
@@ -74,6 +90,9 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
                     .longTermWellnessTips(mapper.convertObjectToJson(nutritionResponse.getLongTermWellnessTips()))
                     .environment(mapper.convertObjectToJson(environmentData))
                     .generationTimestamp(LocalDateTime.now())
+                    .isActivePlan(Boolean.TRUE)
+                    .planMonth(month)
+                    .planYear(year)
                     .build();
 
             // Save to database
@@ -81,6 +100,34 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
 
             log.info("Successfully saved nutrition plan with UUID: {} for pet: {}",
                     savedPlan.getUuid(), petUuid);
+
+            // TODO: Add subscription check here before creating daily plans
+            // Create or replace current month daily plans for this pet
+
+            
+            // try {
+            //     if (nutritionResponse.getDailyFeedingPlan() != null) {
+            //         List<PetDailyPlan> dailyTemplates = convertToDailyPlanTemplates(
+            //                 nutritionResponse.getDailyFeedingPlan());
+            //         if (!dailyTemplates.isEmpty()) {
+            //             petDailyPlanService.createOrReplaceCurrentMonthPlan(
+            //                     userUuid,
+            //                     petUuid,
+            //                     savedPlan.getUuid(),
+            //                     dailyTemplates);
+            //             log.info("Successfully created daily plans for pet: {} with nutrition plan: {}",
+            //                     petUuid, savedPlan.getUuid());
+            //         } else {
+            //             log.warn("No daily feeding plan templates found for pet: {}", petUuid);
+            //         }
+            //     } else {
+            //         log.warn("Daily feeding plan is null for pet: {}", petUuid);
+            //     }
+            // } catch (Exception e) {
+            //     log.error("Error creating daily plans for pet: {} with nutrition plan: {}",
+            //             petUuid, savedPlan.getUuid(), e);
+                
+            // }
 
             return CompletableFuture.completedFuture(savedPlan);
 
@@ -247,7 +294,195 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         }
     }
 
+    @Transactional
+    @Override
+    public NutritionPlan approvePlan(String planUuid, String doctorUserUuid) {
+        NutritionPlan plan = getPlan(planUuid);
+        plan.setDoctorUserUuid(doctorUserUuid);
+        plan.setStatus(NutritionPlanStatus.APPROVED);
+        plan.setApprovedAt(LocalDateTime.now());
+        return nutritionPlanRepository.save(plan);
+    }
+
+    @Transactional
+    @Override
+    public NutritionPlan sendPlan(String planUuid, String doctorUserUuid) {
+        NutritionPlan plan = getPlan(planUuid);
+        plan.setDoctorUserUuid(doctorUserUuid);
+        if (plan.getApprovedAt() == null) {
+            plan.setApprovedAt(LocalDateTime.now());
+        }
+        plan.setStatus(NutritionPlanStatus.SENT);
+        plan.setSentAt(LocalDateTime.now());
+        return nutritionPlanRepository.save(plan);
+    }
+
+    @Override
+    public NutritionPlan getActivePlanForParent(String petUuid, String parentUserUuid) {
+        return nutritionPlanRepository
+                .findFirstByPetUuidAndParentUserUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
+                        petUuid, parentUserUuid, NutritionPlanStatus.SENT)
+                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet"));
+    }
+
+    private NutritionPlan getPlan(String planUuid) {
+        return nutritionPlanRepository.findByUuid(planUuid)
+                .orElseThrow(() -> new CustomException("Nutrition plan not found with UUID: " + planUuid));
+    }
+
     private String generateDefaultPlanName() {
         return "Nutrition Plan - " + LocalDate.now().toString();
     }
+
+    /**
+     * Converts DailyFeedingPlan to List<PetDailyPlan> templates.
+     * These templates will be used to create daily plans for the current month.
+     * 
+     * @param dailyFeedingPlan The daily feeding plan from nutrition recommendation
+     * @return List of PetDailyPlan templates
+     */
+    private List<PetDailyPlan> convertToDailyPlanTemplates(DailyFeedingPlan dailyFeedingPlan) {
+        List<PetDailyPlan> templates = new ArrayList<>();
+
+        if (dailyFeedingPlan == null) {
+            return templates;
+        }
+
+        // Convert meals to FOOD items
+        if (dailyFeedingPlan.getMeals() != null) {
+            for (DailyFeedingPlan.Meal meal : dailyFeedingPlan.getMeals()) {
+                try {
+                    LocalTime time = parseTime(meal.getTime());
+                    PetDailyPlan plan = PetDailyPlan.builder()
+                            .itemType(ItemType.FOOD)
+                            .itemName(meal.getFoodType() != null ? meal.getFoodType() : "Food")
+                            .time(time)
+                            .quantityInGrams(meal.getPortionSizeGrams() > 0
+                                    ? (double) meal.getPortionSizeGrams()
+                                    : null)
+                            .notes(meal.getNotes())
+                            .build();
+                    templates.add(plan);
+                } catch (Exception e) {
+                    log.warn("Error converting meal to daily plan template: {}", meal, e);
+                }
+            }
+        }
+
+        // Convert supplements to SUPPLEMENT items
+        if (dailyFeedingPlan.getSupplements() != null) {
+            for (DailyFeedingPlan.Supplement supplement : dailyFeedingPlan.getSupplements()) {
+                try {
+                    // For supplements, use a default morning time if not specified
+                    // In a real scenario, you might want to parse this from the dosage or have it
+                    // in the response
+                    LocalTime time = LocalTime.of(8, 0); // Default to 8:00 AM
+
+                    // Combine purpose and dosage in notes if available
+                    String notes = "";
+                    if (supplement.getPurpose() != null && !supplement.getPurpose().isEmpty()) {
+                        notes = supplement.getPurpose();
+                    }
+                    if (supplement.getDosage() != null && !supplement.getDosage().isEmpty()) {
+                        if (!notes.isEmpty()) {
+                            notes += " - " + supplement.getDosage();
+                        } else {
+                            notes = supplement.getDosage();
+                        }
+                    }
+
+                    PetDailyPlan plan = PetDailyPlan.builder()
+                            .itemType(ItemType.SUPPLEMENT)
+                            .itemName(supplement.getName() != null ? supplement.getName() : "Supplement")
+                            .time(time)
+                            .quantityInGrams(null) // Supplements typically don't have grams, dosage is in notes
+                            .notes(notes.isEmpty() ? null : notes)
+                            .build();
+                    templates.add(plan);
+                } catch (Exception e) {
+                    log.warn("Error converting supplement to daily plan template: {}", supplement, e);
+                }
+            }
+        }
+
+        return templates;
+    }
+
+    /**
+     * Parses time string to LocalTime.
+     * Supports formats like "HH:mm", "HH:mm:ss", "h:mm a" (12-hour format), etc.
+     * 
+     * @param timeStr Time string to parse
+     * @return LocalTime object
+     * @throws IllegalArgumentException if time cannot be parsed
+     */
+//     private LocalTime parseTime(String timeStr) {
+//     if (timeStr == null || timeStr.trim().isEmpty()) {
+//         throw new IllegalArgumentException("Time string cannot be null or empty");
+//     }
+
+//     String trimmed = timeStr.trim();
+
+//     try {
+//         // 24-hour format (HH:mm)
+//         if (trimmed.matches("\\d{1,2}:\\d{2}")) {
+//             return LocalTime.parse(trimmed, DateTimeFormatter.ofPattern("H:mm"));
+//         }
+
+//         // 24-hour with seconds (HH:mm:ss)
+//         if (trimmed.matches("\\d{1,2}:\\d{2}:\\d{2}")) {
+//             return LocalTime.parse(trimmed, DateTimeFormatter.ofPattern("H:mm:ss"));
+//         }
+
+//         // 12-hour format (h:mm a or h:mm AM/PM)
+//         if (trimmed.matches("(?i)\\d{1,2}:\\d{2}\\s*(AM|PM)")) {
+//             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
+//             return LocalTime.parse(trimmed.toUpperCase(Locale.ENGLISH), formatter);
+//         }
+
+//         // ISO or fallback
+//         return LocalTime.parse(trimmed);
+//     } catch (DateTimeParseException e) {
+//         log.warn("Failed to parse time string '{}', defaulting to 08:00 AM", trimmed, e);
+//         return LocalTime.of(8, 0);
+//     }
+// }
+
+private LocalTime parseTime(String timeStr) {
+    if (timeStr == null || timeStr.trim().isEmpty()) {
+        throw new IllegalArgumentException("Time string cannot be null or empty");
+    }
+
+    String trimmed = timeStr.trim();
+
+    // Extract time like "7:00 AM", "18:30", "18:30:10"
+    Pattern pattern = Pattern.compile("(\\d{1,2}:\\d{2}(:\\d{2})?\\s*(?i)(AM|PM)?)");
+    Matcher matcher = pattern.matcher(trimmed);
+
+    if (matcher.find()) {
+        trimmed = matcher.group().trim();
+    }
+
+    try {
+
+        if (trimmed.matches("\\d{1,2}:\\d{2}")) {
+            return LocalTime.parse(trimmed, DateTimeFormatter.ofPattern("H:mm"));
+        }
+
+        if (trimmed.matches("\\d{1,2}:\\d{2}:\\d{2}")) {
+            return LocalTime.parse(trimmed, DateTimeFormatter.ofPattern("H:mm:ss"));
+        }
+
+        if (trimmed.matches("(?i)\\d{1,2}:\\d{2}\\s*(AM|PM)")) {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
+            return LocalTime.parse(trimmed.toUpperCase(Locale.ENGLISH), formatter);
+        }
+
+        return LocalTime.parse(trimmed);
+
+    } catch (DateTimeParseException e) {
+        log.warn("Failed to parse time string '{}', defaulting to 08:00 AM", trimmed, e);
+        return LocalTime.of(8, 0);
+    }
+}
 }

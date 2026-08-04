@@ -46,6 +46,8 @@ public class Address extends BaseEntity {
 
     private String formattedAddress;
 
+    private Boolean isDefault;
+
     @Column(nullable = false)
     private AddressType addressType;
 

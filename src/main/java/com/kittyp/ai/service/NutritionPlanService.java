@@ -41,4 +41,10 @@ public interface NutritionPlanService {
      * Update plan notes
      */
     NutritionPlan updatePlanNotes(String planUuid, String notes);
+
+    NutritionPlan approvePlan(String planUuid, String doctorUserUuid);
+
+    NutritionPlan sendPlan(String planUuid, String doctorUserUuid);
+
+    NutritionPlan getActivePlanForParent(String petUuid, String parentUserUuid);
 }

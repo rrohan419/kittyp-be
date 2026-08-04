@@ -20,6 +20,7 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.FileUploadRequest;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.service.S3StorageService;
 import lombok.RequiredArgsConstructor;
 
@@ -54,6 +55,37 @@ public class FileStorageController {
         String folderName = isAdminUpload != null && isAdminUpload ? "admin-uploads" : "user-uploads/" + email;
 
         List<String> response = s3StorageService.uploadMultipleFiles(folderName, files);
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    /**
+     * Unauthenticated upload for doctor signup documents (degree, registration cert, etc.).
+     * Folder is scoped by email so files are isolated per applicant.
+     */
+    @PostMapping(value = ApiUrl.UPLOAD_SIGNUP_DOCUMENTS, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<SuccessResponse<List<String>>> uploadSignupDocuments(
+            @RequestParam("files") List<MultipartFile> multipartFiles,
+            @RequestParam("email") String email) {
+
+        if (email == null || email.isBlank()) {
+            throw new CustomException("Email is required for signup document upload", HttpStatus.BAD_REQUEST);
+        }
+        String safeEmail = email.trim().toLowerCase().replaceAll("[^a-z0-9.@_-]", "_");
+
+        List<FileUploadRequest> files = multipartFiles.stream()
+                .map(file -> {
+                    try {
+                        return new FileUploadRequest(
+                                file.getOriginalFilename(),
+                                file.getBytes(),
+                                file.getContentType());
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to read file: " + file.getOriginalFilename(), e);
+                    }
+                })
+                .toList();
+
+        List<String> response = s3StorageService.uploadMultipleFiles("signup-uploads/" + safeEmail, files);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

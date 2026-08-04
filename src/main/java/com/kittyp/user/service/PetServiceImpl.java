@@ -1,5 +1,6 @@
 package com.kittyp.user.service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.service.S3StorageService;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.user.dao.PetDao;
 import com.kittyp.user.dao.UserDao;
@@ -29,6 +31,7 @@ public class PetServiceImpl implements PetService {
     private final PetDao petDao;
     private final Mapper mapper;
     private final UserDao userDao;
+    private final S3StorageService s3StorageService;
 
     @Transactional
     @Override
@@ -41,7 +44,7 @@ public class PetServiceImpl implements PetService {
         Pet newPet = mapper.convert(petDetailDto, Pet.class);
         newPet.setUuid(UUID.randomUUID().toString());
         newPet = petDao.savePets(newPet);
-        
+
         petOwner.addPet(newPet);
         userDao.saveUser(petOwner);
         log.info("Successfully added pet with uuid={} for email={}", newPet.getUuid(), petOwner.getEmail());
@@ -58,7 +61,7 @@ public class PetServiceImpl implements PetService {
 
         if (userPets == null || userPets.isEmpty()) {
             log.warn("No pets found for email={}", email);
-            return List.of(); // Return empty list instead of throwing exception
+            return List.of();
         }
 
         log.info("Found {} pet(s) for email={}", userPets.size(), email);
@@ -72,10 +75,11 @@ public class PetServiceImpl implements PetService {
 
         User petOwner = userDao.userByEmail(email);
 
-        Pet petToDelete = petOwner.getPets().stream().filter(pet -> pet.getUuid().equals(uuid)).findFirst().orElseThrow(() -> {
-            log.info("Pet not found with uuid={}, for owner email {}", uuid, petOwner.getEmail());
-            throw new CustomException("pet not found by uuid : "+uuid, HttpStatus.NOT_FOUND);
-        });
+        Pet petToDelete = petOwner.getPets().stream().filter(pet -> pet.getUuid().equals(uuid)).findFirst()
+                .orElseThrow(() -> {
+                    log.info("Pet not found with uuid={}, for owner email {}", uuid, petOwner.getEmail());
+                    throw new CustomException("pet not found by uuid : " + uuid, HttpStatus.NOT_FOUND);
+                });
 
         log.info("Deleting pet with uuid={}", uuid);
         petOwner.getPets().remove(petToDelete);
@@ -101,7 +105,7 @@ public class PetServiceImpl implements PetService {
         existingPet.setProfilePicture(petDetailDto.getProfilePicture());
         existingPet.setBreed(petDetailDto.getBreed());
         existingPet.setType(petDetailDto.getType());
-        existingPet.setAge(petDetailDto.getAge());
+        existingPet.setDateOfBirth(petDetailDto.getDateOfBirth());
         existingPet.setWeight(petDetailDto.getWeight());
         existingPet.setActivityLevel(petDetailDto.getActivityLevel());
         existingPet.setGender(petDetailDto.getGender());
@@ -111,7 +115,7 @@ public class PetServiceImpl implements PetService {
         existingPet.setAllergies(petDetailDto.getAllergies());
 
         Pet updatedPet = petDao.savePets(existingPet);
-        
+
         log.info("Successfully updated pet with uuid={} for email={}", updatedPet.getUuid(), petOwner.getEmail());
 
         return mapper.convert(updatedPet, PetModel.class);
@@ -127,9 +131,12 @@ public class PetServiceImpl implements PetService {
         log.info("Updating profile picture for pet with uuid={}", petUuid);
         pet.setProfilePicture(petPhotosDto.getPhotos().get(0));
 
-        pet.setPhotos(Set.copyOf(petPhotosDto.getPhotos()));
+        Set<String> mutablePhotos = (pet.getPhotos() != null) ? pet.getPhotos() : new HashSet<>();
+        mutablePhotos.add(petPhotosDto.getPhotos().get(0));
+        pet.setPhotos(mutablePhotos);
+
         Pet updatedPet = petDao.savePets(pet);
-        
+
         log.info("Successfully updated profile picture for pet with uuid={}", updatedPet.getUuid());
 
         return mapper.convert(updatedPet, PetModel.class);

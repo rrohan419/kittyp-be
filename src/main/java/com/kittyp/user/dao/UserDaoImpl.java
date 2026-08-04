@@ -70,6 +70,12 @@ public class UserDaoImpl implements UserDao {
 	}
 
 	@Override
+	public User userByPetUuid(String petUuid) {
+		return userRepository.findByPets_Uuid(petUuid)
+				.orElseThrow(() -> new ResourceNotFoundException("user", "petUuid", petUuid));
+	}
+
+	@Override
 	public Page<User> findAllUsers(Pageable pageable) {
 		try {
 			return userRepository.findAll(pageable);

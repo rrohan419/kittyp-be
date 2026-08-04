@@ -3,6 +3,7 @@
  */
 package com.kittyp.common.service;
 
+import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -121,8 +122,8 @@ public class S3StorageService {
 
             // generate S3 URL if needed
             return s3Client.utilities()
-                .getUrl(b -> b.bucket(userBucket).key(key))
-                .toExternalForm();
+                    .getUrl(b -> b.bucket(userBucket).key(key))
+                    .toExternalForm();
         } catch (Exception e) {
             throw new RuntimeException("Failed to upload file to S3: " + e.getMessage(), e);
         }
@@ -144,16 +145,49 @@ public class S3StorageService {
     }
 
     public void deleteUserFileFromS3(String key) {
-		try {
-			DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-					.bucket(userBucket)
-					.key(key).build();
-			s3Client.deleteObject(deleteObjectRequest);
-		} catch (Exception e) {
-			throw new CustomException("Failed to delete file from S3: " + e.getMessage(),
-					HttpStatus.INTERNAL_SERVER_ERROR);
-		}
+        try {
+            DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                    .bucket(userBucket)
+                    .key(key).build();
+            s3Client.deleteObject(deleteObjectRequest);
+        } catch (Exception e) {
+            throw new CustomException("Failed to delete file from S3: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
-    
+    public void deleteUserFileFromS3viaUrl(String fileUrl) {
+        try {
+            // Extract the key from the S3 URL
+            String key = extractKeyFromUrl(fileUrl);
+
+            // Delete the file using the extracted key
+            DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                    .bucket(userBucket)
+                    .key(key)
+                    .build();
+            s3Client.deleteObject(deleteObjectRequest);
+
+        } catch (Exception e) {
+            throw new CustomException("Failed to delete file from S3: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private String extractKeyFromUrl(String fileUrl) throws Exception {
+        // Create a URI from the provided URL
+        URI uri = new URI(fileUrl);
+
+        // Get the path (after the bucket name and domain)
+        String path = uri.getPath();
+
+        // The path will have a leading "/", so remove that
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+
+        // Return the key (the part after the bucket name)
+        return path;
+    }
+
 }

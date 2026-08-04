@@ -1,8 +1,8 @@
 package com.kittyp.ai.service;
 
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,6 +17,7 @@ import com.kittyp.ai.dto.EnvironmentDataDto;
 import com.kittyp.ai.dto.NutritionistRecommendationRequest;
 import com.kittyp.ai.dto.PetNutritionRecommendationDto;
 import com.kittyp.ai.model.NutritionRecommendationResponse;
+import com.kittyp.ai.model.NutritionRecommendationResponse.Environment;
 import com.kittyp.ai.prompts.SystemPrompt;
 import com.kittyp.ai.util.PromptLoader;
 import com.kittyp.common.exception.CustomException;
@@ -38,7 +39,7 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
     private final Mapper mapper;
     private final GoogleService googleService;
     private final UserDao userDao;
-    private final NutritionPlanService nutritionPlanService;
+    // private final NutritionPlanService nutritionPlanService;
 
     @Override
     public NutritionRecommendationResponse generateNutritionRecommendation(PetNutritionRecommendationDto petDetailDto,
@@ -68,9 +69,9 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
                     .build();
 
             GenerateContentResponse response = geminiClient.models.generateContent(
-                    "gemini-2.5-flash", // or your chosen model
+                    "gemini-2.5-flash",
                     fullPrompt,
-                    config // optional config
+                    config
             );
 
             String aiOutput = response.text();
@@ -80,7 +81,9 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
             // 5. Validate JSON format before returning (optional enterprise safeguard)
             mapper.validateStringJson(cleanedJson); // will throw if invalid JSON
 
-            return mapper.readValueFromString(cleanedJson, NutritionRecommendationResponse.class);
+            NutritionRecommendationResponse nutritionRecommendationResponse = mapper.readValueFromString(cleanedJson, NutritionRecommendationResponse.class);
+            nutritionRecommendationResponse.setUuid(UUID.randomUUID().toString());
+            return nutritionRecommendationResponse;
 
         } catch (Exception e) {
             throw new CustomException("Failed to generate nutrition recommendation", HttpStatus.INTERNAL_SERVER_ERROR, e);
@@ -94,10 +97,7 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
     @Override
     public NutritionRecommendationResponse getNutritionRecommendationRequest(
             NutritionistRecommendationRequest nutritionistRecommendationRequest,
-            HttpServletRequest httpServletRequest) {
-
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userDao.userByEmail(email);
+            HttpServletRequest httpServletRequest) { 
 
         WeatherResponse weatherResponse = googleService.getCurrentWeather(
                 nutritionistRecommendationRequest.getLocation().getLatitude(),
@@ -113,12 +113,11 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
         environmentDataDto.setUvIndex(weatherResponse.getUvIndex());
         environmentDataDto.setPrecipitation(weatherResponse.getPrecipitation().getQpf().getQuantity());
 
-        PetNutritionRecommendationDto petProfile = nutritionistRecommendationRequest.getPetProfile();
+        // PetNutritionRecommendationDto petProfile = nutritionistRecommendationRequest.getPetProfile();
 
         NutritionRecommendationResponse response = generateNutritionRecommendation(
                 nutritionistRecommendationRequest.getPetProfile(), environmentDataDto);
-        nutritionPlanService.saveNutritionPlanAsync(petProfile.getUuid(), user.getUuid(), response, environmentDataDto,
-                petProfile.getName() + "'s Nutrition Plan"+"-"+LocalDate.now());
+        response.setEnvironment(mapToEnvironment(environmentDataDto));
         return response;
     }
 
@@ -165,6 +164,19 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
         }
 
         return cleaned;
+    }
+
+    private Environment mapToEnvironment(EnvironmentDataDto environmentDataDto) {
+        Environment environment = new Environment();
+        environment.setTemperature(environmentDataDto.getTemperature());
+        environment.setUnit(environmentDataDto.getUnit());
+        environment.setHumidity(environmentDataDto.getHumidity());
+        environment.setWeatherCondition(environmentDataDto.getWeatherCondition());
+        environment.setWindSpeed(environmentDataDto.getWindSpeed());
+        environment.setWindUnit(environmentDataDto.getWindUnit());
+        environment.setUvIndex(environmentDataDto.getUvIndex());
+        environment.setPrecipitation(environmentDataDto.getPrecipitation());
+        return environment;
     }
 
 }
