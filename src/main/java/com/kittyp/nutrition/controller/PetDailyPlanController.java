@@ -1,0 +1,45 @@
+package com.kittyp.nutrition.controller;
+
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.kittyp.common.constants.ApiUrl;
+import com.kittyp.common.constants.KeyConstant;
+import com.kittyp.common.constants.ResponseMessage;
+import com.kittyp.common.dto.ApiResponse;
+import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.nutrition.dto.PetDailyPlanDto;
+import com.kittyp.nutrition.entity.PetDailyPlan;
+import com.kittyp.nutrition.model.PetDailyPlanModel;
+import com.kittyp.nutrition.service.PetDailyPlanService;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+
+@RestController
+@RequestMapping(ApiUrl.BASE_URL)
+@RequiredArgsConstructor
+public class PetDailyPlanController {
+    
+    private final ApiResponse<?> responseBuilder;
+    private final PetDailyPlanService petDailyPlanService;
+
+    @PostMapping("/nutrition/generate/daily-plan")
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<List<PetDailyPlanModel>>> generatePetDailyPlan(
+            @RequestBody @Valid List<PetDailyPlanDto> petDailyPlanDto,
+            @RequestParam String petUuid,
+            @RequestParam String userUuid,
+            @RequestParam String nutritionPlanUuid) {
+                List<PetDailyPlanModel> response = petDailyPlanService.createReplaceCurrentMonthPlan(userUuid, petUuid, nutritionPlanUuid, petDailyPlanDto);
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+}
