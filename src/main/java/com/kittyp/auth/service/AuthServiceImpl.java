@@ -1,10 +1,8 @@
 package com.kittyp.auth.service;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -80,49 +78,13 @@ public class AuthServiceImpl implements AuthService {
 
 		user = userDao.saveUser(user);
 
-		// Assign roles
-		Set<String> strRoles = signupRequestDto.getRoles();
-		Set<UserRole> userRoles = new HashSet<>();
-
-		if (strRoles == null || strRoles.isEmpty()) {
-			Role userRole = roleDao.roleByName(ERole.ROLE_USER);
-			if (userRole == null) {
-				throw new RuntimeException("Error: Default ROLE_USER not found.");
-			}
-			userRoles.add(new UserRole(user, userRole));
-		} else {
-			for (String role : strRoles) {
-				Role foundRole;
-				switch (role.toLowerCase()) {
-                    case "admin":
-                    case "admin_user":
-                        foundRole = roleDao.roleByName(ERole.ROLE_ADMIN);
-                        break;
-                    case "mod":
-                        foundRole = roleDao.roleByName(ERole.ROLE_MODERATOR);
-                        break;
-                    case "parent_user":
-                    case "parent":
-                        foundRole = roleDao.roleByName(ERole.ROLE_USER);
-                        break;
-                    case "doctor_user":
-                    case "doctor":
-                        foundRole = roleDao.roleByName(ERole.ROLE_DOCTOR);
-                        break;
-                    case "clinic_admin":
-                        foundRole = roleDao.roleByName(ERole.ROLE_CLINIC_ADMIN);
-                        break;
-					case "clinic_staff":
-						foundRole = roleDao.roleByName(ERole.ROLE_CLINIC_STAFF);
-						break;
-                    default:
-                        foundRole = roleDao.roleByName(ERole.ROLE_USER);
-                }
-				userRoles.add(new UserRole(user, foundRole));
-			}
+		// Never trust client-supplied roles — public signup always gets ROLE_USER only.
+		// Elevated roles must be assigned via admin-only endpoints.
+		Role userRole = roleDao.roleByName(ERole.ROLE_USER);
+		if (userRole == null) {
+			throw new CustomException("Default ROLE_USER not found", HttpStatus.INTERNAL_SERVER_ERROR);
 		}
-
-		user.getUserRoles().addAll(userRoles);
+		user.getUserRoles().add(new UserRole(user, userRole));
 		userDao.saveUser(user);
 		zeptoMailService.sendWelcomeEmail(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);

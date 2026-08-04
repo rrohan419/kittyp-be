@@ -5,9 +5,7 @@ import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -28,55 +26,37 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 
 	private final JwtUtils jwtUtils;
 	private final UserDetailServiceImpl userDetailsService;
-	private final AuthEntryPointJwt authEntryPointJwt;
 
 	private static final Logger logger = LoggerFactory.getLogger(AuthenticationFilter.class);
 
 	@Override
-	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
-			throws ServletException, IOException {
-
-		if (shouldNotFilter(request)) {
-			filterChain.doFilter(request, response);
-			return;
-		}
+	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+			@NonNull FilterChain filterChain) throws ServletException, IOException {
 
 		try {
-
 			String jwt = parseJwt(request);
-
-			if (jwtUtils.validateJwtToken(jwt)) {
+			if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
 				String username = jwtUtils.getUserNameFromJwtToken(jwt);
-
 				UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 				UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
 						userDetails, null, userDetails.getAuthorities());
 				authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
 				SecurityContextHolder.getContext().setAuthentication(authentication);
 			}
-
-			filterChain.doFilter(request, response);
-		} catch (AuthenticationException ex) {
-			logger.error("Cannot set user authentication: {}", ex.getMessage());
-
-			// Critical: DO NOT continue the filter chain - let Spring Security handle it
-			// This ensures the exception reaches the AuthenticationEntryPoint
+		} catch (Exception ex) {
+			logger.warn("JWT authentication failed: {}", ex.getMessage());
 			SecurityContextHolder.clearContext();
-			authEntryPointJwt.commence(request, response, ex);
-
 		}
+
+		filterChain.doFilter(request, response);
 	}
 
-	private String parseJwt(HttpServletRequest request) throws AuthenticationException {
-
+	private String parseJwt(HttpServletRequest request) {
 		String headerAuth = request.getHeader("Authorization");
-
 		if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
-			return headerAuth.substring(7);
+			return headerAuth.substring(7).trim();
 		}
-
-		throw new BadCredentialsException("Authorization token not found or invalid");
+		return null;
 	}
 
 	@Override
@@ -93,5 +73,4 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 				|| path.startsWith("/api/v1/product/")
 				|| path.startsWith("/api/v1/webhook/");
 	}
-
 }

@@ -90,7 +90,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	@Override
 	public void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint) {
-		log.info("Signup OTP [{}] for email={} phoneHint={} code={}", purpose, recipientEmail, phoneHint, code);
+		log.info("Signup OTP [{}] requested for email={} phoneHint={}", purpose, recipientEmail, phoneHint);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name = "PHONE".equalsIgnoreCase(purpose) && phoneHint != null

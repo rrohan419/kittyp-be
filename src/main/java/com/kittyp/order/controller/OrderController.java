@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.auth.util.SecurityContextUtils;
 import com.kittyp.cart.dto.CartCheckoutRequest;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
@@ -43,6 +44,7 @@ public class OrderController {
 	private final ApiResponse<?> responseBuilder;
 	private final OrderService orderService;
 	private final InvoiceService invoiceService;
+	private final SecurityContextUtils securityContextUtils;
 
 	@PostMapping(ApiUrl.ORDERS_BY_FILTER)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
@@ -63,7 +65,7 @@ public class OrderController {
 	}
 
 	@PostMapping(ApiUrl.ORDER_STATUS_UPDATE)
-	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
 	public ResponseEntity<SuccessResponse<OrderModel>> orderStatusyUpdate(
 			@RequestBody OrderStatusUpdateDto orderQuantityUpdateDto) {
 
@@ -72,29 +74,23 @@ public class OrderController {
 				ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
-	// @GetMapping(ApiUrl.CREATED_ORDER_BY_USER)
-	// @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-	// public ResponseEntity<SuccessResponse<OrderModel>>
-	// userLastCreatedOrders(@PathVariable String userUuid) {
-
-	// OrderModel response = orderService.latestCreatedCartByUser(userUuid);
-	// return responseBuilder.buildSuccessResponse(response,
-	// ResponseMessage.SUCCESS, HttpStatus.OK);
-	// }
-
 	@GetMapping(ApiUrl.ORDER_INVOICE_BY_USER)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
 	public ResponseEntity<SuccessResponse<URL>> orderInvoice(@PathVariable String orderNumber,
 			@RequestParam(required = false) String userUuid) {
 
+		if (userUuid != null) {
+			securityContextUtils.requireSelfOrAdmin(userUuid);
+		}
 		URL response = invoiceService.getInvoicePresignedUrl(orderNumber, userUuid);
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
 	@PostMapping(ApiUrl.ORDER_CHECKOUT)
-	// @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
 	public ResponseEntity<SuccessResponse<OrderModel>> createOrder(@PathVariable String userUuid,
 			@Valid @RequestBody CartCheckoutRequest request) {
+		securityContextUtils.requireSelfOrAdmin(userUuid);
 		OrderModel response = orderService.createOrderFromCart(userUuid, request);
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}

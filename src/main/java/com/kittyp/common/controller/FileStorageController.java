@@ -2,6 +2,8 @@ package com.kittyp.common.controller;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,66 +31,91 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class FileStorageController {
 
-    private final ApiResponse<?> responseBuilder;
-    private final S3StorageService s3StorageService;
+	private static final long MAX_FILE_BYTES = 10 * 1024 * 1024;
+	private static final Set<String> ALLOWED_TYPES = Set.of(
+			"image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf");
 
-    @PostMapping(value = "/upload/public-url", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<List<String>>> uploadFiles(
-            @RequestParam("files") List<MultipartFile> multipartFiles, @RequestParam(required = false) Boolean isAdminUpload) {
+	private final ApiResponse<?> responseBuilder;
+	private final S3StorageService s3StorageService;
 
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+	@PostMapping(value = "/upload/public-url", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<List<String>>> uploadFiles(
+			@RequestParam("files") List<MultipartFile> multipartFiles,
+			@RequestParam(required = false) Boolean isAdminUpload) {
 
-        List<FileUploadRequest> files = multipartFiles.stream()
-                .map(file -> {
-                    try {
-                        return new FileUploadRequest(
-                                file.getOriginalFilename(),
-                                file.getBytes(),
-                                file.getContentType());
-                    } catch (IOException e) {
-                        throw new RuntimeException("Failed to read file: " + file.getOriginalFilename(), e);
-                    }
-                })
-                .toList();
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		validateFiles(multipartFiles);
 
-        String folderName = isAdminUpload != null && isAdminUpload
-                ? "admin-uploads"
-                : "doctors/" + email.trim().toLowerCase();
+		boolean adminUpload = Boolean.TRUE.equals(isAdminUpload);
+		if (adminUpload && SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+				.noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
+			throw new CustomException("Admin upload not permitted", HttpStatus.FORBIDDEN);
+		}
 
-        List<String> response = s3StorageService.uploadMultipleFiles(folderName, files);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
+		String folder = adminUpload ? "admin-uploads" : "doctors/" + sanitizeEmail(email);
+		return responseBuilder.buildSuccessResponse(
+				s3StorageService.uploadMultipleFiles(folder, toRequests(multipartFiles)),
+				ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
 
-    /**
-     * Unauthenticated upload for doctor signup documents (degree, registration cert, etc.).
-     * Stored under doctors/{email}/ in the shared user bucket.
-     */
-    @PostMapping(value = ApiUrl.UPLOAD_SIGNUP_DOCUMENTS, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<SuccessResponse<List<String>>> uploadSignupDocuments(
-            @RequestParam("files") List<MultipartFile> multipartFiles,
-            @RequestParam("email") String email) {
+	/**
+	 * Unauthenticated upload for doctor signup documents (degree, registration cert, etc.).
+	 * Stored under doctors/{email}/ in the shared user bucket.
+	 */
+	@PostMapping(value = ApiUrl.UPLOAD_SIGNUP_DOCUMENTS, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<SuccessResponse<List<String>>> uploadSignupDocuments(
+			@RequestParam("files") List<MultipartFile> multipartFiles,
+			@RequestParam("email") String email) {
 
-        if (email == null || email.isBlank()) {
-            throw new CustomException("Email is required for signup document upload", HttpStatus.BAD_REQUEST);
-        }
-        String safeEmail = email.trim().toLowerCase().replaceAll("[^a-z0-9.@_-]", "_");
+		if (email == null || email.isBlank() || !email.contains("@")) {
+			throw new CustomException("Valid email is required", HttpStatus.BAD_REQUEST);
+		}
+		validateFiles(multipartFiles);
 
-        List<FileUploadRequest> files = multipartFiles.stream()
-                .map(file -> {
-                    try {
-                        return new FileUploadRequest(
-                                file.getOriginalFilename(),
-                                file.getBytes(),
-                                file.getContentType());
-                    } catch (IOException e) {
-                        throw new RuntimeException("Failed to read file: " + file.getOriginalFilename(), e);
-                    }
-                })
-                .toList();
+		return responseBuilder.buildSuccessResponse(
+				s3StorageService.uploadMultipleFiles("doctors/" + sanitizeEmail(email), toRequests(multipartFiles)),
+				ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
 
-        List<String> response = s3StorageService.uploadMultipleFiles("doctors/" + safeEmail, files);
-        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
+	private void validateFiles(List<MultipartFile> files) {
+		if (files == null || files.isEmpty()) {
+			throw new CustomException("At least one file is required", HttpStatus.BAD_REQUEST);
+		}
+		if (files.size() > 5) {
+			throw new CustomException("Maximum 5 files allowed", HttpStatus.BAD_REQUEST);
+		}
+		for (MultipartFile file : files) {
+			if (file == null || file.isEmpty()) {
+				throw new CustomException("Empty files are not allowed", HttpStatus.BAD_REQUEST);
+			}
+			if (file.getSize() > MAX_FILE_BYTES) {
+				throw new CustomException("File exceeds 10MB limit", HttpStatus.BAD_REQUEST);
+			}
+			String type = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
+			if (!ALLOWED_TYPES.contains(type)) {
+				throw new CustomException("Unsupported file type", HttpStatus.BAD_REQUEST);
+			}
+			String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+			if (name.contains("..") || name.contains("/") || name.contains("\\")) {
+				throw new CustomException("Invalid file name", HttpStatus.BAD_REQUEST);
+			}
+		}
+	}
 
+	private List<FileUploadRequest> toRequests(List<MultipartFile> files) {
+		return files.stream().map(file -> {
+			try {
+				String name = file.getOriginalFilename() == null ? "upload.bin" : file.getOriginalFilename();
+				return new FileUploadRequest(name.replaceAll("[^a-zA-Z0-9._-]", "_"), file.getBytes(),
+						file.getContentType());
+			} catch (IOException e) {
+				throw new CustomException("Failed to read file", HttpStatus.BAD_REQUEST);
+			}
+		}).toList();
+	}
+
+	private String sanitizeEmail(String email) {
+		return email.trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9.@_-]", "_");
+	}
 }

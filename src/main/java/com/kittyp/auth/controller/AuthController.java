@@ -108,7 +108,8 @@ public class AuthController {
 	}
 
 	@PostMapping(ApiUrl.USER_PASSWORD_RESET)
-	public ResponseEntity<SuccessResponse<Boolean>> updatePassword(@RequestBody UpdatePasswordDto updatePasswordDto) {
+	public ResponseEntity<SuccessResponse<Boolean>> updatePassword(
+			@Valid @RequestBody UpdatePasswordDto updatePasswordDto) {
 
 		Boolean response = userService.updatePassword(updatePasswordDto);
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -116,8 +117,8 @@ public class AuthController {
 
 	@GetMapping(ApiUrl.SEND_CODE)
 	public ResponseEntity<SuccessResponse<Boolean>> sendResetPasswordCode(@RequestParam String email) {
+		// Always return success to prevent email enumeration
 		userService.sendResetPasswordCode(email);
-
 		return responseBuilder.buildSuccessResponse(true, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 }
