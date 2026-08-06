@@ -5,6 +5,7 @@ package com.kittyp.user.service;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -18,15 +19,21 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.kittyp.auth.util.JwtUtils;
+import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.notification.FcmPushNotificationService;
+import com.kittyp.notification.service.SmsService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.dao.UserFcmTokenDao;
+import com.kittyp.user.dto.ProfileOtpSendRequest;
+import com.kittyp.user.dto.ProfileOtpVerifyRequest;
 import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.entity.User;
@@ -59,6 +66,9 @@ public class UserServiceImpl implements UserService {
 	private final ZeptoMailService zeptoMailService;
 	private final FcmPushNotificationService fcmPushNotificationService;
 	private final UserFcmTokenDao fcmTokenDao;
+	private final JwtUtils jwtUtils;
+	private final SmsService smsService;
+	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 
 	@Transactional
 	@Override
@@ -71,20 +81,7 @@ public class UserServiceImpl implements UserService {
 			return null;
 		}
 
-		UserDetailsModel userDetailsModel = mapper.convert(user, UserDetailsModel.class);
-		userDetailsModel.setRoles(user.getUserRoles().stream()
-				.map(UserRole::getRole)
-				.map(role -> role.getName().name())
-				.collect(Collectors.toSet()));
-
-		if (user.getPets() != null && !user.getPets().isEmpty()) {
-			Set<PetModel> petModels = user.getPets().stream()
-					.map(pet -> mapper.convert(pet, PetModel.class))
-					.collect(Collectors.toSet());
-			userDetailsModel.setOwnerPets(petModels);
-		} else {
-			userDetailsModel.setOwnerPets(new HashSet<>());
-		}
+		UserDetailsModel userDetailsModel = toUserDetailsModel(user);
 
 		logger.info("User details retrieved successfully for email: {}", email);
 		return userDetailsModel;
@@ -116,10 +113,36 @@ public class UserServiceImpl implements UserService {
 			throw new CustomException("User not found", HttpStatus.NOT_FOUND);
 		}
 
-		if (userDetailDto.getEmail() != null && !userDetailDto.getEmail().isBlank()) {
-			user.setEmail(userDetailDto.getEmail());
-			logger.debug("Updated email to: {}", userDetailDto.getEmail());
+		boolean emailChanging = userDetailDto.getEmail() != null && !userDetailDto.getEmail().isBlank()
+				&& !userDetailDto.getEmail().trim().equalsIgnoreCase(user.getEmail());
+		boolean phoneChanging = isPhoneChanging(user, userDetailDto);
+
+		if (phoneChanging) {
+			String local = userDetailDto.getPhoneNumber() == null ? "" : userDetailDto.getPhoneNumber().trim();
+			if (!local.matches("\\d{10}")) {
+				throw new CustomException("Phone number must be exactly 10 digits", HttpStatus.BAD_REQUEST);
+			}
 		}
+
+		if (emailChanging) {
+			String newEmail = userDetailDto.getEmail().trim().toLowerCase();
+			if (!newEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+				throw new CustomException("Invalid email address", HttpStatus.BAD_REQUEST);
+			}
+			if (userDao.userPresentByEmail(newEmail)) {
+				throw new CustomException("Email is already in use", HttpStatus.CONFLICT);
+			}
+			if (!verificationCodeService.isVerified(
+					VerificationCodeService.profileEmailVerifiedKey(user.getUuid(), newEmail))) {
+				throw new CustomException("Email re-verification required before changing email",
+						HttpStatus.BAD_REQUEST);
+			}
+			user.setEmail(newEmail);
+			verificationCodeService.clearVerified(
+					VerificationCodeService.profileEmailVerifiedKey(user.getUuid(), newEmail));
+			logger.debug("Updated email to: {}", newEmail);
+		}
+
 		if (userDetailDto.getFirstName() != null && !userDetailDto.getFirstName().isBlank()) {
 			user.setFirstName(userDetailDto.getFirstName());
 			logger.debug("Updated first name to: {}", userDetailDto.getFirstName());
@@ -128,17 +151,168 @@ public class UserServiceImpl implements UserService {
 			user.setLastName(userDetailDto.getLastName());
 			logger.debug("Updated last name to: {}", userDetailDto.getLastName());
 		}
-		if (userDetailDto.getPhoneNumber() != null && !userDetailDto.getPhoneNumber().isBlank()
-				&& userDetailDto.getPhoneCountryCode() != null && !userDetailDto.getPhoneCountryCode().isBlank()) {
-			user.setPhoneCountryCode(userDetailDto.getPhoneCountryCode());
-			user.setPhoneNumber(userDetailDto.getPhoneNumber());
-			logger.debug("Updated phone number to: {}{}", userDetailDto.getPhoneCountryCode(),
-					userDetailDto.getPhoneNumber());
+
+		if (phoneChanging) {
+			String fullPhone = normalizePhone(userDetailDto.getPhoneCountryCode(), userDetailDto.getPhoneNumber());
+			if (!verificationCodeService.isVerified(
+					VerificationCodeService.profilePhoneVerifiedKey(user.getUuid(), fullPhone))) {
+				throw new CustomException("Phone re-verification required before changing phone number",
+						HttpStatus.BAD_REQUEST);
+			}
+			user.setPhoneCountryCode(userDetailDto.getPhoneCountryCode().trim());
+			user.setPhoneNumber(userDetailDto.getPhoneNumber().trim());
+			verificationCodeService.clearVerified(
+					VerificationCodeService.profilePhoneVerifiedKey(user.getUuid(), fullPhone));
+			logger.debug("Updated phone number to: {}", fullPhone);
+		}
+
+		if (userDetailDto.getAge() != null) {
+			if (userDetailDto.getAge() < 1 || userDetailDto.getAge() > 120) {
+				throw new CustomException("Age must be between 1 and 120", HttpStatus.BAD_REQUEST);
+			}
+			user.setAge(userDetailDto.getAge());
+			logger.debug("Updated age to: {}", userDetailDto.getAge());
 		}
 
 		user = userDao.saveUser(user);
-		logger.info("User details updated successfully for email: {}", email);
-		return mapper.convert(user, UserDetailsModel.class);
+		if (emailChanging || phoneChanging) {
+			clinicOwnerUserLinkService.linkUserToClinicOwners(user);
+		}
+		logger.info("User details updated successfully for email: {}", user.getEmail());
+		UserDetailsModel model = toUserDetailsModel(user);
+		if (emailChanging) {
+			// Keep session alive after email change by issuing a fresh JWT for the new email
+			model.setAccessToken(jwtUtils.generateTokenFromEmail(user.getEmail()));
+		}
+		return model;
+	}
+
+	private UserDetailsModel toUserDetailsModel(User user) {
+		UserDetailsModel userDetailsModel = mapper.convert(user, UserDetailsModel.class);
+		userDetailsModel.setRoles(user.getUserRoles().stream()
+				.map(UserRole::getRole)
+				.map(role -> role.getName().name())
+				.collect(Collectors.toSet()));
+
+		if (user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank()
+				&& (userDetailsModel.getPhoneCountryCode() == null || userDetailsModel.getPhoneCountryCode().isBlank())) {
+			userDetailsModel.setPhoneCountryCode("+91");
+		}
+
+		if (user.getPets() != null && !user.getPets().isEmpty()) {
+			Set<PetModel> petModels = user.getPets().stream()
+					.map(pet -> mapper.convert(pet, PetModel.class))
+					.collect(Collectors.toSet());
+			userDetailsModel.setOwnerPets(petModels);
+		} else {
+			userDetailsModel.setOwnerPets(new HashSet<>());
+		}
+		return userDetailsModel;
+	}
+
+	@Override
+	public MessageResponse sendProfileOtp(String authEmail, ProfileOtpSendRequest request) {
+		User user = requireUserByEmail(authEmail);
+		String channel = request.getChannel() == null ? "" : request.getChannel().trim().toUpperCase();
+
+		if ("EMAIL".equals(channel)) {
+			if (request.getEmail() == null || request.getEmail().isBlank()) {
+				throw new CustomException("Email is required", HttpStatus.BAD_REQUEST);
+			}
+			String newEmail = request.getEmail().trim().toLowerCase();
+			if (newEmail.equalsIgnoreCase(user.getEmail())) {
+				throw new CustomException("New email must be different from current email", HttpStatus.BAD_REQUEST);
+			}
+			if (userDao.userPresentByEmail(newEmail)) {
+				throw new CustomException("Email is already in use", HttpStatus.CONFLICT);
+			}
+			String code = verificationCodeService.generateCode(
+					VerificationCodeService.profileEmailOtpKey(user.getUuid(), newEmail));
+			zeptoMailService.sendSignupOtpEmail(newEmail, code, "EMAIL", null);
+			return new MessageResponse("OTP sent to email");
+		}
+
+		if ("PHONE".equals(channel)) {
+			if (request.getPhone() == null || request.getPhone().isBlank()) {
+				throw new CustomException("Phone is required", HttpStatus.BAD_REQUEST);
+			}
+			String phone = request.getPhone().trim();
+			// Expect country code + 10-digit local number, e.g. +919876543210
+			String digits = phone.replaceAll("\\D", "");
+			if (digits.length() < 10 || !digits.substring(digits.length() - 10).matches("\\d{10}")) {
+				throw new CustomException("Phone number must include a valid 10-digit local number",
+						HttpStatus.BAD_REQUEST);
+			}
+			String currentFull = normalizePhone(user.getPhoneCountryCode(), user.getPhoneNumber());
+			if (phone.equals(currentFull)) {
+				throw new CustomException("New phone must be different from current phone", HttpStatus.BAD_REQUEST);
+			}
+			String code = verificationCodeService.generateCode(
+					VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone));
+			smsService.sendOtp(phone, code);
+			return new MessageResponse("OTP sent to phone");
+		}
+
+		throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
+	}
+
+	@Override
+	public Map<String, Boolean> verifyProfileOtp(String authEmail, ProfileOtpVerifyRequest request) {
+		User user = requireUserByEmail(authEmail);
+		String channel = request.getChannel() == null ? "" : request.getChannel().trim().toUpperCase();
+		boolean ok;
+
+		if ("EMAIL".equals(channel)) {
+			String newEmail = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
+			ok = verificationCodeService.verifyCode(
+					VerificationCodeService.profileEmailOtpKey(user.getUuid(), newEmail), request.getCode(), true);
+			if (ok) {
+				verificationCodeService.markVerified(
+						VerificationCodeService.profileEmailVerifiedKey(user.getUuid(), newEmail));
+			}
+		} else if ("PHONE".equals(channel)) {
+			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
+			ok = verificationCodeService.verifyCode(
+					VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone), request.getCode(), true);
+			if (ok) {
+				verificationCodeService.markVerified(
+						VerificationCodeService.profilePhoneVerifiedKey(user.getUuid(), phone));
+			}
+		} else {
+			throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
+		}
+
+		if (!ok) {
+			throw new CustomException("Invalid or expired OTP", HttpStatus.BAD_REQUEST);
+		}
+		return Map.of("verified", true);
+	}
+
+	private User requireUserByEmail(String email) {
+		User user = userDao.userByEmail(email);
+		if (user == null) {
+			throw new CustomException("User not found", HttpStatus.NOT_FOUND);
+		}
+		return user;
+	}
+
+	private static boolean isPhoneChanging(User user, UserDetailDto dto) {
+		if (dto.getPhoneNumber() == null || dto.getPhoneNumber().isBlank()
+				|| dto.getPhoneCountryCode() == null || dto.getPhoneCountryCode().isBlank()) {
+			return false;
+		}
+		String next = normalizePhone(dto.getPhoneCountryCode(), dto.getPhoneNumber());
+		String currentCode = user.getPhoneCountryCode() == null || user.getPhoneCountryCode().isBlank()
+				? "+91"
+				: user.getPhoneCountryCode();
+		String current = normalizePhone(currentCode, user.getPhoneNumber());
+		return !next.equals(current);
+	}
+
+	private static String normalizePhone(String countryCode, String phoneNumber) {
+		String code = countryCode == null ? "" : countryCode.trim();
+		String number = phoneNumber == null ? "" : phoneNumber.trim();
+		return code + number;
 	}
 
 	@Override

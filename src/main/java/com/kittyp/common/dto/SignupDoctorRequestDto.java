@@ -32,4 +32,7 @@ public class SignupDoctorRequestDto extends SignupRequestDto {
     private String governmentIdUrl;
     private String clinicPhotosUrls;
     private String photoUrl;
+
+    /** Optional clinic invite token — joins that clinic instead of creating a new one. */
+    private String inviteToken;
 }

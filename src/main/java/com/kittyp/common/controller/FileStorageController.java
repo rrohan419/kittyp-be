@@ -24,6 +24,7 @@ import com.kittyp.common.dto.FileUploadRequest;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.service.S3StorageService;
+import com.kittyp.common.util.VerificationCodeService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -37,6 +38,7 @@ public class FileStorageController {
 
 	private final ApiResponse<?> responseBuilder;
 	private final S3StorageService s3StorageService;
+	private final VerificationCodeService verificationCodeService;
 
 	@PostMapping(value = "/upload/public-url", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
@@ -71,10 +73,16 @@ public class FileStorageController {
 		if (email == null || email.isBlank() || !email.contains("@")) {
 			throw new CustomException("Valid email is required", HttpStatus.BAD_REQUEST);
 		}
+		String normalized = email.trim().toLowerCase(Locale.ROOT);
+		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(normalized))
+				&& !verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(email.trim()))) {
+			throw new CustomException("Email OTP verification required before uploading documents",
+					HttpStatus.UNAUTHORIZED);
+		}
 		validateFiles(multipartFiles);
 
 		return responseBuilder.buildSuccessResponse(
-				s3StorageService.uploadMultipleFiles("doctors/" + sanitizeEmail(email), toRequests(multipartFiles)),
+				s3StorageService.uploadMultipleFiles("doctors/" + sanitizeEmail(normalized), toRequests(multipartFiles)),
 				ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 

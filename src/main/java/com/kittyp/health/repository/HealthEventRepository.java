@@ -11,4 +11,6 @@ public interface HealthEventRepository extends JpaRepository<HealthEvent, Long> 
     List<HealthEvent> findByClinic_IdAndPet_UuidOrderByDateDesc(Long clinicId, String petUuid);
 
     List<HealthEvent> findByClinic_Id(Long clinicId);
+
+    long countDistinctPet_IdByClinic_Id(Long clinicId);
 }

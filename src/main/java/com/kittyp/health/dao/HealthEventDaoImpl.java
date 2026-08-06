@@ -29,4 +29,9 @@ public class HealthEventDaoImpl implements HealthEventDao {
     public List<HealthEvent> findByClinic(Long clinicId) {
         return healthEventRepository.findByClinic_Id(clinicId);
     }
+
+    @Override
+    public long countDistinctPetsByClinic(Long clinicId) {
+        return healthEventRepository.countDistinctPet_IdByClinic_Id(clinicId);
+    }
 }

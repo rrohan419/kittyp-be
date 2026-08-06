@@ -112,4 +112,20 @@ public class VerificationCodeService {
     public static String phoneVerifiedKey(String phone) {
         return "signup-phone-ok:" + phone.trim();
     }
+
+    public static String profileEmailOtpKey(String userUuid, String email) {
+        return "profile-email:" + userUuid + ":" + email.trim().toLowerCase();
+    }
+
+    public static String profilePhoneOtpKey(String userUuid, String phone) {
+        return "profile-phone:" + userUuid + ":" + phone.trim();
+    }
+
+    public static String profileEmailVerifiedKey(String userUuid, String email) {
+        return "profile-email-ok:" + userUuid + ":" + email.trim().toLowerCase();
+    }
+
+    public static String profilePhoneVerifiedKey(String userUuid, String phone) {
+        return "profile-phone-ok:" + userUuid + ":" + phone.trim();
+    }
 }

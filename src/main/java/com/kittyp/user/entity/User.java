@@ -57,6 +57,9 @@ public class User extends BaseEntity {
     @Column
     private String phoneNumber;
 
+    @Column
+    private Integer age;
+
     @Column(nullable = false)
     private String password;
 

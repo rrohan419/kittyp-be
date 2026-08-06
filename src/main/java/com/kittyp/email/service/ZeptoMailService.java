@@ -16,4 +16,7 @@ public interface ZeptoMailService {
 
 	/** Sends a signup OTP email. purpose e.g. "email" or "phone". */
 	void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint);
+
+	/** Clinic doctor invitation with accept link. */
+	void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);
 }

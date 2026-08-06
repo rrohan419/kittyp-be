@@ -3,6 +3,9 @@
  */
 package com.kittyp.user.controller;
 
+import java.util.List;
+
+import com.kittyp.clinic.dto.ClinicDtos.SwitchClinicRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,14 +26,20 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.PaginationModel;
-import com.kittyp.user.dto.ProfilePictureUpdateDto;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
+import com.kittyp.clinic.service.ClinicService;
 import com.kittyp.user.dto.UserDetailDto;
+import com.kittyp.user.dto.ProfileOtpSendRequest;
+import com.kittyp.user.dto.ProfileOtpVerifyRequest;
+import com.kittyp.user.dto.ProfilePictureUpdateDto;
 import com.kittyp.user.dto.UserStatusUpdateDto;
 import com.kittyp.user.models.FcmTokenModel;
+import com.kittyp.common.model.MessageResponse;
 import com.kittyp.user.models.UserDetailsModel;
 import com.kittyp.user.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -42,6 +51,7 @@ import lombok.RequiredArgsConstructor;
 public class UserController {
 
     private final UserService userService;
+    private final ClinicService clinicService;
     private final ApiResponse<?> responseBuilder;
     private final SecurityContextUtils securityContextUtils;
 
@@ -53,6 +63,21 @@ public class UserController {
 
         UserDetailsModel response = userService.userDetailsByEmail(email);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @GetMapping(ApiUrl.USER_CLINICS)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<List<ClinicModel>>> userClinics() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(clinicService.mine(email), ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.USER_SWITCH_CLINIC)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<ClinicModel>> switchClinic(@RequestBody @Valid SwitchClinicRequest request) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(clinicService.switchClinic(request.clinicUuid(), email),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @PostMapping(ApiUrl.USER_BASE_URL)
@@ -67,6 +92,24 @@ public class UserController {
 
         UserDetailsModel response = userService.updateUserDetail(email, userDetailDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.USER_PROFILE_OTP_SEND)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<MessageResponse>> sendProfileOtp(
+            @RequestBody @Valid ProfileOtpSendRequest request) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(userService.sendProfileOtp(email, request),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.USER_PROFILE_OTP_VERIFY)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<java.util.Map<String, Boolean>>> verifyProfileOtp(
+            @RequestBody @Valid ProfileOtpVerifyRequest request) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(userService.verifyProfileOtp(email, request),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @PostMapping("/user/admin")

@@ -11,4 +11,6 @@ public interface HealthEventDao {
     List<HealthEvent> findByClinicAndPet(Long clinicId, String petUuid);
 
     List<HealthEvent> findByClinic(Long clinicId);
+
+    long countDistinctPetsByClinic(Long clinicId);
 }

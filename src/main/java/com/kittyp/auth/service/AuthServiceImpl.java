@@ -22,7 +22,13 @@ import com.kittyp.auth.dto.SocialSso;
 import com.kittyp.auth.util.JwtUtils;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicDoctor;
+import com.kittyp.clinic.entity.ClinicDoctorInvite;
+import com.kittyp.clinic.enums.ClinicDoctorInviteStatus;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
+import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.LoginRequestDto;
 import com.kittyp.common.dto.SignupClinicRequestDto;
@@ -37,6 +43,7 @@ import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.email.service.ZeptoMailService;
+import com.kittyp.notification.service.SmsService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Role;
@@ -59,8 +66,12 @@ public class AuthServiceImpl implements AuthService {
 	private final ZeptoMailService zeptoMailService;
 	private final GoogleOAuth2Service googleOAuth2Service;
 	private final ClinicDao clinicDao;
+	private final ClinicDoctorRepository clinicDoctorRepository;
+	private final ClinicDoctorInviteRepository clinicDoctorInviteRepository;
 	private final DoctorProfileDao doctorProfileDao;
 	private final VerificationCodeService verificationCodeService;
+	private final SmsService smsService;
+	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 
 	@Transactional
 	@Override
@@ -85,7 +96,8 @@ public class AuthServiceImpl implements AuthService {
 			throw new CustomException("Default ROLE_USER not found", HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 		user.getUserRoles().add(new UserRole(user, userRole));
-		userDao.saveUser(user);
+		user = userDao.saveUser(user);
+		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
 		zeptoMailService.sendWelcomeEmail(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
@@ -109,16 +121,32 @@ public class AuthServiceImpl implements AuthService {
 		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
-		if (!verificationCodeService.isVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()))) {
+		if (!verificationCodeService.isVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()))
+				&& !verificationCodeService.isVerified(
+						VerificationCodeService.phoneVerifiedKey("+91" + req.getPhoneNumber().trim()))) {
 			throw new CustomException("Phone OTP verification required", HttpStatus.BAD_REQUEST);
 		}
 
 		User user = createUserWithRole(req, ERole.ROLE_DOCTOR);
 		user.setPhoneNumber(req.getPhoneNumber());
+		user.setPhoneCountryCode("+91");
 		user = userDao.saveUser(user);
 
+		ClinicDoctorInvite invite = null;
+		if (req.getInviteToken() != null && !req.getInviteToken().isBlank()) {
+			invite = clinicDoctorInviteRepository.findByToken(req.getInviteToken().trim())
+					.orElseThrow(() -> new CustomException("Invalid clinic invite token", HttpStatus.BAD_REQUEST));
+			if (invite.getStatus() != ClinicDoctorInviteStatus.PENDING
+					|| invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+				throw new CustomException("Clinic invite is expired or no longer valid", HttpStatus.BAD_REQUEST);
+			}
+			if (!invite.getEmail().equalsIgnoreCase(req.getEmail())) {
+				throw new CustomException("Signup email must match the invited email", HttpStatus.BAD_REQUEST);
+			}
+		}
+
 		Clinic clinic = null;
-		if (req.getClinicName() != null && !req.getClinicName().isBlank()) {
+		if (invite == null && req.getClinicName() != null && !req.getClinicName().isBlank()) {
 			clinic = clinicDao.saveClinic(Clinic.builder()
 					.uuid(UUID.randomUUID().toString())
 					.name(req.getClinicName())
@@ -135,7 +163,7 @@ public class AuthServiceImpl implements AuthService {
 				? req.getLicenseNumber()
 				: req.getRegistrationNumber();
 
-		doctorProfileDao.save(DoctorProfile.builder()
+		DoctorProfile profile = doctorProfileDao.save(DoctorProfile.builder()
 				.uuid(UUID.randomUUID().toString())
 				.user(user)
 				.licenseNumber(license)
@@ -150,7 +178,7 @@ public class AuthServiceImpl implements AuthService {
 				.governmentIdUrl(req.getGovernmentIdUrl())
 				.clinicPhotosUrls(req.getClinicPhotosUrls())
 				.licenseDocumentUrl(req.getRegistrationCertificateUrl())
-				.clinic(clinic)
+				.clinic(invite != null ? invite.getClinic() : clinic)
 				.currency("INR")
 				.emailOtpVerified(true)
 				.phoneOtpVerified(true)
@@ -159,6 +187,28 @@ public class AuthServiceImpl implements AuthService {
 				.status(DoctorStatus.DOCUMENTS_SUBMITTED)
 				.submittedAt(LocalDateTime.now())
 				.build());
+
+		if (clinic != null) {
+			clinicDoctorRepository.save(ClinicDoctor.builder()
+					.clinic(clinic)
+					.doctor(profile)
+					.role("owner")
+					.isActive(true)
+					.joinedAt(java.time.LocalDate.now())
+					.build());
+		}
+
+		if (invite != null) {
+			clinicDoctorRepository.save(ClinicDoctor.builder()
+					.clinic(invite.getClinic())
+					.doctor(profile)
+					.role("doctor")
+					.isActive(true)
+					.joinedAt(java.time.LocalDate.now())
+					.build());
+			invite.setStatus(ClinicDoctorInviteStatus.ACCEPTED);
+			clinicDoctorInviteRepository.save(invite);
+		}
 
 		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
 		verificationCodeService.clearVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
@@ -186,14 +236,15 @@ public class AuthServiceImpl implements AuthService {
 			if (request.getPhone() == null || request.getPhone().isBlank()) {
 				throw new CustomException("Phone is required", HttpStatus.BAD_REQUEST);
 			}
-			if (request.getEmail() == null || request.getEmail().isBlank()) {
-				throw new CustomException("Email is required to deliver phone OTP", HttpStatus.BAD_REQUEST);
-			}
 			String phone = request.getPhone().trim();
-			String email = request.getEmail().trim().toLowerCase();
+			String digits = phone.replaceAll("\\D", "");
+			if (digits.length() < 10 || !digits.substring(digits.length() - 10).matches("\\d{10}")) {
+				throw new CustomException("Phone number must include a valid 10-digit local number",
+						HttpStatus.BAD_REQUEST);
+			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.phoneOtpKey(phone));
-			zeptoMailService.sendSignupOtpEmail(email, code, "PHONE", phone);
-			return new MessageResponse("OTP sent for phone verification (via email)");
+			smsService.sendOtp(phone, code);
+			return new MessageResponse("OTP sent to phone");
 		}
 		throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
 	}
@@ -232,6 +283,9 @@ public class AuthServiceImpl implements AuthService {
 		if (userDao.userPresentByEmail(signupClinicRequestDto.getEmail())) {
 			throw new ResourceAlreadyExistsException("User", "email", signupClinicRequestDto.getEmail());
 		}
+		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()))) {
+			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
+		}
 
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
 
@@ -247,6 +301,7 @@ public class AuthServiceImpl implements AuthService {
 				.status(ClinicStatus.PENDING)
 				.build());
 
+		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
 		zeptoMailService.sendWelcomeEmail(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
