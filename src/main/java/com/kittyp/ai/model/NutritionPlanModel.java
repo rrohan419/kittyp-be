@@ -24,5 +24,15 @@ public class NutritionPlanModel {
 
     private String userUuid;
 
+    private String parentUserUuid;
+
+    private String doctorUserUuid;
+
+    private String status;
+
+    private LocalDateTime approvedAt;
+
+    private LocalDateTime sentAt;
+
     private NutritionRecommendationResponse nutritionRecommendationResponse;
 }

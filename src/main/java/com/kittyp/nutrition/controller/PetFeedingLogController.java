@@ -47,7 +47,7 @@ public class PetFeedingLogController {
             @PathVariable String petUuid,
             @RequestParam(required = false) LocalDateTime from,
             @RequestParam(required = false) LocalDateTime to) {
-        ownerOf(petUuid);
+        assertCanViewFeeding(petUuid);
         LocalDateTime start = from == null ? LocalDate.now().minusDays(30).atStartOfDay() : from;
         LocalDateTime end = to == null ? LocalDateTime.now() : to;
         if (end.isBefore(start)) {
@@ -76,6 +76,20 @@ public class PetFeedingLogController {
                 .build();
         return responseBuilder.buildSuccessResponse(toModel(petFeedingLogDao.save(log)),
                 ResponseMessage.SUCCESS, HttpStatus.CREATED);
+    }
+
+    private void assertCanViewFeeding(String petUuid) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User authenticatedUser = userDao.userByEmail(email);
+        User petOwner = userDao.userByPetUuid(petUuid);
+        if (authenticatedUser.getUuid().equals(petOwner.getUuid())) {
+            return;
+        }
+        boolean isDoctor = authenticatedUser.getUserRoles() != null && authenticatedUser.getUserRoles().stream()
+                .anyMatch(ur -> ur.getRole() != null && ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_DOCTOR);
+        if (!isDoctor) {
+            throw new CustomException("You are not authorized to access this pet", HttpStatus.FORBIDDEN);
+        }
     }
 
     private User ownerOf(String petUuid) {

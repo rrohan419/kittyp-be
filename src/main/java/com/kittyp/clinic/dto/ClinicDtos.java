@@ -26,7 +26,56 @@ public final class ClinicDtos {
     }
 
     public record DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
-            String role, Boolean isActive) {
+            String role, Boolean isActive, String status, String photoUrl) {
+        public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
+                String role, Boolean isActive) {
+            this(doctorUuid, userUuid, name, email, specialization, role, isActive, null, null);
+        }
+    }
+
+    /** Full doctor profile for clinic staff (read-only verification + related patients). */
+    public record ClinicDoctorDetailModel(
+            String doctorUuid,
+            String userUuid,
+            String name,
+            String firstName,
+            String lastName,
+            String email,
+            String phoneNumber,
+            String specialization,
+            String registrationNumber,
+            String licenseNumber,
+            String bio,
+            String photoUrl,
+            Double experienceYears,
+            String role,
+            Boolean isActive,
+            String joinedAt,
+            String status,
+            String degreeCertificateUrl,
+            String registrationCertificateUrl,
+            String governmentIdUrl,
+            String licenseDocumentUrl,
+            String clinicPhotosUrls,
+            boolean emailOtpVerified,
+            boolean phoneOtpVerified,
+            boolean checkMobileOtp,
+            boolean checkEmailOtp,
+            boolean checkGovernmentId,
+            boolean checkDegree,
+            boolean checkRegistrationCertificate,
+            boolean checkClinicAddress,
+            boolean checkRegistrationNumber,
+            boolean checkGoogleMapsMatch,
+            boolean checkClinicPhotos,
+            String submittedAt,
+            String reviewedAt,
+            String reviewNotes,
+            List<ClinicDoctorPatientModel> patients) {
+    }
+
+    public record ClinicDoctorPatientModel(ClinicPetListModel pet, OwnerSummaryModel owner, int appointmentCount,
+            LocalDateTime lastAppointment) {
     }
 
     public record PatientModel(String petUuid, String petName, String ownerName, String ownerEmail,
@@ -131,14 +180,14 @@ public final class ClinicDtos {
     public record ClinicStatsModel(long diagnosedPetCount, long patientCount) {
     }
 
-    public record DoctorInviteRequest(String name, @Email String email, String doctorUuid) {
+    public record DoctorInviteRequest(String name, String email, String doctorUuid) {
     }
 
     public record DoctorLookupModel(String doctorUuid, String name, String email) {
     }
 
     public record DoctorInviteModel(String uuid, String email, String doctorName, String status, String expiresAt,
-            String clinicUuid, String clinicName) {
+            String clinicUuid, String clinicName, String token) {
     }
 
     public record DoctorInvitePreview(String clinicName, String doctorName, String email, boolean expired,

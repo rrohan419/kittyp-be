@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -29,6 +30,8 @@ import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorDetailModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorPatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerPetModel;
@@ -212,6 +215,95 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ClinicDoctorDetailModel doctorDetail(String clinicUuid, String doctorUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        ClinicDoctor affiliation = clinicDoctorRepository.findByClinic_IdAndDoctor_Uuid(clinic.getId(), doctorUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("doctor", "uuid", doctorUuid));
+        DoctorProfile doctor = affiliation.getDoctor();
+        User user = doctor.getUser();
+
+        Map<String, List<Booking>> bookingsByPet = bookingDao.findByClinic(clinic.getId()).stream()
+                .filter(b -> b.getDoctor() != null && doctor.getId().equals(b.getDoctor().getId()))
+                .filter(b -> b.getPet() != null)
+                .collect(Collectors.groupingBy(b -> b.getPet().getUuid()));
+
+        Map<String, ClinicDoctorPatientModel> patients = new HashMap<>();
+
+        for (Map.Entry<String, List<Booking>> entry : bookingsByPet.entrySet()) {
+            Pet pet = entry.getValue().get(0).getPet();
+            if (pet.getClinic() == null || !clinic.getId().equals(pet.getClinic().getId()) || pet.getClinicOwner() == null) {
+                continue;
+            }
+            LocalDateTime lastAppt = entry.getValue().stream()
+                    .map(Booking::getSlotStart)
+                    .filter(Objects::nonNull)
+                    .max(LocalDateTime::compareTo)
+                    .orElse(null);
+            patients.put(pet.getUuid(), new ClinicDoctorPatientModel(toPetListModel(pet), ownerSummary(pet.getClinicOwner()),
+                    entry.getValue().size(), lastAppt));
+        }
+
+        // Also include clinic pets whose owner account is this doctor (same linked user).
+        Long doctorUserId = user.getId();
+        for (Pet pet : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
+            if (pet.getClinicOwner() == null || pet.getClinicOwner().getLinkedUser() == null) {
+                continue;
+            }
+            if (!doctorUserId.equals(pet.getClinicOwner().getLinkedUser().getId())) {
+                continue;
+            }
+            patients.computeIfAbsent(pet.getUuid(),
+                    id -> new ClinicDoctorPatientModel(toPetListModel(pet), ownerSummary(pet.getClinicOwner()), 0, null));
+        }
+
+        List<ClinicDoctorPatientModel> patientList = patients.values().stream()
+                .sorted(Comparator
+                        .comparing(ClinicDoctorPatientModel::lastAppointment, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(p -> p.pet().name(), Comparator.nullsLast(String::compareToIgnoreCase)))
+                .toList();
+
+        return new ClinicDoctorDetailModel(
+                doctor.getUuid(),
+                user.getUuid(),
+                fullName(user),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getEmail(),
+                doctor.getPhoneNumber() != null ? doctor.getPhoneNumber() : user.getPhoneNumber(),
+                doctor.getSpecialization() == null ? null : doctor.getSpecialization().name(),
+                doctor.getRegistrationNumber(),
+                doctor.getLicenseNumber(),
+                doctor.getBio(),
+                doctor.getPhotoUrl(),
+                doctor.getExperienceYears(),
+                affiliation.getRole(),
+                affiliation.getIsActive(),
+                affiliation.getJoinedAt() == null ? null : affiliation.getJoinedAt().toString(),
+                doctor.getStatus() == null ? null : doctor.getStatus().name(),
+                doctor.getDegreeCertificateUrl(),
+                doctor.getRegistrationCertificateUrl(),
+                doctor.getGovernmentIdUrl(),
+                doctor.getLicenseDocumentUrl(),
+                doctor.getClinicPhotosUrls(),
+                doctor.isEmailOtpVerified(),
+                doctor.isPhoneOtpVerified(),
+                doctor.isCheckMobileOtp(),
+                doctor.isCheckEmailOtp(),
+                doctor.isCheckGovernmentId(),
+                doctor.isCheckDegree(),
+                doctor.isCheckRegistrationCertificate(),
+                doctor.isCheckClinicAddress(),
+                doctor.isCheckRegistrationNumber(),
+                doctor.isCheckGoogleMapsMatch(),
+                doctor.isCheckClinicPhotos(),
+                doctor.getSubmittedAt() == null ? null : doctor.getSubmittedAt().toString(),
+                doctor.getReviewedAt() == null ? null : doctor.getReviewedAt().toString(),
+                doctor.getReviewNotes(),
+                patientList);
+    }
+
+    @Override
     @Transactional
     public DoctorInviteModel inviteDoctor(String clinicUuid, DoctorInviteRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
@@ -246,25 +338,39 @@ public class ClinicServiceImpl implements ClinicService {
             }
             inviteEmail = lookup.email().toLowerCase();
             doctorName = request.name() != null && !request.name().isBlank() ? request.name().trim() : lookup.name();
+            if (inviteEmail.equalsIgnoreCase(inviter.getEmail())) {
+                throw new CustomException("You cannot invite your own account to this clinic", HttpStatus.BAD_REQUEST);
+            }
             if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(),
                     profile.getUser().getId())) {
-                throw new CustomException("This doctor is already affiliated with the clinic", HttpStatus.CONFLICT);
+                throw new CustomException(
+                        "This doctor is already on your clinic roster — open Doctors to see them. No new invite is needed.",
+                        HttpStatus.CONFLICT);
             }
         } else {
             inviteEmail = request.email().trim().toLowerCase();
+            if (!inviteEmail.contains("@") || inviteEmail.length() < 5) {
+                throw new CustomException("Enter a valid doctor email", HttpStatus.BAD_REQUEST);
+            }
             if (request.name() == null || request.name().isBlank()) {
                 throw new CustomException("Doctor name is required when inviting by email", HttpStatus.BAD_REQUEST);
             }
             doctorName = request.name().trim();
+            if (inviteEmail.equalsIgnoreCase(inviter.getEmail())) {
+                throw new CustomException("You cannot invite your own account to this clinic", HttpStatus.BAD_REQUEST);
+            }
             if (userDao.userPresentByEmail(inviteEmail)) {
                 User existingUser = userDao.userByEmail(inviteEmail);
                 if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(),
                         existingUser.getId())) {
-                    throw new CustomException("This doctor is already affiliated with the clinic", HttpStatus.CONFLICT);
+                    throw new CustomException(
+                            "This doctor is already on your clinic roster — open Doctors to see them. No new invite is needed.",
+                            HttpStatus.CONFLICT);
                 }
             }
         }
 
+        // Refresh an existing pending invite (same clinic + email) instead of failing.
         ClinicDoctorInvite invite = clinicDoctorInviteRepository
                 .findByClinic_IdAndEmailIgnoreCaseAndStatus(clinic.getId(), inviteEmail, ClinicDoctorInviteStatus.PENDING)
                 .orElse(null);
@@ -292,9 +398,11 @@ public class ClinicServiceImpl implements ClinicService {
         invite = clinicDoctorInviteRepository.save(invite);
 
         String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/clinic-invite/accept?token=" + invite.getToken();
+        // Email may fail locally (missing Zepto template); invite is still stored and returned with token.
         zeptoMailService.sendClinicDoctorInviteEmail(inviteEmail, doctorName, clinic.getName(), acceptUrl);
 
-        return inviteModel(invite);
+        // Include token so the clinic UI can show a shareable accept link when email is delayed.
+        return inviteModel(invite, true);
     }
 
     @Override
@@ -304,7 +412,17 @@ public class ClinicServiceImpl implements ClinicService {
         DoctorProfile profile = doctorProfileDao.findByUuid(doctorUuid.trim());
         User doctorUser = profile.getUser();
 
-        // Only reveal doctor email/name if they share at least one clinic with the caller.
+        boolean canInviteDoctors = caller.getUserRoles().stream().anyMatch(ur -> {
+            ERole role = ur.getRole().getName();
+            return ERole.ROLE_CLINIC_ADMIN.equals(role) || ERole.ROLE_CLINIC_STAFF.equals(role)
+                    || ERole.ROLE_ADMIN.equals(role);
+        }) || !clinicDao.findAllByOwnerUserId(caller.getId()).isEmpty();
+
+        if (canInviteDoctors) {
+            return lookup;
+        }
+
+        // Otherwise only reveal doctor email/name if they share at least one clinic with the caller.
         Set<Long> callerClinicIds = new HashSet<>();
         clinicDao.findAllByOwnerUserId(caller.getId()).forEach(c -> callerClinicIds.add(c.getId()));
         clinicStaffDao.findActiveByUserId(caller.getId()).forEach(s -> callerClinicIds.add(s.getClinic().getId()));
@@ -348,6 +466,26 @@ public class ClinicServiceImpl implements ClinicService {
                     return inviteModel(invite);
                 })
                 .filter(m -> ClinicDoctorInviteStatus.PENDING.name().equals(m.status()))
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public List<DoctorInviteModel> listMyPendingInvites(String email) {
+        User user = userDao.userByEmail(email);
+        return clinicDoctorInviteRepository
+                .findByEmailIgnoreCaseAndStatus(user.getEmail(), ClinicDoctorInviteStatus.PENDING)
+                .stream()
+                .map(invite -> {
+                    if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+                        invite.setStatus(ClinicDoctorInviteStatus.EXPIRED);
+                        clinicDoctorInviteRepository.save(invite);
+                        return null;
+                    }
+                    // Include token so the doctor can open/accept from the notification inbox.
+                    return inviteModel(invite, true);
+                })
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -458,9 +596,13 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private DoctorInviteModel inviteModel(ClinicDoctorInvite invite) {
+        return inviteModel(invite, false);
+    }
+
+    private DoctorInviteModel inviteModel(ClinicDoctorInvite invite, boolean includeToken) {
         return new DoctorInviteModel(invite.getUuid(), invite.getEmail(), invite.getDoctorName(),
                 invite.getStatus().name(), invite.getExpiresAt().toString(), invite.getClinic().getUuid(),
-                invite.getClinic().getName());
+                invite.getClinic().getName(), includeToken ? invite.getToken() : null);
     }
 
     @Override
@@ -1005,13 +1147,22 @@ public class ClinicServiceImpl implements ClinicService {
 
     private void requireClinicManager(Clinic clinic, User user) {
         boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(user.getId());
+        if (owner) {
+            return;
+        }
+        // Active staff (clinic admin or staff role) can manage invites/doctors for this clinic.
+        if (clinicStaffDao.isActiveMember(clinic.getId(), user.getId())) {
+            return;
+        }
         boolean clinicAdmin = user.getUserRoles().stream()
                 .anyMatch(userRole -> CLINIC_ADMIN_ROLE.equals(userRole.getRole().getName()));
-        boolean affiliated = owner || clinicStaffDao.isActiveMember(clinic.getId(), user.getId())
-                || clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), user.getId());
-        if (!owner && !(clinicAdmin && affiliated)) {
-            throw new AccessDeniedException("You do not have permission to manage this clinic.");
+        boolean doctorHere = clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(),
+                user.getId());
+        if (clinicAdmin && doctorHere) {
+            return;
         }
+        throw new CustomException("You do not have permission to invite doctors for this clinic",
+                HttpStatus.FORBIDDEN);
     }
 
     private Map<String, PatientModel> patientMap(Clinic clinic) {
@@ -1098,7 +1249,8 @@ public class ClinicServiceImpl implements ClinicService {
         var doctor = affiliation.getDoctor();
         return new DoctorModel(doctor.getUuid(), doctor.getUser().getUuid(), fullName(doctor.getUser()),
                 doctor.getUser().getEmail(), doctor.getSpecialization() == null ? null : doctor.getSpecialization().name(),
-                affiliation.getRole(), affiliation.getIsActive());
+                affiliation.getRole(), affiliation.getIsActive(),
+                doctor.getStatus() == null ? null : doctor.getStatus().name(), doctor.getPhotoUrl());
     }
 
     private BookingModel bookingModel(Booking booking) {

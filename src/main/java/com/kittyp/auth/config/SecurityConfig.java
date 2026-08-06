@@ -63,6 +63,8 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.POST, "/api/v1/product/all").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/article/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/article/all").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/blogs/**").permitAll()
+						.requestMatchers(HttpMethod.POST, "/api/v1/blogs/all").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/upload/signup-documents").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/clinic/invites/**").permitAll()
 						.requestMatchers("/api/v1/webhook/**").permitAll()

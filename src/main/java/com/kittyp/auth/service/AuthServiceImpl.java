@@ -229,6 +229,7 @@ public class AuthServiceImpl implements AuthService {
 				throw new ResourceAlreadyExistsException("User", "email", email);
 			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
+			System.out.println("code = " + code);
 			zeptoMailService.sendSignupOtpEmail(email, code, "EMAIL", null);
 			return new MessageResponse("OTP sent to email");
 		}
@@ -243,6 +244,7 @@ public class AuthServiceImpl implements AuthService {
 						HttpStatus.BAD_REQUEST);
 			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.phoneOtpKey(phone));
+			System.out.println("code = " + code);
 			smsService.sendOtp(phone, code);
 			return new MessageResponse("OTP sent to phone");
 		}
@@ -266,6 +268,13 @@ public class AuthServiceImpl implements AuthService {
 			ok = verificationCodeService.verifyCode(VerificationCodeService.phoneOtpKey(phone), request.getCode(), true);
 			if (ok) {
 				verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(phone));
+				// Also mark digits-only / +91 forms so registerDoctor phoneNumber checks match
+				String digits = phone.replaceAll("\\D", "");
+				if (digits.length() >= 10) {
+					String local10 = digits.substring(digits.length() - 10);
+					verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(local10));
+					verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey("+91" + local10));
+				}
 			}
 		} else {
 			throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);

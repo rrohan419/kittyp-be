@@ -22,4 +22,7 @@ public class ArticleFilterDto {
 	private ArticleStatus articleStatus;
 
 	private List<String> tags;
+
+	/** Filter articles by author id (doctor public profile / my blogs). */
+	private Long authorId;
 }

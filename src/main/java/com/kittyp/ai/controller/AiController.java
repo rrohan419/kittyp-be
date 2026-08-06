@@ -51,6 +51,15 @@ public class AiController {
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
+    /** Loop 2 alias: POST /api/v1/ai/nutrition-plan */
+    @PostMapping("/ai/nutrition-plan")
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<NutritionRecommendationResponse>> generateNutritionPlan(
+            @RequestBody @Valid NutritionistRecommendationRequest nutritionistRecommendationRequest,
+            HttpServletRequest httpServletRequest) {
+        return generateNutritionAIData(nutritionistRecommendationRequest, httpServletRequest);
+    }
+
     @GetMapping(ApiUrl.AI_TIP_OF_THE_DAY)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<TipOfTheDayModel>> tipOfTheDay(@RequestParam String petUuid) {

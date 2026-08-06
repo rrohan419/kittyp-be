@@ -66,14 +66,18 @@ public class NutritionPlanController {
             @RequestParam(required = false) String uuid,
             @RequestParam(required = false) String searchText,
             @RequestParam(required = false) String userUuid,
+            @RequestParam(required = false) String doctorUserUuid,
             @RequestParam(required = false) Boolean isActive,
+            @RequestParam(required = false) String status,
             @RequestParam(required = false) List<String> tags) {
 
         NutritionPlanFilter nutritionPlanFilter = NutritionPlanFilter.builder()
                 .petUuid(petUuid)
                 .uuid(uuid)
                 .userUuid(userUuid)
+                .doctorUserUuid(doctorUserUuid)
                 .isActive(isActive)
+                .status(status)
                 .searchText(searchText)
                 .tags(tags)
                 .sortBy(sortBy)

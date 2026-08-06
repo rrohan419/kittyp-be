@@ -17,14 +17,29 @@ public class NutritionPlanSpecification {
         ).and(
                 filter.getUserUuid() != null ? hasUserUuid(filter.getUserUuid()) : null
         ).and(
+                filter.getDoctorUserUuid() != null ? hasDoctorUserUuid(filter.getDoctorUserUuid()) : null
+        ).and(
                 filter.getIsActive() != null ? isActive(filter.getIsActive()) : null
         ).and(
                 filter.getPetUuid() != null ? hasPetUuid(filter.getPetUuid()) : null
+        ).and(
+                filter.getStatus() != null ? hasStatus(filter.getStatus()) : null
         ).and(
                 filter.getTags() != null && !filter.getTags().isEmpty() ? hasTags(filter.getTags()) : null
         ).and(
                 filter.getSearchText() != null ? searchText(filter.getSearchText()) : null
         );
+    }
+
+    public static Specification<NutritionPlan> hasDoctorUserUuid(String doctorUserUuid) {
+        return (root, query, criteriaBuilder) ->
+                criteriaBuilder.equal(root.get("doctorUserUuid"), doctorUserUuid);
+    }
+
+    public static Specification<NutritionPlan> hasStatus(String status) {
+        return (root, query, criteriaBuilder) ->
+                criteriaBuilder.equal(root.get("status"),
+                        com.kittyp.ai.enums.NutritionPlanStatus.valueOf(status));
     }
 
     public static Specification<NutritionPlan> searchText(String searchText) {

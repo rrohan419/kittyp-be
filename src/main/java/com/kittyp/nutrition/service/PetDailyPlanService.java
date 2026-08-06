@@ -14,6 +14,14 @@ public interface PetDailyPlanService {
             String nutritionPlanUuid,
             List<PetDailyPlan> dailyTemplates);
 
+    /** Materialize meal templates across the next {@code days} days (default 30). */
+    List<PetDailyPlan> createOrReplaceNextDaysPlan(
+            String userUuid,
+            String petUuid,
+            String nutritionPlanUuid,
+            List<PetDailyPlan> dailyTemplates,
+            int days);
+
     void deactivateExistingPlansForMonth(String petUuid, int month, int year);
 
     List<PetDailyPlanModel> getPetsDailyPlanActivePlan(String petUuid);

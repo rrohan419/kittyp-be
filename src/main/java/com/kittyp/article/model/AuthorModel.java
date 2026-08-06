@@ -15,4 +15,5 @@ public class AuthorModel {
     private String name;
     private String avatar;
     private String role;
+	private String userUuid;
 }

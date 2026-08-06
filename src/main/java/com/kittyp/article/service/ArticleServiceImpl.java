@@ -34,10 +34,12 @@ import com.kittyp.article.entity.ArticleCommentLikes;
 import com.kittyp.article.entity.ArticleComments;
 import com.kittyp.article.entity.ArticlesLikes;
 import com.kittyp.article.entity.Author;
+import com.kittyp.article.enums.ArticleStatus;
 import com.kittyp.article.model.ArticleCommentsModel;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
 import com.kittyp.article.model.AuthorModel;
+import com.kittyp.article.service.AuthorService;
 import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
@@ -64,6 +66,7 @@ public class ArticleServiceImpl implements ArticleService {
 	private final ArticleCommentsDao articleCommentsDao;
 	private final ArticlesLikesDao articlesLikesDao;
 	private final ArticleCommentLikesDao articleCommentLikesDao;
+	private final AuthorService authorService;
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -131,13 +134,30 @@ public class ArticleServiceImpl implements ArticleService {
 	public ArticleModel saveArticle(ArticleDto articleDto) {
 		Article article = mapper.convert(articleDto, Article.class);
 
-		Author author = authorDao.authorById(articleDto.getAuthorId());
+		Author author;
+		if (articleDto.getAuthorId() != null) {
+			author = authorDao.authorById(articleDto.getAuthorId());
+		} else {
+			String email = SecurityContextHolder.getContext().getAuthentication().getName();
+			User user = userDao.userByEmail(email);
+			String displayName = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
+					+ (user.getLastName() != null ? user.getLastName() : "")).trim();
+			AuthorModel authorModel = authorService.getOrCreateForUser(user.getUuid(), displayName,
+					user.getProfilePictureUrl());
+			author = authorDao.authorById(authorModel.getId());
+		}
+
+		if (article.getStatus() == null) {
+			article.setStatus(ArticleStatus.DRAFT);
+		}
 
 		article.setAuthor(author);
 
 		Article savedArticle = articleDao.saveArticle(article);
 
-		author.getArticles().add(savedArticle);
+		if (author.getArticles() != null) {
+			author.getArticles().add(savedArticle);
+		}
 		authorDao.saveAuthor(author);
 
 		return mapper.convert(savedArticle, ArticleModel.class);

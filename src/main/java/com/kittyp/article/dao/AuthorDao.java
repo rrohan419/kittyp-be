@@ -18,5 +18,7 @@ public interface AuthorDao {
 	Author authorById(Long id);
 
 	Page<Author> getAllAuthors(Pageable pageable);
+
+	Author findByUserUuid(String userUuid);
 }
 

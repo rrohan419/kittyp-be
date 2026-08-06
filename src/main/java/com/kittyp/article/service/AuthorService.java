@@ -22,4 +22,7 @@ public interface AuthorService {
     AuthorModel saveAuthor(AuthorDto authorDto);
 
     AuthorModel editAuthorById(AuthorDto authorDto, Long id);
+
+    /** Get or create an Author row linked to the current doctor user. */
+    AuthorModel getOrCreateForUser(String userUuid, String displayName, String avatarUrl);
 }
