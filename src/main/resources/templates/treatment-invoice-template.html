@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        @page { size: A4; margin: 18mm 14mm; }
+        body { font-family: 'KittypInvoice', Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; margin: 0; }
+        h1 { font-size: 18px; margin: 0 0 4px 0; text-align: center; letter-spacing: 0.5px; }
+        h2 { font-size: 13px; margin: 0 0 2px 0; text-align: center; color: #374151; font-weight: normal; }
+        h3 { font-size: 12px; margin: 16px 0 6px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; color: #111827; }
+        .muted { color: #6b7280; }
+        .header { text-align: center; margin-bottom: 14px; border-bottom: 2px solid #111827; padding-bottom: 10px; }
+        .meta-table, .info-table, .items-table, .totals-table { width: 100%; border-collapse: collapse; }
+        .meta-table td, .info-table td { vertical-align: top; padding: 2px 4px; }
+        .info-box { width: 48%; display: inline-block; vertical-align: top; }
+        .items-table th, .items-table td { border: 1px solid #d1d5db; padding: 6px 8px; }
+        .items-table th { background: #f3f4f6; text-align: left; font-size: 10px; text-transform: uppercase; }
+        .right { text-align: right; }
+        .center { text-align: center; }
+        .totals-table td { padding: 4px 6px; }
+        .grand { font-weight: bold; font-size: 13px; border-top: 2px solid #111827; }
+        .notes { white-space: pre-wrap; background: #f9fafb; border: 1px solid #e5e7eb; padding: 8px; margin-top: 6px; }
+        .footer { margin-top: 28px; text-align: center; font-size: 9px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+        .badge { display: inline-block; padding: 2px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 10px; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1 th:text="${invoice.clinicName} ?: 'Veterinary Clinic'">Clinic</h1>
+    <h2 th:text="${invoice.title}">TAX INVOICE / MEDICAL INVOICE</h2>
+    <p class="muted" style="margin: 4px 0 0;">
+        <span th:if="${invoice.clinicAddress}" th:text="${invoice.clinicAddress}"></span>
+        <span th:if="${invoice.clinicPhone}"> · <span th:text="${invoice.clinicPhone}"></span></span>
+        <span th:if="${invoice.clinicEmail}"> · <span th:text="${invoice.clinicEmail}"></span></span>
+    </p>
+    <p class="muted" style="margin: 2px 0 0;" th:if="${invoice.clinicGstin} or ${invoice.clinicRegistrationNumber}">
+        <span th:if="${invoice.clinicGstin}">GSTIN: <span th:text="${invoice.clinicGstin}"></span></span>
+        <span th:if="${invoice.clinicRegistrationNumber}"> · Reg. No: <span th:text="${invoice.clinicRegistrationNumber}"></span></span>
+    </p>
+</div>
+
+<table class="meta-table">
+    <tr>
+        <td width="50%">
+            <strong>Invoice No:</strong> <span th:text="${invoice.invoiceNumber}">INV-2026-000001</span><br/>
+            <strong>Date:</strong> <span th:text="${invoice.invoiceDate}">01 Jan 2026</span><br/>
+            <strong>Doctor:</strong> <span th:text="${invoice.doctorName}">Dr.</span>
+        </td>
+        <td width="50%" class="right">
+            <span class="badge" th:text="${invoice.paymentStatus}">UNPAID</span><br/>
+            <span th:if="${invoice.paymentMode}"><strong>Mode:</strong> <span th:text="${invoice.paymentMode}"></span><br/></span>
+            <span th:if="${invoice.transactionId}"><strong>Txn:</strong> <span th:text="${invoice.transactionId}"></span></span>
+        </td>
+    </tr>
+</table>
+
+<table class="info-table" style="margin-top: 14px;">
+    <tr>
+        <td width="50%" style="padding-right: 10px;">
+            <h3 style="margin-top: 0;">Pet Owner</h3>
+            <div th:text="${invoice.ownerName} ?: '—'">Owner</div>
+            <div class="muted" th:if="${invoice.ownerPhone}" th:text="${invoice.ownerPhone}"></div>
+            <div class="muted" th:if="${invoice.ownerEmail}" th:text="${invoice.ownerEmail}"></div>
+            <div class="muted" th:if="${invoice.ownerAddress}" th:text="${invoice.ownerAddress}"></div>
+        </td>
+        <td width="50%">
+            <h3 style="margin-top: 0;">Patient</h3>
+            <div><strong th:text="${invoice.petName} ?: '—'">Pet</strong></div>
+            <div class="muted">
+                <span th:if="${invoice.petSpecies}" th:text="${invoice.petSpecies}"></span>
+                <span th:if="${invoice.petBreed}"> · <span th:text="${invoice.petBreed}"></span></span>
+                <span th:if="${invoice.petGender}"> · <span th:text="${invoice.petGender}"></span></span>
+            </div>
+            <div class="muted">
+                <span th:if="${invoice.petAge}" th:text="${invoice.petAge}"></span>
+                <span th:if="${invoice.petWeight}"> · <span th:text="${invoice.petWeight}"></span></span>
+            </div>
+            <div class="muted" th:if="${invoice.patientId}">Patient ID: <span th:text="${invoice.patientId}"></span></div>
+            <div class="muted" th:if="${invoice.petMicrochip}">Microchip: <span th:text="${invoice.petMicrochip}"></span></div>
+        </td>
+    </tr>
+</table>
+
+<div th:if="${invoice.consultationDate} or ${invoice.reason} or ${invoice.diagnosis}">
+    <h3>Visit Details</h3>
+    <table class="meta-table">
+        <tr>
+            <td width="33%"><strong>Date:</strong> <span th:text="${invoice.consultationDate} ?: '—'"></span></td>
+            <td width="33%"><strong>Reason:</strong> <span th:text="${invoice.reason} ?: '—'"></span></td>
+            <td width="34%"><strong>Diagnosis:</strong> <span th:text="${invoice.diagnosis} ?: '—'"></span></td>
+        </tr>
+    </table>
+</div>
+
+<!-- reusable fragment-like blocks via th:if -->
+<div th:if="${invoice.services != null and !invoice.services.isEmpty()}">
+    <h3>Services</h3>
+    <table class="items-table">
+        <thead>
+        <tr>
+            <th>Service</th>
+            <th class="right" width="12%">Qty</th>
+            <th class="right" width="16%">Rate (₹)</th>
+            <th class="right" width="18%">Amount (₹)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.services}">
+            <td th:text="${item.description}">Item</td>
+            <td class="right" th:text="${item.quantity}">1</td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.rate, 1, 2)}">0.00</td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.amount, 1, 2)}">0.00</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div th:if="${invoice.medicines != null and !invoice.medicines.isEmpty()}">
+    <h3>Medicines Dispensed</h3>
+    <table class="items-table">
+        <thead>
+        <tr>
+            <th>Medicine</th>
+            <th class="right" width="12%">Qty</th>
+            <th class="right" width="16%">Unit (₹)</th>
+            <th class="right" width="18%">Amount (₹)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.medicines}">
+            <td>
+                <span th:text="${item.description}">Med</span>
+                <span class="muted" th:if="${item.unit}" th:text="' (' + item.unit + ')'"></span>
+            </td>
+            <td class="right" th:text="${item.quantity}">1</td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.rate, 1, 2)}">0.00</td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.amount, 1, 2)}">0.00</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div th:if="${invoice.consumables != null and !invoice.consumables.isEmpty()}">
+    <h3>Consumables</h3>
+    <table class="items-table">
+        <thead>
+        <tr><th>Item</th><th class="right">Qty</th><th class="right">Rate (₹)</th><th class="right">Amount (₹)</th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.consumables}">
+            <td th:text="${item.description}"></td>
+            <td class="right" th:text="${item.quantity}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.rate, 1, 2)}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.amount, 1, 2)}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div th:if="${invoice.laboratory != null and !invoice.laboratory.isEmpty()}">
+    <h3>Laboratory</h3>
+    <table class="items-table">
+        <thead>
+        <tr><th>Test</th><th class="right">Qty</th><th class="right">Rate (₹)</th><th class="right">Amount (₹)</th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.laboratory}">
+            <td th:text="${item.description}"></td>
+            <td class="right" th:text="${item.quantity}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.rate, 1, 2)}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.amount, 1, 2)}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div th:if="${invoice.surgery != null and !invoice.surgery.isEmpty()}">
+    <h3>Surgery</h3>
+    <table class="items-table">
+        <thead>
+        <tr><th>Procedure</th><th class="right">Qty</th><th class="right">Rate (₹)</th><th class="right">Amount (₹)</th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.surgery}">
+            <td th:text="${item.description}"></td>
+            <td class="right" th:text="${item.quantity}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.rate, 1, 2)}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.amount, 1, 2)}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div th:if="${invoice.hospitalization != null and !invoice.hospitalization.isEmpty()}">
+    <h3>Hospitalization</h3>
+    <table class="items-table">
+        <thead>
+        <tr><th>Charge</th><th class="right">Qty</th><th class="right">Rate (₹)</th><th class="right">Amount (₹)</th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.hospitalization}">
+            <td th:text="${item.description}"></td>
+            <td class="right" th:text="${item.quantity}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.rate, 1, 2)}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.amount, 1, 2)}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div th:if="${invoice.other != null and !invoice.other.isEmpty()}">
+    <h3>Other Charges</h3>
+    <table class="items-table">
+        <thead>
+        <tr><th>Description</th><th class="right">Qty</th><th class="right">Rate (₹)</th><th class="right">Amount (₹)</th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.other}">
+            <td th:text="${item.description}"></td>
+            <td class="right" th:text="${item.quantity}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.rate, 1, 2)}"></td>
+            <td class="right" th:text="${#numbers.formatDecimal(item.amount, 1, 2)}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<table class="totals-table" style="width: 45%; margin-left: auto; margin-top: 16px;">
+    <tr>
+        <td class="right muted">Subtotal</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.subtotal, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr th:if="${invoice.discount != null and invoice.discount.compareTo(T(java.math.BigDecimal).ZERO) > 0}">
+        <td class="right muted">Discount</td>
+        <td class="right" th:text="'-₹' + ${#numbers.formatDecimal(invoice.discount, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr>
+        <td class="right muted">Taxable Amount</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.taxableAmount, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr th:if="${invoice.cgst != null and invoice.cgst.compareTo(T(java.math.BigDecimal).ZERO) > 0}">
+        <td class="right muted">CGST</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.cgst, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr th:if="${invoice.sgst != null and invoice.sgst.compareTo(T(java.math.BigDecimal).ZERO) > 0}">
+        <td class="right muted">SGST</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.sgst, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr th:if="${invoice.igst != null and invoice.igst.compareTo(T(java.math.BigDecimal).ZERO) > 0}">
+        <td class="right muted">IGST</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.igst, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr class="grand">
+        <td class="right">Grand Total</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.grandTotal, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr>
+        <td class="right muted">Amount Paid</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.paidAmount, 1, 2)}">₹0.00</td>
+    </tr>
+    <tr>
+        <td class="right muted">Balance</td>
+        <td class="right" th:text="'₹' + ${#numbers.formatDecimal(invoice.balance, 1, 2)}">₹0.00</td>
+    </tr>
+</table>
+
+<div th:if="${invoice.doctorNotes}">
+    <h3>Doctor Notes</h3>
+    <div class="notes" th:text="${invoice.doctorNotes}"></div>
+</div>
+
+<div th:if="${invoice.nextVisitNotes}">
+    <h3>Next Visit</h3>
+    <div class="notes" th:text="${invoice.nextVisitNotes}"></div>
+</div>
+
+<div class="footer">
+    Generated by Kittyp Vet CRM · This is a computer-generated invoice · No signature required
+</div>
+</body>
+</html>
