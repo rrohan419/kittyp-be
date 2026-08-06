@@ -42,11 +42,14 @@ public class JwtUtils {
         return Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
     }
     
-    public String generateJwtToken(Authentication authentication) {
+	public String generateJwtToken(Authentication authentication) {
         UserDetailsImpl userPrincipal = (UserDetailsImpl) authentication.getPrincipal();
-        
+        return generateTokenFromEmail(userPrincipal.getEmail());
+    }
+
+    public String generateTokenFromEmail(String email) {
         return Jwts.builder()
-                .setSubject(userPrincipal.getEmail()) // Use email for consistency with UserDetailsService
+                .setSubject(email)
                 .setAudience(audience)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))

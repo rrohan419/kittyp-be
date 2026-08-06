@@ -28,7 +28,10 @@ public class UserDetailsModel {
     private LocalDateTime createdAt;
     private String phoneNumber;
     private String phoneCountryCode;
+    private Integer age;
     private boolean enabled;
     private String profilePictureUrl;
     private Set<PetModel> ownerPets;
+    /** Present when email was changed so the client can refresh JWT without logging out. */
+    private String accessToken;
 }

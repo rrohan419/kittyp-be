@@ -15,15 +15,28 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
+import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerProfileModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicPetListModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicPetMedicalProfileModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicRequest;
+import com.kittyp.clinic.dto.ClinicDtos.CreateOwnerRequest;
+import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteModel;
+import com.kittyp.clinic.dto.ClinicDtos.DoctorInvitePreview;
+import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteRequest;
+import com.kittyp.clinic.dto.ClinicDtos.DoctorLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicStatsModel;
+import com.kittyp.clinic.dto.ClinicDtos.SwitchClinicRequest;
 import com.kittyp.clinic.service.ClinicService;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
@@ -53,7 +66,7 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_BASE_URL)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<ClinicModel>> create(@RequestBody @Valid ClinicRequest request) {
         return success(clinicService.create(request, email()));
     }
@@ -77,10 +90,56 @@ public class ClinicController {
         return success(clinicService.doctors(uuid, email()));
     }
 
+    @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF)
+    public ResponseEntity<SuccessResponse<DoctorInviteModel>> inviteDoctor(@PathVariable String uuid,
+            @RequestBody @Valid DoctorInviteRequest request) {
+        return success(clinicService.inviteDoctor(uuid, request, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_DOCTOR_LOOKUP)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<DoctorLookupModel>> lookupDoctor(@RequestParam String uuid) {
+        return success(clinicService.lookupDoctor(uuid, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_DOCTOR_INVITES)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<DoctorInviteModel>>> doctorInvites(@PathVariable String uuid) {
+        return success(clinicService.listDoctorInvites(uuid, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE_REVOKE)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF)
+    public ResponseEntity<SuccessResponse<Void>> revokeDoctorInvite(@PathVariable String uuid,
+            @PathVariable String inviteUuid) {
+        clinicService.revokeDoctorInvite(uuid, inviteUuid, email());
+        return success(null);
+    }
+
+    @GetMapping(ApiUrl.CLINIC_INVITE_BY_TOKEN)
+    public ResponseEntity<SuccessResponse<DoctorInvitePreview>> previewInvite(@PathVariable String token) {
+        return success(clinicService.previewInvite(token));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_INVITE_ACCEPT)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<DoctorModel>> acceptInvite(@PathVariable String token) {
+        return success(clinicService.acceptInvite(token, email()));
+    }
+
     @GetMapping(ApiUrl.CLINIC_PATIENTS)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<List<PatientModel>>> patients(@PathVariable String uuid) {
         return success(clinicService.patients(uuid, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_PATIENTS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<PatientDetailModel>> addPatient(@PathVariable String uuid,
+            @RequestBody @Valid AddPatientRequest request) {
+        return success(clinicService.addPatient(uuid, request, email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_PATIENT_DETAIL)
@@ -88,6 +147,50 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<PatientDetailModel>> patient(@PathVariable String uuid,
             @PathVariable String petUuid) {
         return success(clinicService.patientDetail(uuid, petUuid, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_OWNERS)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<ClinicOwnerModel>>> owners(@PathVariable String uuid,
+            @RequestParam(required = false) String q) {
+        return success(clinicService.listOwners(uuid, q, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNERS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ClinicOwnerModel>> createOwner(@PathVariable String uuid,
+            @RequestBody @Valid CreateOwnerRequest request) {
+        return success(clinicService.createOwner(uuid, request, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_OWNER_DETAIL)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<ClinicOwnerProfileModel>> ownerProfile(@PathVariable String uuid,
+            @PathVariable String ownerUuid) {
+        return success(clinicService.ownerProfile(uuid, ownerUuid, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNER_PETS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ClinicPetListModel>> addPetToOwner(@PathVariable String uuid,
+            @PathVariable String ownerUuid, @RequestBody @Valid AddOwnerPetRequest request) {
+        return success(clinicService.addPetToOwner(uuid, ownerUuid, request, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_PETS)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<ClinicPetListModel>>> pets(@PathVariable String uuid,
+            @RequestParam(required = false) String q) {
+        return success(clinicService.listPets(uuid, q, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_PET_DETAIL)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<ClinicPetMedicalProfileModel>> petProfile(@PathVariable String uuid,
+            @PathVariable String petUuid) {
+        return success(clinicService.petMedicalProfile(uuid, petUuid, email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_BOOKINGS)
@@ -123,6 +226,24 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<HealthEventModel>> createHealthEvent(@PathVariable String uuid,
             @PathVariable String petUuid, @RequestBody @Valid HealthEventRequest request) {
         return success(clinicService.createHealthEvent(uuid, petUuid, request, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_SHUTDOWN)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<ClinicModel>> shutdown(@PathVariable String uuid) {
+        return success(clinicService.shutdown(uuid, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_REOPEN)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<ClinicModel>> reopen(@PathVariable String uuid) {
+        return success(clinicService.reopen(uuid, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_STATS)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<ClinicStatsModel>> stats(@PathVariable String uuid) {
+        return success(clinicService.stats(uuid, email()));
     }
 
     private String email() {

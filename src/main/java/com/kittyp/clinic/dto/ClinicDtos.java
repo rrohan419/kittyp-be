@@ -8,6 +8,7 @@ import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.health.enums.HealthEventStatus;
 import com.kittyp.health.enums.HealthEventType;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -29,7 +30,23 @@ public final class ClinicDtos {
     }
 
     public record PatientModel(String petUuid, String petName, String ownerName, String ownerEmail,
-            LocalDateTime lastVisit) {
+            LocalDateTime lastVisit, String ownerUuid, String ownerPhone, String ownerAddress, String species,
+            String breed) {
+    }
+
+    public record OwnerSummaryModel(String ownerUuid, String name, String email, String phone, String address,
+            Boolean linked, String linkedUserUuid) {
+        public OwnerSummaryModel(String ownerUuid, String name, String email, String phone, String address) {
+            this(ownerUuid, name, email, phone, address, null, null);
+        }
+    }
+
+    public record PatientPetModel(String petUuid, String petName, String species, String breed,
+            LocalDateTime lastVisit, boolean atThisClinic, String globalPetId, String microchipNumber) {
+        public PatientPetModel(String petUuid, String petName, String species, String breed,
+                LocalDateTime lastVisit, boolean atThisClinic) {
+            this(petUuid, petName, species, breed, lastVisit, atThisClinic, null, null);
+        }
     }
 
     public record VaccineScheduleModel(Long id, String vaccineName, LocalDate dueDate, Boolean completed,
@@ -40,8 +57,59 @@ public final class ClinicDtos {
             Boolean isPast, String status, List<String> attachments) {
     }
 
-    public record PatientDetailModel(PatientModel patient, List<HealthEventModel> healthEvents,
-            List<VaccineScheduleModel> vaccineSchedule) {
+    public record PatientDetailModel(PatientModel patient, OwnerSummaryModel owner, List<PatientPetModel> pets,
+            List<HealthEventModel> healthEvents, List<VaccineScheduleModel> vaccineSchedule) {
+    }
+
+    public record ClinicOwnerPetModel(String petUuid, String globalPetId, String name, String species, String breed,
+            String gender, LocalDate dateOfBirth, String weight, String microchipNumber, String photoUrl,
+            String patientNumber, LocalDateTime lastVisit) {
+    }
+
+    public record ClinicOwnerModel(String ownerUuid, String name, String firstName, String lastName, String email,
+            String phone, String alternatePhone, String address, String notes, boolean linked, String linkedUserUuid,
+            int petCount, LocalDateTime lastVisit, List<ClinicOwnerPetModel> pets) {
+    }
+
+    public record ClinicOwnerProfileModel(ClinicOwnerModel owner, String billingStatus, long invoiceCount) {
+    }
+
+    public record ClinicPetListModel(String petUuid, String globalPetId, String name, String species, String breed,
+            String gender, LocalDate dateOfBirth, String weight, String microchipNumber, String photoUrl,
+            String patientNumber, String ownerUuid, String ownerName, String ownerPhone, String ownerEmail,
+            boolean linked, LocalDateTime lastVisit) {
+    }
+
+    public record ClinicPetMedicalProfileModel(ClinicPetListModel pet, OwnerSummaryModel owner,
+            List<HealthEventModel> timeline, List<BookingModel> appointments, List<VaccineScheduleModel> vaccinations,
+            List<String> prescriptions, List<String> labReports, List<String> surgeries,
+            List<InvoiceSummaryModel> invoices) {
+    }
+
+    public record InvoiceSummaryModel(String uuid, String status, String amount, String currency, String petUuid,
+            LocalDateTime createdAt) {
+    }
+
+    public record CreateOwnerRequest(
+            @NotBlank String firstName,
+            String lastName,
+            @NotBlank @Email String email,
+            @NotBlank String phone,
+            String alternatePhone,
+            String address,
+            String notes) {
+    }
+
+    public record AddOwnerPetRequest(
+            @NotBlank String name,
+            String species,
+            String breed,
+            String gender,
+            LocalDate dateOfBirth,
+            String weight,
+            String microchipNumber,
+            String photoUrl,
+            String patientNumber) {
     }
 
     public record BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
@@ -55,5 +123,42 @@ public final class ClinicDtos {
 
     public record HealthEventRequest(@NotNull HealthEventType type, String title, String description,
             @NotNull LocalDate date, Boolean isPast, HealthEventStatus status, List<String> attachments) {
+    }
+
+    public record SwitchClinicRequest(@NotBlank String clinicUuid) {
+    }
+
+    public record ClinicStatsModel(long diagnosedPetCount, long patientCount) {
+    }
+
+    public record DoctorInviteRequest(String name, @Email String email, String doctorUuid) {
+    }
+
+    public record DoctorLookupModel(String doctorUuid, String name, String email) {
+    }
+
+    public record DoctorInviteModel(String uuid, String email, String doctorName, String status, String expiresAt,
+            String clinicUuid, String clinicName) {
+    }
+
+    public record DoctorInvitePreview(String clinicName, String doctorName, String email, boolean expired,
+            boolean accepted, String status) {
+    }
+
+    public record AddPatientRequest(
+            @NotBlank String ownerFirstName,
+            String ownerLastName,
+            @NotBlank @Email String ownerEmail,
+            @NotBlank String ownerPhone,
+            String ownerAddress,
+            String ownerAlternatePhone,
+            String ownerNotes,
+            @NotBlank String petName,
+            String petType,
+            String petBreed,
+            String petGender,
+            LocalDate petDateOfBirth,
+            String petWeight,
+            String petMicrochipNumber) {
     }
 }

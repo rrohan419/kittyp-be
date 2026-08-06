@@ -158,8 +158,11 @@ public class OrderServiceImpl implements OrderService {
 		// Calculate totals
 		order.setSubTotal(subTotal);
 
-		// Add shipping cost based on method
+		// Add shipping cost based on method (optional)
 		BigDecimal shippingCost = calculateShippingCost(request.getShippingMethod());
+		if (request.getShippingMethod() != null) {
+			order.setShippingMethod(request.getShippingMethod().name());
+		}
 
 		// Calculate tax
 		BigDecimal tax = calculateTax(subTotal);
@@ -188,6 +191,9 @@ public class OrderServiceImpl implements OrderService {
 	}
 
 	public BigDecimal calculateShippingCost(ShippingTypes shippingMethod) {
+		if (shippingMethod == null) {
+			return BigDecimal.ZERO;
+		}
 	    return shippingMethod.getCost();
 	}
 

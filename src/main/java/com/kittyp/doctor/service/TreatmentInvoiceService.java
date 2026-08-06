@@ -12,12 +12,15 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
@@ -30,7 +33,9 @@ import com.kittyp.doctor.enums.ConsultationInvoiceStatus;
 import com.kittyp.doctor.enums.TreatmentInvoiceItemType;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
 import com.kittyp.payment.util.PdfGenerator;
+import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -43,6 +48,9 @@ public class TreatmentInvoiceService {
 
     private final ConsultationInvoiceRepository invoiceRepository;
     private final ClinicRepository clinicRepository;
+    private final ClinicDoctorRepository clinicDoctorRepository;
+    private final ClinicPetOwnerRepository clinicPetOwnerRepository;
+    private final PetsRepository petsRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final PdfGenerator pdfGenerator;
@@ -72,10 +80,33 @@ public class TreatmentInvoiceService {
                 ? request.getBalance()
                 : grandTotal.subtract(paid).max(BigDecimal.ZERO);
 
-        Clinic clinic = request.getClinicUuid() == null ? null : requireClinic(request.getClinicUuid());
-        User owner = request.getOwnerUserUuid() == null ? null
-                : userRepository.findByUuid(request.getOwnerUserUuid())
-                        .orElseThrow(() -> new ResourceNotFoundException("User", "uuid", request.getOwnerUserUuid()));
+        Clinic clinic = null;
+        if (request.getClinicUuid() != null && !request.getClinicUuid().isBlank()) {
+            clinic = requireClinic(request.getClinicUuid());
+            requireDoctorAffiliated(clinic, doctor);
+        }
+
+        User owner = null;
+        if (request.getOwnerUserUuid() != null && !request.getOwnerUserUuid().isBlank()) {
+            owner = userRepository.findByUuid(request.getOwnerUserUuid())
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "uuid", request.getOwnerUserUuid()));
+            if (clinic != null
+                    && !clinicPetOwnerRepository.existsByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(),
+                            owner.getId())) {
+                throw new CustomException("Owner is not a client of this clinic.", HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        String petUuid = blankToNull(request.getPetUuid());
+        if (petUuid != null && clinic != null) {
+            Pet pet = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
+                    .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+            if (owner != null && pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null
+                    && !pet.getClinicOwner().getLinkedUser().getId().equals(owner.getId())) {
+                throw new CustomException("Pet does not belong to the specified owner at this clinic.",
+                        HttpStatus.BAD_REQUEST);
+            }
+        }
 
         String invoiceNumber = nextInvoiceNumber();
 
@@ -84,7 +115,7 @@ public class TreatmentInvoiceService {
                 .invoiceNumber(invoiceNumber)
                 .doctor(doctor)
                 .clinic(clinic)
-                .petUuid(request.getPetUuid())
+                .petUuid(petUuid)
                 .owner(owner)
                 .lineItems(writeJson(items))
                 .petSnapshot(writeJson(petSnapshot(request)))
@@ -313,6 +344,19 @@ public class TreatmentInvoiceService {
             throw new ResourceNotFoundException("Clinic", "uuid", uuid);
         }
         return clinic;
+    }
+
+    private void requireDoctorAffiliated(Clinic clinic, User doctor) {
+        boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(doctor.getId());
+        boolean affiliated = clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(),
+                doctor.getId());
+        if (!owner && !affiliated) {
+            throw new AccessDeniedException("You are not affiliated with this clinic.");
+        }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String fullName(User user) {

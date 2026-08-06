@@ -18,4 +18,6 @@ public interface ClinicDoctorRepository extends JpaRepository<ClinicDoctor, Long
 
     @Query("select distinct cd.doctor.id from ClinicDoctor cd where cd.isActive = true")
     Set<Long> findActiveAffiliatedDoctorIds();
+
+    List<ClinicDoctor> findByDoctor_User_IdAndIsActiveTrue(Long userId);
 }

@@ -4,6 +4,12 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Local secrets — never commit ###
+**/application-local.properties
+**/application-local.yml
+**/.env
+**/.env.*
+
 ### STS ###
 .apt_generated
 .classpath
