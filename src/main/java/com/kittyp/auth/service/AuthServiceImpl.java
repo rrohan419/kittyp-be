@@ -189,6 +189,7 @@ public class AuthServiceImpl implements AuthService {
 				.clinicPhotosUrls(req.getClinicPhotosUrls())
 				.licenseDocumentUrl(req.getRegistrationCertificateUrl())
 				.clinic(clinic)
+				.currency("INR")
 				.emailOtpVerified(true)
 				.phoneOtpVerified(true)
 				.checkEmailOtp(true)

@@ -35,6 +35,7 @@ public class ApiUrl {
 
 	public static final String DOCTOR_BASE_URL = "/doctor";
 	public static final String DOCTOR_ME = DOCTOR_BASE_URL + "/me";
+	public static final String DOCTOR_ME_AVAILABILITY = DOCTOR_ME + "/availability";
 
 	public static final String UPLOAD_SIGNUP_DOCUMENTS = "/upload/signup-documents";
 
