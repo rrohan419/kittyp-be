@@ -2,6 +2,7 @@ package com.kittyp.doctor.controller;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -36,23 +38,28 @@ import lombok.RequiredArgsConstructor;
 public class AdminDoctorController {
 
     private final DoctorProfileDao doctorProfileDao;
+    private final ClinicDoctorRepository clinicDoctorRepository;
     private final ApiResponse<?> responseBuilder;
 
     @GetMapping(ApiUrl.ADMIN_DOCTORS)
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN_OR_MODERATOR)
     public ResponseEntity<SuccessResponse<List<DoctorVerificationModel>>> list(
             @RequestParam(required = false) DoctorStatus status) {
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
         List<DoctorProfile> profiles = status == null
                 ? doctorProfileDao.findAllOrdered()
                 : doctorProfileDao.findByStatus(status);
-        return responseBuilder.buildSuccessResponse(profiles.stream().map(this::toModel).toList(),
+        return responseBuilder.buildSuccessResponse(
+                profiles.stream().map(p -> toModel(p, clinicLinkedIds)).toList(),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.ADMIN_DOCTOR_BY_UUID)
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN_OR_MODERATOR)
     public ResponseEntity<SuccessResponse<DoctorVerificationModel>> detail(@PathVariable String uuid) {
-        return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.findByUuid(uuid)),
+        DoctorProfile profile = doctorProfileDao.findByUuid(uuid);
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        return responseBuilder.buildSuccessResponse(toModel(profile, clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
@@ -80,7 +87,8 @@ public class AdminDoctorController {
         if (profile.getStatus() == DoctorStatus.DOCUMENTS_SUBMITTED && anyChecked(profile)) {
             profile.setStatus(DoctorStatus.UNDER_REVIEW);
         }
-        return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.save(profile)),
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.save(profile), clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
@@ -92,9 +100,9 @@ public class AdminDoctorController {
         DoctorStatus next = request.getStatus();
 
         if (next == DoctorStatus.VERIFIED || next == DoctorStatus.PUBLISHED) {
-            if (!allChecksPassed(profile)) {
+            if (!allApplicableChecksPassed(profile)) {
                 throw new CustomException(
-                        "All verification checklist items must be confirmed before Verified/Published",
+                        "All applicable verification checklist items must be confirmed before Verified/Published",
                         HttpStatus.BAD_REQUEST);
             }
         }
@@ -107,7 +115,8 @@ public class AdminDoctorController {
             profile.setReviewedAt(LocalDateTime.now());
         }
 
-        return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.save(profile)),
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.save(profile), clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
@@ -117,14 +126,53 @@ public class AdminDoctorController {
                 || p.isCheckRegistrationNumber() || p.isCheckGoogleMapsMatch() || p.isCheckClinicPhotos();
     }
 
-    private boolean allChecksPassed(DoctorProfile p) {
-        return p.isCheckMobileOtp() && p.isCheckEmailOtp() && p.isCheckGovernmentId() && p.isCheckDegree()
-                && p.isCheckRegistrationCertificate() && p.isCheckClinicAddress()
-                && p.isCheckRegistrationNumber() && p.isCheckGoogleMapsMatch() && p.isCheckClinicPhotos();
+    /**
+     * Core checks always required. Clinic / gov-id / photos only when the doctor provided that data
+     * or is associated with a clinic.
+     */
+    private boolean allApplicableChecksPassed(DoctorProfile p) {
+        if (!p.isCheckMobileOtp() || !p.isCheckEmailOtp()) {
+            return false;
+        }
+        if (!p.isCheckDegree() || !p.isCheckRegistrationCertificate() || !p.isCheckRegistrationNumber()) {
+            return false;
+        }
+        if (requiresGovernmentIdCheck(p) && !p.isCheckGovernmentId()) {
+            return false;
+        }
+        if (requiresClinicChecks(p)) {
+            if (!p.isCheckClinicAddress() || !p.isCheckGoogleMapsMatch()) {
+                return false;
+            }
+            if (requiresClinicPhotosCheck(p) && !p.isCheckClinicPhotos()) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    private DoctorVerificationModel toModel(DoctorProfile p) {
-        String clinicAddress = p.getClinic() != null ? p.getClinic().getAddress() : null;
+    private boolean requiresClinicChecks(DoctorProfile p) {
+        return p.getClinic() != null
+                || clinicDoctorRepository.existsByDoctor_IdAndIsActiveTrue(p.getId());
+    }
+
+    private boolean requiresGovernmentIdCheck(DoctorProfile p) {
+        return hasText(p.getGovernmentIdUrl());
+    }
+
+    private boolean requiresClinicPhotosCheck(DoctorProfile p) {
+        return requiresClinicChecks(p) && hasText(p.getClinicPhotosUrls());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private DoctorVerificationModel toModel(DoctorProfile p, Set<Long> clinicLinkedIds) {
+        boolean hasClinic = p.getClinic() != null;
+        boolean clinicPriority = hasClinic || clinicLinkedIds.contains(p.getId());
+        String clinicAddress = hasClinic ? p.getClinic().getAddress() : null;
+        String clinicName = hasClinic ? p.getClinic().getName() : null;
         String specialization = p.getSpecialization() != null ? p.getSpecialization().name() : null;
         return new DoctorVerificationModel(
                 p.getUuid(),
@@ -140,6 +188,12 @@ public class AdminDoctorController {
                 p.getGovernmentIdUrl(),
                 p.getClinicPhotosUrls(),
                 clinicAddress,
+                clinicName,
+                hasClinic || clinicPriority,
+                clinicPriority,
+                requiresGovernmentIdCheck(p),
+                requiresClinicChecks(p),
+                requiresClinicPhotosCheck(p),
                 p.isEmailOtpVerified(),
                 p.isPhoneOtpVerified(),
                 p.isCheckMobileOtp(),

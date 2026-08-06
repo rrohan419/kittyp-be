@@ -81,11 +81,17 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 
 	@Override
 	protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
-		// Skip filtering for public endpoints
+		// Skip filtering for public endpoints (no JWT required)
 		String path = request.getRequestURI();
-		return path.startsWith("/api/v1/auth/") || path.startsWith("/api/v1/public/") || path.startsWith("/swagger-ui/")
-				|| path.startsWith("/v3/api-docs/") || path.startsWith("/actuator/") || path.startsWith("/api/v1/article/")
-				|| path.startsWith("/api/v1/product/")|| path.startsWith("/api/v1/webhook/");
+		return path.startsWith("/api/v1/auth/")
+				|| path.startsWith("/api/v1/public/")
+				|| path.startsWith("/api/v1/upload/signup-documents")
+				|| path.startsWith("/swagger-ui/")
+				|| path.startsWith("/v3/api-docs/")
+				|| path.startsWith("/actuator/")
+				|| path.startsWith("/api/v1/article/")
+				|| path.startsWith("/api/v1/product/")
+				|| path.startsWith("/api/v1/webhook/");
 	}
 
 }

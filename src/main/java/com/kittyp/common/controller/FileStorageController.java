@@ -52,7 +52,9 @@ public class FileStorageController {
                 })
                 .toList();
 
-        String folderName = isAdminUpload != null && isAdminUpload ? "admin-uploads" : "user-uploads/" + email;
+        String folderName = isAdminUpload != null && isAdminUpload
+                ? "admin-uploads"
+                : "doctors/" + email.trim().toLowerCase();
 
         List<String> response = s3StorageService.uploadMultipleFiles(folderName, files);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -60,7 +62,7 @@ public class FileStorageController {
 
     /**
      * Unauthenticated upload for doctor signup documents (degree, registration cert, etc.).
-     * Folder is scoped by email so files are isolated per applicant.
+     * Stored under doctors/{email}/ in the shared user bucket.
      */
     @PostMapping(value = ApiUrl.UPLOAD_SIGNUP_DOCUMENTS, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessResponse<List<String>>> uploadSignupDocuments(
@@ -85,7 +87,7 @@ public class FileStorageController {
                 })
                 .toList();
 
-        List<String> response = s3StorageService.uploadMultipleFiles("signup-uploads/" + safeEmail, files);
+        List<String> response = s3StorageService.uploadMultipleFiles("doctors/" + safeEmail, files);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

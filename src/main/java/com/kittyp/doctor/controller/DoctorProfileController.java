@@ -1,5 +1,7 @@
 package com.kittyp.doctor.controller;
 
+import java.util.Set;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -8,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -28,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class DoctorProfileController {
 
     private final DoctorProfileDao doctorProfileDao;
+    private final ClinicDoctorRepository clinicDoctorRepository;
     private final UserDao userDao;
     private final ApiResponse<?> responseBuilder;
 
@@ -40,8 +44,16 @@ public class DoctorProfileController {
         if (profile == null) {
             throw new CustomException("Doctor profile not found", HttpStatus.NOT_FOUND);
         }
-        String clinicAddress = profile.getClinic() != null ? profile.getClinic().getAddress() : null;
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        boolean hasClinic = profile.getClinic() != null;
+        boolean clinicPriority = hasClinic || clinicLinkedIds.contains(profile.getId());
+        boolean requiresClinic = hasClinic || clinicPriority;
+        boolean requiresGovId = hasText(profile.getGovernmentIdUrl());
+        boolean requiresPhotos = requiresClinic && hasText(profile.getClinicPhotosUrls());
+        String clinicAddress = hasClinic ? profile.getClinic().getAddress() : null;
+        String clinicName = hasClinic ? profile.getClinic().getName() : null;
         String specialization = profile.getSpecialization() != null ? profile.getSpecialization().name() : null;
+
         DoctorVerificationModel model = new DoctorVerificationModel(
                 profile.getUuid(),
                 user.getFirstName(),
@@ -56,6 +68,12 @@ public class DoctorProfileController {
                 profile.getGovernmentIdUrl(),
                 profile.getClinicPhotosUrls(),
                 clinicAddress,
+                clinicName,
+                requiresClinic,
+                clinicPriority,
+                requiresGovId,
+                requiresClinic,
+                requiresPhotos,
                 profile.isEmailOtpVerified(),
                 profile.isPhoneOtpVerified(),
                 profile.isCheckMobileOtp(),
@@ -71,5 +89,9 @@ public class DoctorProfileController {
                 profile.getReviewedAt(),
                 profile.getReviewNotes());
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

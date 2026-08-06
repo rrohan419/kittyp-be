@@ -1,11 +1,14 @@
 package com.kittyp.doctor.dao;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Repository;
 
+import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.entity.DoctorProfile;
@@ -19,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 public class DoctorProfileDaoImpl implements DoctorProfileDao {
 
     private final DoctorProfileRepository doctorProfileRepository;
+    private final ClinicDoctorRepository clinicDoctorRepository;
     private final Environment env;
 
     @Override
@@ -44,11 +48,25 @@ public class DoctorProfileDaoImpl implements DoctorProfileDao {
 
     @Override
     public List<DoctorProfile> findAllOrdered() {
-        return doctorProfileRepository.findAllByOrderBySubmittedAtDesc();
+        return prioritize(doctorProfileRepository.findAllWithUserAndClinic());
     }
 
     @Override
     public List<DoctorProfile> findByStatus(DoctorStatus status) {
-        return doctorProfileRepository.findByStatusOrderBySubmittedAtDesc(status);
+        return prioritize(doctorProfileRepository.findByStatusWithUserAndClinic(status));
+    }
+
+    private List<DoctorProfile> prioritize(List<DoctorProfile> profiles) {
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        return profiles.stream()
+                .sorted(Comparator
+                        .comparing((DoctorProfile p) -> !isClinicPriority(p, clinicLinkedIds))
+                        .thenComparing(DoctorProfile::getSubmittedAt,
+                                Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    private boolean isClinicPriority(DoctorProfile p, Set<Long> clinicLinkedIds) {
+        return p.getClinic() != null || clinicLinkedIds.contains(p.getId());
     }
 }

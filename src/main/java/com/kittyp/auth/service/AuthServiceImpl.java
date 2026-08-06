@@ -239,6 +239,8 @@ public class AuthServiceImpl implements AuthService {
 	public Map<String, Boolean> verifySignupOtp(SignupOtpVerifyRequest request) {
 		String channel = request.getChannel() == null ? "" : request.getChannel().trim().toUpperCase();
 		boolean ok;
+		System.out.println("request.getCode() = " + request.getCode());
+		
 		if ("EMAIL".equals(channel)) {
 			String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
 			ok = verificationCodeService.verifyCode(VerificationCodeService.emailOtpKey(email), request.getCode(), true);
@@ -254,6 +256,7 @@ public class AuthServiceImpl implements AuthService {
 		} else {
 			throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
 		}
+		System.out.println("ok? = " + ok);
 		if (!ok) {
 			throw new CustomException("Invalid or expired OTP", HttpStatus.BAD_REQUEST);
 		}
