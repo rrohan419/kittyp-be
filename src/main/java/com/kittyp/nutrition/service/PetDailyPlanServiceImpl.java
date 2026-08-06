@@ -34,15 +34,30 @@ public class PetDailyPlanServiceImpl implements PetDailyPlanService {
 
         LocalDate today = LocalDate.now();
         LocalDate endOfMonth = today.withDayOfMonth(today.lengthOfMonth());
-        int month = today.getMonthValue();
-        int year = today.getYear();
+        return materializeRange(userUuid, petUuid, nutritionPlanUuid, dailyTemplates, today, endOfMonth);
+    }
 
-        // Deactivate any old plans for this month
-        deactivateExistingPlansForMonth(petUuid, month, year);
+    @Transactional
+    @Override
+    public List<PetDailyPlan> createOrReplaceNextDaysPlan(String userUuid, String petUuid, String nutritionPlanUuid,
+            List<PetDailyPlan> dailyTemplates, int days) {
+        int safeDays = days <= 0 ? 30 : days;
+        LocalDate today = LocalDate.now();
+        LocalDate end = today.plusDays(safeDays - 1L);
+        return materializeRange(userUuid, petUuid, nutritionPlanUuid, dailyTemplates, today, end);
+    }
+
+    private List<PetDailyPlan> materializeRange(String userUuid, String petUuid, String nutritionPlanUuid,
+            List<PetDailyPlan> dailyTemplates, LocalDate start, LocalDate end) {
+        // Deactivate months covered by the window
+        LocalDate cursor = start.withDayOfMonth(1);
+        while (!cursor.isAfter(end)) {
+            deactivateExistingPlansForMonth(petUuid, cursor.getMonthValue(), cursor.getYear());
+            cursor = cursor.plusMonths(1);
+        }
 
         List<PetDailyPlan> plansToSave = new ArrayList<>();
-
-        for (LocalDate day = today; !day.isAfter(endOfMonth); day = day.plusDays(1)) {
+        for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
             for (PetDailyPlan template : dailyTemplates) {
                 PetDailyPlan plan = PetDailyPlan.builder()
                         .petUuid(petUuid)
@@ -54,17 +69,16 @@ public class PetDailyPlanServiceImpl implements PetDailyPlanService {
                         .quantityInGrams(template.getQuantityInGrams())
                         .notes(template.getNotes())
                         .day(day)
-                        .planMonth(month)
-                        .planYear(year)
+                        .planMonth(day.getMonthValue())
+                        .planYear(day.getYear())
                         .active(true)
                         .build();
-
                 plansToSave.add(plan);
             }
         }
 
-        log.info("Generated {} daily plans for pet={} for month={} year={}",
-                plansToSave.size(), petUuid, month, year);
+        log.info("Generated {} daily plans for pet={} from {} to {}",
+                plansToSave.size(), petUuid, start, end);
 
         return petDailyPlanDao.saveAllPetDailyPlan(plansToSave);
     }
@@ -81,7 +95,7 @@ public class PetDailyPlanServiceImpl implements PetDailyPlanService {
     public List<PetDailyPlanModel> getPetsDailyPlanActivePlan(String petUuid) {
         List<PetDailyPlan> petDailyPlans = petDailyPlanDao.activePetDailyPlanByPetUuid(petUuid);
         if(petDailyPlans == null || petDailyPlans.isEmpty()){
-            throw new CustomException("no active plan found for your pet", HttpStatus.NOT_FOUND);
+            return List.of();
         }
 
         return mapper.convertToList(petDailyPlans, PetDailyPlanModel.class);

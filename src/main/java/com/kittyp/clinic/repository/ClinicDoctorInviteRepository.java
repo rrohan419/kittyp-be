@@ -20,5 +20,7 @@ public interface ClinicDoctorInviteRepository extends JpaRepository<ClinicDoctor
 	Optional<ClinicDoctorInvite> findByClinic_IdAndEmailIgnoreCaseAndStatus(Long clinicId, String email,
 			ClinicDoctorInviteStatus status);
 
+	List<ClinicDoctorInvite> findByEmailIgnoreCaseAndStatus(String email, ClinicDoctorInviteStatus status);
+
 	long countByClinic_IdAndCreatedAtAfter(Long clinicId, LocalDateTime after);
 }

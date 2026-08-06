@@ -57,6 +57,11 @@ public class AuthorDaoImpl implements AuthorDao {
 		
 	}
 
+	@Override
+	public Author findByUserUuid(String userUuid) {
+		return authorRepository.findByUserUuid(userUuid).orElse(null);
+	}
+
 	
 
 }

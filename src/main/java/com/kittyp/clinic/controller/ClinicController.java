@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerProfileModel;
@@ -90,8 +91,15 @@ public class ClinicController {
         return success(clinicService.doctors(uuid, email()));
     }
 
+    @GetMapping(ApiUrl.CLINIC_DOCTOR_BY_UUID)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<ClinicDoctorDetailModel>> doctorDetail(
+            @PathVariable String uuid, @PathVariable String doctorUuid) {
+        return success(clinicService.doctorDetail(uuid, doctorUuid, email()));
+    }
+
     @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF)
+    @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<DoctorInviteModel>> inviteDoctor(@PathVariable String uuid,
             @RequestBody @Valid DoctorInviteRequest request) {
         return success(clinicService.inviteDoctor(uuid, request, email()));
@@ -110,11 +118,17 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE_REVOKE)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF)
+    @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<Void>> revokeDoctorInvite(@PathVariable String uuid,
             @PathVariable String inviteUuid) {
         clinicService.revokeDoctorInvite(uuid, inviteUuid, email());
         return success(null);
+    }
+
+    @GetMapping(ApiUrl.CLINIC_MY_INVITES)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<List<DoctorInviteModel>>> myPendingInvites() {
+        return success(clinicService.listMyPendingInvites(email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_INVITE_BY_TOKEN)

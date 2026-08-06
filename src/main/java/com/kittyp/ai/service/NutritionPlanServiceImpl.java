@@ -312,9 +312,33 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         if (plan.getApprovedAt() == null) {
             plan.setApprovedAt(LocalDateTime.now());
         }
+        if (plan.getParentUserUuid() == null) {
+            plan.setParentUserUuid(plan.getUserUuid());
+        }
         plan.setStatus(NutritionPlanStatus.SENT);
         plan.setSentAt(LocalDateTime.now());
-        return nutritionPlanRepository.save(plan);
+        plan.setIsActivePlan(true);
+        NutritionPlan saved = nutritionPlanRepository.save(plan);
+
+        // Materialize a 30-day interactive schedule for parent + doctor tracking
+        try {
+            NutritionRecommendationResponse recommendation = mapData(saved);
+            if (recommendation != null && recommendation.getDailyFeedingPlan() != null) {
+                List<PetDailyPlan> templates = convertToDailyPlanTemplates(recommendation.getDailyFeedingPlan());
+                if (!templates.isEmpty()) {
+                    petDailyPlanService.createOrReplaceNextDaysPlan(
+                            saved.getUserUuid(),
+                            saved.getPetUuid(),
+                            saved.getUuid(),
+                            templates,
+                            30);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to materialize 30-day daily plans for nutrition plan {}", planUuid, e);
+        }
+
+        return saved;
     }
 
     @Override

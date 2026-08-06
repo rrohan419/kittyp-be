@@ -70,14 +70,22 @@ public class FileStorageController {
 			@RequestParam("files") List<MultipartFile> multipartFiles,
 			@RequestParam("email") String email) {
 
-		if (email == null || email.isBlank() || !email.contains("@")) {
+		if (email == null || email.isBlank()) {
 			throw new CustomException("Valid email is required", HttpStatus.BAD_REQUEST);
 		}
-		String normalized = email.trim().toLowerCase(Locale.ROOT);
-		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(normalized))
-				&& !verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(email.trim()))) {
+		// If clients send email both as query and multipart, Spring may join them with a comma.
+		String raw = email.trim();
+		if (raw.contains(",")) {
+			raw = raw.split(",", 2)[0].trim();
+		}
+		if (raw.isBlank() || !raw.contains("@")) {
+			throw new CustomException("Valid email is required", HttpStatus.BAD_REQUEST);
+		}
+		String normalized = raw.toLowerCase(Locale.ROOT);
+		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(normalized))) {
+			// BAD_REQUEST (not 401): clients treat 401 as session expiry and hard-redirect to /login
 			throw new CustomException("Email OTP verification required before uploading documents",
-					HttpStatus.UNAUTHORIZED);
+					HttpStatus.BAD_REQUEST);
 		}
 		validateFiles(multipartFiles);
 

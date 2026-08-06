@@ -67,6 +67,12 @@ public class ApiUrl {
 	public static final String ALL_AUTHORS = ARTICLE_BASE_URL + AUTHOR_BASE_URL + "/all";
 	public static final String AUTHOR_BY_ID = AUTHOR_BASE_URL + "/{id}";
 	public static final String CREATE_AUTHOR = ADMIN + AUTHOR_BASE_URL + "/create";
+	public static final String AUTHOR_ME = ARTICLE_BASE_URL + AUTHOR_BASE_URL + "/me";
+
+	/** Alias surface for Loop 2 doctor blogs (delegates to article module). */
+	public static final String BLOGS_BASE_URL = "/blogs";
+	public static final String BLOGS_ALL = BLOGS_BASE_URL + "/all";
+	public static final String BLOGS_BY_SLUG = BLOGS_BASE_URL + "/{slug}";
 
 	// Product controller
 	public static final String PRODUCT_BASE_URL = "/product";
@@ -120,10 +126,12 @@ public class ApiUrl {
 	public static final String CLINIC_MINE = CLINIC_BASE_URL + "/mine";
 	public static final String CLINIC_BY_UUID = CLINIC_BASE_URL + PATH_VARIABLE_UUID;
 	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
+	public static final String CLINIC_DOCTOR_BY_UUID = CLINIC_DOCTORS + "/{doctorUuid}";
 	public static final String CLINIC_DOCTOR_INVITE = CLINIC_DOCTORS + "/invite";
 	public static final String CLINIC_DOCTOR_INVITES = CLINIC_DOCTORS + "/invites";
 	public static final String CLINIC_DOCTOR_INVITE_REVOKE = CLINIC_DOCTOR_INVITES + "/{inviteUuid}/revoke";
 	public static final String CLINIC_DOCTOR_LOOKUP = CLINIC_BASE_URL + "/doctors/lookup";
+	public static final String CLINIC_MY_INVITES = CLINIC_BASE_URL + "/my-doctor-invites";
 	public static final String CLINIC_INVITE_BY_TOKEN = CLINIC_BASE_URL + "/invites/{token}";
 	public static final String CLINIC_INVITE_ACCEPT = CLINIC_INVITE_BY_TOKEN + "/accept";
 	public static final String CLINIC_PATIENTS = CLINIC_BY_UUID + "/patients";

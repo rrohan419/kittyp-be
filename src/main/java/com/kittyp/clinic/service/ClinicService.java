@@ -5,6 +5,8 @@ import java.util.List;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorDetailModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorPatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerProfileModel;
@@ -37,11 +39,16 @@ public interface ClinicService {
 
     List<DoctorModel> doctors(String clinicUuid, String email);
 
+    ClinicDoctorDetailModel doctorDetail(String clinicUuid, String doctorUuid, String email);
+
     DoctorInviteModel inviteDoctor(String clinicUuid, DoctorInviteRequest request, String email);
 
     DoctorLookupModel lookupDoctor(String doctorUuid, String email);
 
     List<DoctorInviteModel> listDoctorInvites(String clinicUuid, String email);
+
+    /** Pending clinic invites addressed to the authenticated doctor's email. */
+    List<DoctorInviteModel> listMyPendingInvites(String email);
 
     void revokeDoctorInvite(String clinicUuid, String inviteUuid, String email);
 

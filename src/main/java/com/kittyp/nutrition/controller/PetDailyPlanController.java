@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,7 +19,6 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.nutrition.dto.PetDailyPlanDto;
-import com.kittyp.nutrition.entity.PetDailyPlan;
 import com.kittyp.nutrition.model.PetDailyPlanModel;
 import com.kittyp.nutrition.service.PetDailyPlanService;
 
@@ -41,5 +42,14 @@ public class PetDailyPlanController {
             @RequestParam String nutritionPlanUuid) {
                 List<PetDailyPlanModel> response = petDailyPlanService.createReplaceCurrentMonthPlan(userUuid, petUuid, nutritionPlanUuid, petDailyPlanDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @GetMapping("/nutrition/pets/{petUuid}/daily-plan")
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<List<PetDailyPlanModel>>> activeDailyPlan(
+            @PathVariable String petUuid) {
+        return responseBuilder.buildSuccessResponse(
+                petDailyPlanService.getPetsDailyPlanActivePlan(petUuid),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 }
