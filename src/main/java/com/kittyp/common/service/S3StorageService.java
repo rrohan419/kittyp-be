@@ -66,6 +66,41 @@ public class S3StorageService {
         return key;
     }
 
+    public String uploadTreatmentInvoice(String invoiceUuid, byte[] pdfBytes) {
+        String key = "treatment-invoices/" + invoiceUuid + ".pdf";
+        try {
+            PutObjectRequest put = PutObjectRequest.builder()
+                    .bucket(invoiceBucket)
+                    .key(key)
+                    .contentType("application/pdf")
+                    .build();
+            s3.putObject(put, RequestBody.fromBytes(pdfBytes));
+        } catch (Exception e) {
+            log.error("Error uploading treatment invoice {}: {}", invoiceUuid, e.getMessage());
+            throw new CustomException("Failed to upload treatment invoice PDF", HttpStatus.INTERNAL_SERVER_ERROR, e);
+        }
+        return key;
+    }
+
+    public URL presignedTreatmentInvoiceUrl(String invoiceUuid, Duration ttl) {
+        String key = "treatment-invoices/" + invoiceUuid + ".pdf";
+        try {
+            s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(invoiceBucket)
+                    .key(key)
+                    .build());
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                throw new CustomException("Treatment invoice PDF not found", HttpStatus.NOT_FOUND);
+            }
+            throw e;
+        }
+        PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(builder -> builder
+                .signatureDuration(ttl)
+                .getObjectRequest(getReq -> getReq.bucket(invoiceBucket).key(key)));
+        return presignedRequest.url();
+    }
+
     // public URL presignedUrl(String orderId, Duration ttl) {
     // String key = "invoices/" + orderId + ".pdf";
     // PresignedGetObjectRequest presignedRequest =

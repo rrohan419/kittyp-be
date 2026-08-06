@@ -1,7 +1,7 @@
 package com.kittyp.doctor.controller;
 
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,8 +15,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.kittyp.clinic.entity.Clinic;
-import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -27,6 +25,7 @@ import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
 import com.kittyp.doctor.dto.UpdateConsultationInvoiceStatusDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
+import com.kittyp.doctor.service.TreatmentInvoiceService;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.UserRepository;
 
@@ -41,35 +40,14 @@ public class ConsultationInvoiceController {
     private final ApiResponse<?> responseBuilder;
     private final ConsultationInvoiceRepository consultationInvoiceRepository;
     private final UserRepository userRepository;
-    private final ClinicRepository clinicRepository;
+    private final TreatmentInvoiceService treatmentInvoiceService;
 
     @PostMapping(ApiUrl.CONSULTATION_INVOICE_BASE_URL)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> createInvoice(
             @Valid @RequestBody CreateConsultationInvoiceDto request) {
-        User doctor = currentUser();
-        Clinic clinic = request.getClinicUuid() == null ? null
-                : requireClinic(request.getClinicUuid());
-        User owner = request.getOwnerUserUuid() == null ? null
-                : userRepository.findByUuid(request.getOwnerUserUuid())
-                        .orElseThrow(() -> new ResourceNotFoundException("User", "uuid", request.getOwnerUserUuid()));
-
-        ConsultationInvoice invoice = ConsultationInvoice.builder()
-                .uuid(UUID.randomUUID().toString())
-                .doctor(doctor)
-                .clinic(clinic)
-                .petUuid(request.getPetUuid())
-                .owner(owner)
-                .lineItems(request.getLineItems())
-                .amount(request.getAmount())
-                .currency(request.getCurrency() == null || request.getCurrency().isBlank()
-                        ? "INR" : request.getCurrency().toUpperCase())
-                .notes(request.getNotes())
-                .pdfUrl(request.getPdfUrl())
-                .build();
-
-        return responseBuilder.buildSuccessResponse(consultationInvoiceRepository.save(invoice),
-                ResponseMessage.SUCCESS, HttpStatus.CREATED);
+        ConsultationInvoice invoice = treatmentInvoiceService.create(currentUser(), request);
+        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.CREATED);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_MINE)
@@ -96,18 +74,25 @@ public class ConsultationInvoiceController {
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
+    @PostMapping(ApiUrl.CONSULTATION_INVOICE_GENERATE_PDF)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ConsultationInvoice>> generatePdf(@PathVariable String uuid) {
+        ConsultationInvoice invoice = treatmentInvoiceService.generateAndAttachPdf(requireOwnedInvoice(uuid));
+        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @GetMapping(ApiUrl.CONSULTATION_INVOICE_PDF)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<Map<String, String>>> getPdfUrl(@PathVariable String uuid) {
+        ConsultationInvoice invoice = requireOwnedInvoice(uuid);
+        String url = treatmentInvoiceService.getPresignedPdfUrl(invoice);
+        return responseBuilder.buildSuccessResponse(Map.of("url", url), ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
     private User currentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
-    }
-
-    private Clinic requireClinic(String uuid) {
-        Clinic clinic = clinicRepository.findByUuid(uuid);
-        if (clinic == null) {
-            throw new ResourceNotFoundException("Clinic", "uuid", uuid);
-        }
-        return clinic;
     }
 
     private ConsultationInvoice requireOwnedInvoice(String uuid) {
