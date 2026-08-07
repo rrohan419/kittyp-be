@@ -24,6 +24,7 @@ import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
+import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.common.model.PaginationModel;
 
@@ -52,9 +53,13 @@ public interface ClinicService {
 
     void revokeDoctorInvite(String clinicUuid, String inviteUuid, String email);
 
+    DoctorInviteModel remindDoctorInvite(String clinicUuid, String inviteUuid, String email);
+
     DoctorInvitePreview previewInvite(String token);
 
     DoctorModel acceptInvite(String token, String email);
+
+    void rejectInvite(String token, String email);
 
     List<PatientModel> patients(String clinicUuid, String email);
 
@@ -63,6 +68,12 @@ public interface ClinicService {
     PatientDetailModel addPatient(String clinicUuid, AddPatientRequest request, String email);
 
     List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email);
+
+    /** Search all active KittyP users (live DB) for existing-customer pickers. */
+    List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email);
+
+    /** Ensure a clinic client row exists for the given platform user and return it. */
+    ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email);
 
     ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email);
 
@@ -73,6 +84,12 @@ public interface ClinicService {
     List<ClinicPetListModel> listPets(String clinicUuid, String q, String email);
 
     ClinicPetMedicalProfileModel petMedicalProfile(String clinicUuid, String petUuid, String email);
+
+    /** Soft-hide pet from clinic lists; row and visits remain. */
+    void hidePet(String clinicUuid, String petUuid, String email);
+
+    /** Soft-hide owner (+ their pets at this clinic) from lists; data retained. */
+    void hideOwner(String clinicUuid, String ownerUuid, String email);
 
     PaginationModel<BookingModel> bookings(String clinicUuid, String status, int page, int size, String email);
 

@@ -120,6 +120,19 @@ public final class ClinicDtos {
             int petCount, LocalDateTime lastVisit, List<ClinicOwnerPetModel> pets) {
     }
 
+    /** KittyP platform user hit for clinic "existing customer" search. */
+    public record PlatformUserSearchModel(
+            String userUuid,
+            String name,
+            String email,
+            String phone,
+            String clinicOwnerUuid,
+            boolean alreadyClient) {
+    }
+
+    public record EnsureOwnerFromUserRequest(@NotBlank String userUuid) {
+    }
+
     public record ClinicOwnerProfileModel(ClinicOwnerModel owner, String billingStatus, long invoiceCount) {
     }
 
@@ -187,7 +200,8 @@ public final class ClinicDtos {
     }
 
     public record DoctorInviteModel(String uuid, String email, String doctorName, String status, String expiresAt,
-            String clinicUuid, String clinicName, String token) {
+            String clinicUuid, String clinicName, String token, String createdAt, String lastRemindedAt,
+            Boolean canRemind) {
     }
 
     public record DoctorInvitePreview(String clinicName, String doctorName, String email, boolean expired,

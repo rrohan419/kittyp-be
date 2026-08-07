@@ -78,6 +78,14 @@ public class Pet extends BaseEntity {
 
     private LocalDate registeredAt;
 
+    /**
+     * When true, parent removed this pet from My Pets — do not auto-reattach on login/clinic link.
+     * Clinic/doctor records remain (isActive / clinicOwner unchanged).
+     */
+    @Column(name = "hidden_from_parent")
+    @Builder.Default
+    private Boolean hiddenFromParent = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "clinic_id")
     @ToString.Exclude

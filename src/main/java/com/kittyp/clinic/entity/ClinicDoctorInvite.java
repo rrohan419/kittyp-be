@@ -57,4 +57,7 @@ public class ClinicDoctorInvite extends BaseEntity {
 
 	@Column(nullable = false)
 	private LocalDateTime expiresAt;
+
+	/** Last time the clinic sent a reminder email for this pending invite. */
+	private LocalDateTime lastRemindedAt;
 }

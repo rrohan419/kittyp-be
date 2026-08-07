@@ -133,6 +133,43 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		}
 	}
 
+	@Override
+	public void sendClinicDoctorInviteReminderEmail(String recipientEmail, String doctorName, String clinicName,
+			String acceptUrl) {
+		log.info("Clinic doctor invite REMINDER to email={} clinic={} acceptUrl={}", recipientEmail, clinicName,
+				acceptUrl);
+		sendClinicDoctorInviteEmail(recipientEmail, doctorName, clinicName, acceptUrl);
+	}
+
+	@Override
+	public void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
+			String doctorEmail, boolean accepted) {
+		String action = accepted ? "accepted" : "declined";
+		log.info("Clinic invite {} — notify clinicEmail={} clinic={} doctor={} <{}>", action, recipientEmail,
+				clinicName, doctorName, doctorEmail);
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			String name = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName;
+			String body = String.format("%s (%s) %s your invite to join %s.",
+					doctorName == null || doctorName.isBlank() ? "A doctor" : doctorName,
+					doctorEmail == null ? "" : doctorEmail, action, name);
+			mailDto.setMergeInfo(Map.of(
+					"Customer_Name", name,
+					"RESET_CODE", body,
+					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send clinic invite response email to {}: {}", recipientEmail, e.getMessage());
+		}
+	}
+
 	@Transactional
 	@Override
 	public void sendOrderConfirmationEmail(String recipientEmail, String orderNumber) {

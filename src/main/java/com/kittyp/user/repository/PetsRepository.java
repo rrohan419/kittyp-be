@@ -25,6 +25,9 @@ public interface PetsRepository extends JpaRepository<Pet, Long> {
 
 	Optional<Pet> findByUuidAndClinic_IdAndIsActiveTrue(String uuid, Long clinicId);
 
+	/** Includes soft-hidden pets so visit/history deep links still resolve. */
+	Optional<Pet> findByUuidAndClinic_Id(String uuid, Long clinicId);
+
 	long countByClinic_IdAndIsActiveTrue(Long clinicId);
 
 	@Query("""

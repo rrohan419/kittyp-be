@@ -31,10 +31,12 @@ import com.kittyp.clinic.dto.ClinicDtos.DoctorInvitePreview;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteRequest;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
+import com.kittyp.clinic.dto.ClinicDtos.EnsureOwnerFromUserRequest;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
+import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicStatsModel;
 import com.kittyp.clinic.dto.ClinicDtos.SwitchClinicRequest;
@@ -44,6 +46,7 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.model.PaginationModel;
 
 import jakarta.validation.Valid;
@@ -125,6 +128,13 @@ public class ClinicController {
         return success(null);
     }
 
+    @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE_REMIND)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<DoctorInviteModel>> remindDoctorInvite(@PathVariable String uuid,
+            @PathVariable String inviteUuid) {
+        return success(clinicService.remindDoctorInvite(uuid, inviteUuid, email()));
+    }
+
     @GetMapping(ApiUrl.CLINIC_MY_INVITES)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<List<DoctorInviteModel>>> myPendingInvites() {
@@ -140,6 +150,13 @@ public class ClinicController {
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<DoctorModel>> acceptInvite(@PathVariable String token) {
         return success(clinicService.acceptInvite(token, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_INVITE_REJECT)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<Void>> rejectInvite(@PathVariable String token) {
+        clinicService.rejectInvite(token, email());
+        return success(null);
     }
 
     @GetMapping(ApiUrl.CLINIC_PATIENTS)
@@ -168,6 +185,21 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<List<ClinicOwnerModel>>> owners(@PathVariable String uuid,
             @RequestParam(required = false) String q) {
         return success(clinicService.listOwners(uuid, q, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_USERS_SEARCH)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<PlatformUserSearchModel>>> searchUsers(@PathVariable String uuid,
+            @RequestParam(required = false) String q) {
+        return success(clinicService.searchPlatformUsers(uuid, q, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNER_FROM_USER)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ClinicOwnerModel>> ownerFromUser(@PathVariable String uuid,
+            @RequestBody @Valid EnsureOwnerFromUserRequest request) {
+        return success(clinicService.ensureOwnerFromUser(uuid, request.userUuid(), email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_OWNERS)
@@ -205,6 +237,24 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<ClinicPetMedicalProfileModel>> petProfile(@PathVariable String uuid,
             @PathVariable String petUuid) {
         return success(clinicService.petMedicalProfile(uuid, petUuid, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_PET_HIDE)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<MessageResponse>> hidePet(@PathVariable String uuid,
+            @PathVariable String petUuid) {
+        clinicService.hidePet(uuid, petUuid, email());
+        return success(new MessageResponse("Pet hidden from clinic lists (records kept)"));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNER_HIDE)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<MessageResponse>> hideOwner(@PathVariable String uuid,
+            @PathVariable String ownerUuid) {
+        clinicService.hideOwner(uuid, ownerUuid, email());
+        return success(new MessageResponse("Client hidden from clinic lists (records kept)"));
     }
 
     @GetMapping(ApiUrl.CLINIC_BOOKINGS)

@@ -81,10 +81,13 @@ public class PetServiceImpl implements PetService {
                     throw new CustomException("pet not found by uuid : " + uuid, HttpStatus.NOT_FOUND);
                 });
 
-        log.info("Deleting pet with uuid={}", uuid);
+        log.info("Hiding pet uuid={} from parent email={} (row kept for clinic/medical history)", uuid,
+                petOwner.getEmail());
+        // Detach from parent account only — never hard-delete (visits/clinic records stay).
+        petToDelete.setHiddenFromParent(true);
         petOwner.getPets().remove(petToDelete);
         userDao.saveUser(petOwner);
-        log.info("Deleted pet with uuid={}", uuid);
+        log.info("Pet uuid={} detached from parent; database row retained", uuid);
     }
 
     @Transactional

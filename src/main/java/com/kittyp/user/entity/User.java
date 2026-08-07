@@ -79,7 +79,7 @@ public class User extends BaseEntity {
     @ToString.Exclude
     private Set<Address> addresses = new HashSet<>();
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = false)
     @JoinColumn(name = "user_uuid", referencedColumnName = "uuid")
     @ToString.Exclude
     @Builder.Default

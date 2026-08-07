@@ -25,6 +25,9 @@ import lombok.RequiredArgsConstructor;
 /**
  * Links clinic pet owners to platform users by shared email or phone,
  * and attaches existing {@code pets} rows to the user (no duplicate pets).
+ *
+ * Timing: works whether the parent already has a KittyP account when the clinic
+ * registers them, or signs up months/years later with the same email/phone.
  */
 @Service
 @RequiredArgsConstructor
@@ -58,36 +61,40 @@ public class ClinicOwnerUserLinkService {
 			return owner;
 		}
 		if (owner.getLinkedUser() != null) {
-			// Already linked — do not silently re-attach pets from clinic-side writes.
+			// Already soft-linked — still ensure pets are on the user account.
+			attachPetsToUser(owner, owner.getLinkedUser());
 			return owner;
 		}
 		String email = normalizeEmail(owner.getEmail());
 		String phone = normalizePhoneDigits(owner.getPhone());
+		String altPhone = normalizePhoneDigits(owner.getAlternatePhone());
 
 		User matched = null;
 		if (email != null) {
 			matched = userRepository.findByEmail(email).orElse(null);
 		}
-		if (matched == null && phone != null && phone.matches("\\d{10}")) {
-			List<User> byPhone = userRepository.findByPhoneDigits(phone);
-			if (byPhone.size() == 1) {
-				matched = byPhone.get(0);
-			} else if (byPhone.size() > 1) {
-				log.warn("Ambiguous phone match for clinic owner {} — skipping link", owner.getUuid());
-				return owner;
-			}
+		if (matched == null) {
+			matched = matchUniqueByPhone(phone);
+		}
+		if (matched == null) {
+			matched = matchUniqueByPhone(altPhone);
 		}
 		if (matched != null) {
-			// Soft-link for clinic billing/UI only. Pets attach when the platform user
-			// signs up / updates profile (linkUserToClinicOwners) — never from clinic staff writes.
 			owner.setLinkedUser(matched);
 			owner = clinicPetOwnerRepository.save(owner);
-			log.info("Soft-linked clinic owner {} to user {} (pets not auto-attached)", owner.getUuid(),
+			attachPetsToUser(owner, matched);
+			log.info("Linked clinic owner {} to existing user {} (pets attached)", owner.getUuid(),
 					matched.getUuid());
 		}
 		return owner;
 	}
 
+	/**
+	 * Called on parent signup / profile update. Finds unmatched clinic owners by
+	 * email or phone, links them, and attaches pets. Also re-attaches pets for
+	 * owners already soft-linked to this user (e.g. clinic created record while
+	 * account existed but pets were not yet on the parent profile).
+	 */
 	@Transactional
 	public int linkUserToClinicOwners(User user) {
 		if (user == null) {
@@ -102,15 +109,22 @@ public class ClinicOwnerUserLinkService {
 		List<ClinicPetOwner> byPhone = phone == null || !phone.matches("\\d{10}")
 				? List.of()
 				: clinicPetOwnerRepository.findByLinkedUserIsNullAndIsActiveTrueAndPhone(phone);
+		List<ClinicPetOwner> byAltPhone = phone == null || !phone.matches("\\d{10}")
+				? List.of()
+				: clinicPetOwnerRepository.findByLinkedUserIsNullAndIsActiveTrueAndAlternatePhone(phone);
 
 		Set<Long> emailIds = byEmail.stream().map(ClinicPetOwner::getId).collect(Collectors.toSet());
-		Set<Long> phoneIds = byPhone.stream().map(ClinicPetOwner::getId).collect(Collectors.toSet());
+		Set<Long> phoneIds = Stream.concat(byPhone.stream(), byAltPhone.stream())
+				.map(ClinicPetOwner::getId)
+				.collect(Collectors.toSet());
 
-		Set<String> emails = Stream.concat(byEmail.stream(), byPhone.stream())
+		Set<String> emails = Stream.of(byEmail, byPhone, byAltPhone)
+				.flatMap(List::stream)
 				.map(o -> normalizeEmail(o.getEmail()))
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
-		Set<String> phones = Stream.concat(byEmail.stream(), byPhone.stream())
+		Set<String> phones = Stream.of(byEmail, byPhone, byAltPhone)
+				.flatMap(List::stream)
 				.map(o -> normalizePhoneDigits(o.getPhone()))
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
@@ -121,34 +135,67 @@ public class ClinicOwnerUserLinkService {
 			if (intersection.isEmpty() && emails.size() > 1 && phones.size() > 1) {
 				log.warn("Ambiguous clinic-owner match for user {} (email vs phone conflict) — skipping auto-link",
 						user.getUuid());
-				return 0;
+				// Still attach pets for already-linked owners below.
+			} else {
+				linkUnmatchedOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
+						.flatMap(List::stream)
+						.collect(Collectors.toMap(ClinicPetOwner::getId, o -> o, (a, b) -> a))
+						.values());
 			}
+		} else {
+			linkUnmatchedOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
+					.flatMap(List::stream)
+					.collect(Collectors.toMap(ClinicPetOwner::getId, o -> o, (a, b) -> a))
+					.values());
 		}
 
-		Set<Long> toLink = new HashSet<>();
-		toLink.addAll(emailIds);
-		toLink.addAll(phoneIds);
-		if (toLink.isEmpty()) {
-			return 0;
-		}
+		// Edge case: already soft-linked earlier without pets on the user account.
+		int attached = ensurePetsForAlreadyLinkedOwners(user);
+		return attached;
+	}
 
-		int linked = 0;
-		for (ClinicPetOwner owner : Stream.concat(byEmail.stream(), byPhone.stream())
-				.filter(o -> toLink.contains(o.getId()))
-				.collect(Collectors.toMap(ClinicPetOwner::getId, o -> o, (a, b) -> a))
-				.values()) {
+	private void linkUnmatchedOwners(User user, Iterable<ClinicPetOwner> owners) {
+		for (ClinicPetOwner owner : owners) {
 			if (owner.getLinkedUser() != null) {
 				continue;
 			}
 			owner.setLinkedUser(user);
 			clinicPetOwnerRepository.save(owner);
 			attachPetsToUser(owner, user);
-			linked++;
+			log.info("Late-linked clinic owner {} to user {}", owner.getUuid(), user.getUuid());
 		}
-		if (linked > 0) {
-			log.info("Linked {} clinic owner(s) to user {}", linked, user.getUuid());
+	}
+
+	private int ensurePetsForAlreadyLinkedOwners(User user) {
+		List<ClinicPetOwner> already = clinicPetOwnerRepository.findByLinkedUser_IdAndIsActiveTrue(user.getId());
+		int n = 0;
+		for (ClinicPetOwner owner : already) {
+			int before = userPetCount(user);
+			attachPetsToUser(owner, user);
+			if (userPetCount(user) > before) {
+				n++;
+			}
 		}
-		return linked;
+		return n;
+	}
+
+	private int userPetCount(User user) {
+		User managed = userDao.userByUuid(user.getUuid());
+		return managed.getPets() == null ? 0 : managed.getPets().size();
+	}
+
+	private User matchUniqueByPhone(String phone) {
+		if (phone == null || !phone.matches("\\d{10}")) {
+			return null;
+		}
+		List<User> byPhone = userRepository.findByPhoneDigits(phone);
+		if (byPhone.size() == 1) {
+			return byPhone.get(0);
+		}
+		if (byPhone.size() > 1) {
+			log.warn("Ambiguous phone match {} — skipping link", phone);
+		}
+		return null;
 	}
 
 	/** Attach clinic-registered pets (already in {@code pets}) to the platform user. */
@@ -159,6 +206,9 @@ public class ClinicOwnerUserLinkService {
 				: managed.getPets().stream().map(Pet::getUuid).collect(Collectors.toSet());
 		boolean changed = false;
 		for (Pet pet : clinicPets) {
+			if (Boolean.TRUE.equals(pet.getHiddenFromParent())) {
+				continue;
+			}
 			if (owned.contains(pet.getUuid())) {
 				continue;
 			}
@@ -167,6 +217,7 @@ public class ClinicOwnerUserLinkService {
 		}
 		if (changed) {
 			userDao.saveUser(managed);
+			log.info("Attached {} clinic pet(s) to user {}", clinicPets.size(), managed.getUuid());
 		}
 	}
 }

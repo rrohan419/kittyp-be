@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -21,6 +22,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.kittyp.booking.dao.BookingDao;
 import com.kittyp.booking.entity.Booking;
@@ -53,6 +56,7 @@ import com.kittyp.clinic.dto.ClinicDtos.OwnerSummaryModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientPetModel;
+import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.clinic.dto.ClinicDtos.VaccineScheduleModel;
 import com.kittyp.clinic.entity.Clinic;
@@ -89,11 +93,17 @@ import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.enums.ERole;
 import com.kittyp.user.repository.PetsRepository;
+import com.kittyp.user.repository.UserRepository;
 import com.kittyp.vaccine.dao.PetVaccineScheduleDao;
 import com.kittyp.vaccine.entity.PetVaccineSchedule;
+import com.kittyp.visit.dao.VisitDao;
+import com.kittyp.visit.entity.Visit;
+import com.kittyp.visit.enums.VisitStatus;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -118,6 +128,8 @@ public class ClinicServiceImpl implements ClinicService {
     private final ZeptoMailService zeptoMailService;
     private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
     private final ConsultationInvoiceRepository consultationInvoiceRepository;
+    private final VisitDao visitDao;
+    private final UserRepository userRepository;
 
     @Value("${app.frontend.base-url:http://localhost:8080}")
     private String frontendBaseUrl;
@@ -247,35 +259,24 @@ public class ClinicServiceImpl implements ClinicService {
                     entry.getValue().size(), lastAppt));
         }
 
-        Long doctorUserId = user.getId();
-        String doctorEmail = user.getEmail() == null ? null : user.getEmail().trim().toLowerCase();
-        String doctorTag = "doctor:" + doctor.getUuid();
-        String importPrefix = "doc:" + doctor.getUuid() + ":";
-        boolean doctorOwnsThisClinic = clinic.getOwner() != null && doctorUserId.equals(clinic.getOwner().getId());
-        for (Pet pet : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
-            if (pet.getClinicOwner() == null) {
+        // Pets this doctor actually attended via walk-in / clinic-flow visits (pet + owner).
+        for (Visit visit : visitDao.findByClinicAndDoctor(clinic.getId(), doctor.getId())) {
+            if (visit.getStatus() == VisitStatus.CANCELLED || visit.getStatus() == VisitStatus.NO_SHOW) {
                 continue;
             }
-            ClinicPetOwner owner = pet.getClinicOwner();
-            boolean linkedToDoctor = owner.getLinkedUser() != null
-                    && doctorUserId.equals(owner.getLinkedUser().getId());
-            boolean ownerTagged = owner.getNotes() != null && owner.getNotes().contains(doctorTag);
-            boolean ownerIsDoctorEmail = doctorEmail != null && doctorEmail.equalsIgnoreCase(owner.getEmail());
-            boolean sourcedFromDoctor = pet.getPatientNumber() != null
-                    && pet.getPatientNumber().startsWith(importPrefix);
-            if (!doctorOwnsThisClinic && !linkedToDoctor && !ownerTagged && !ownerIsDoctorEmail
-                    && !sourcedFromDoctor && !bookingsByPet.containsKey(pet.getUuid())) {
+            Pet pet = visit.getPet();
+            ClinicPetOwner owner = visit.getClinicOwner();
+            if (pet == null || owner == null) {
                 continue;
             }
-
-            List<Booking> petBookings = bookingsByPet.getOrDefault(pet.getUuid(), List.of());
-            patients.computeIfAbsent(pet.getUuid(),
-                    id -> new ClinicDoctorPatientModel(toPetListModel(pet), ownerSummary(owner), petBookings.size(),
-                            petBookings.stream()
-                                    .map(Booking::getSlotStart)
-                                    .filter(Objects::nonNull)
-                                    .max(LocalDateTime::compareTo)
-                                    .orElse(null)));
+            LocalDateTime when = visit.getCompletedAt() != null ? visit.getCompletedAt()
+                    : visit.getStartedAt() != null ? visit.getStartedAt()
+                            : visit.getCheckedInAt() != null ? visit.getCheckedInAt() : visit.getCreatedAt();
+            patients.merge(pet.getUuid(),
+                    new ClinicDoctorPatientModel(toPetListModel(pet), ownerSummary(owner), 1, when),
+                    (existing, added) -> new ClinicDoctorPatientModel(existing.pet(), existing.owner(),
+                            existing.appointmentCount() + 1,
+                            laterOf(existing.lastAppointment(), added.lastAppointment())));
         }
 
         List<ClinicDoctorPatientModel> patientList = patients.values().stream()
@@ -634,16 +635,30 @@ public class ClinicServiceImpl implements ClinicService {
     @Transactional
     public List<DoctorInviteModel> listDoctorInvites(String clinicUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
-        return clinicDoctorInviteRepository.findByClinic_IdAndStatus(clinic.getId(), ClinicDoctorInviteStatus.PENDING)
-                .stream()
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime recentCutoff = now.minusDays(14);
+        return clinicDoctorInviteRepository.findByClinic_IdOrderByCreatedAtDesc(clinic.getId()).stream()
                 .map(invite -> {
-                    if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+                    if (invite.getStatus() == ClinicDoctorInviteStatus.PENDING
+                            && invite.getExpiresAt().isBefore(now)) {
                         invite.setStatus(ClinicDoctorInviteStatus.EXPIRED);
                         clinicDoctorInviteRepository.save(invite);
                     }
-                    return inviteModel(invite);
+                    return invite;
                 })
-                .filter(m -> ClinicDoctorInviteStatus.PENDING.name().equals(m.status()))
+                .filter(invite -> {
+                    if (invite.getStatus() == ClinicDoctorInviteStatus.PENDING) {
+                        return true;
+                    }
+                    // Surface accept/reject/revoke responses in the clinic notification inbox for 14 days.
+                    LocalDateTime stamp = invite.getUpdatedAt() != null ? invite.getUpdatedAt() : invite.getCreatedAt();
+                    return stamp != null && !stamp.isBefore(recentCutoff)
+                            && (invite.getStatus() == ClinicDoctorInviteStatus.ACCEPTED
+                                    || invite.getStatus() == ClinicDoctorInviteStatus.REJECTED
+                                    || invite.getStatus() == ClinicDoctorInviteStatus.REVOKED
+                                    || invite.getStatus() == ClinicDoctorInviteStatus.EXPIRED);
+                })
+                .map(this::inviteModel)
                 .toList();
     }
 
@@ -682,6 +697,38 @@ public class ClinicServiceImpl implements ClinicService {
         }
         invite.setStatus(ClinicDoctorInviteStatus.REVOKED);
         clinicDoctorInviteRepository.save(invite);
+    }
+
+    @Override
+    @Transactional
+    public DoctorInviteModel remindDoctorInvite(String clinicUuid, String inviteUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        ClinicDoctorInvite invite = clinicDoctorInviteRepository.findByUuid(inviteUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("invite", "uuid", inviteUuid));
+        if (!invite.getClinic().getId().equals(clinic.getId())) {
+            throw new AccessDeniedException("Invite does not belong to this clinic");
+        }
+        if (invite.getStatus() != ClinicDoctorInviteStatus.PENDING) {
+            throw new CustomException("Only pending invites can be reminded", HttpStatus.BAD_REQUEST);
+        }
+        if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+            invite.setStatus(ClinicDoctorInviteStatus.EXPIRED);
+            clinicDoctorInviteRepository.save(invite);
+            throw new CustomException("This invite has expired — send a new invite", HttpStatus.BAD_REQUEST);
+        }
+        if (!canRemindInvite(invite)) {
+            throw new CustomException(
+                    "Reminder available 24 hours after the invite (or last reminder). Try again later.",
+                    HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/clinic-invite/accept?token=" + invite.getToken();
+        zeptoMailService.sendClinicDoctorInviteReminderEmail(invite.getEmail(), invite.getDoctorName(),
+                clinic.getName(), acceptUrl);
+        invite.setLastRemindedAt(LocalDateTime.now());
+        invite = clinicDoctorInviteRepository.save(invite);
+        return inviteModel(invite, true);
     }
 
     @Override
@@ -746,6 +793,7 @@ public class ClinicServiceImpl implements ClinicService {
         if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), user.getId())) {
             invite.setStatus(ClinicDoctorInviteStatus.ACCEPTED);
             clinicDoctorInviteRepository.save(invite);
+            notifyClinicOfInviteResponse(invite, true);
             ClinicDoctor existing = clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
                     .filter(a -> a.getDoctor().getUser().getId().equals(user.getId()))
                     .findFirst()
@@ -765,10 +813,87 @@ public class ClinicServiceImpl implements ClinicService {
 
         invite.setStatus(ClinicDoctorInviteStatus.ACCEPTED);
         clinicDoctorInviteRepository.save(invite);
+        notifyClinicOfInviteResponse(invite, true);
 
         importDoctorPatientsIntoClinic(clinic, profile);
 
         return doctorModel(affiliation);
+    }
+
+    @Override
+    @Transactional
+    public void rejectInvite(String token, String email) {
+        ClinicDoctorInvite invite = requireInviteByToken(token);
+        if (invite.getStatus() != ClinicDoctorInviteStatus.PENDING) {
+            throw new CustomException("This invite is no longer valid", HttpStatus.BAD_REQUEST);
+        }
+        if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+            invite.setStatus(ClinicDoctorInviteStatus.EXPIRED);
+            clinicDoctorInviteRepository.save(invite);
+            throw new CustomException("This invite has expired", HttpStatus.BAD_REQUEST);
+        }
+
+        User user = userDao.userByEmail(email);
+        if (user == null || !invite.getEmail().equalsIgnoreCase(user.getEmail())) {
+            throw new CustomException("Sign in with the invited email (" + invite.getEmail() + ") to respond",
+                    HttpStatus.FORBIDDEN);
+        }
+
+        invite.setStatus(ClinicDoctorInviteStatus.REJECTED);
+        clinicDoctorInviteRepository.save(invite);
+        notifyClinicOfInviteResponse(invite, false);
+    }
+
+    private void notifyClinicOfInviteResponse(ClinicDoctorInvite invite, boolean accepted) {
+        Clinic clinic = invite.getClinic();
+        String action = accepted ? "accepted" : "declined";
+        String payload = String.format("%s (%s) %s the invite to join %s.", invite.getDoctorName(), invite.getEmail(),
+                action, clinic.getName());
+
+        User notifyUser = clinic.getOwner();
+        if (notifyUser != null) {
+            Runnable persist = () -> {
+                try {
+                    notificationLogRepository.save(NotificationLog.builder()
+                            .user(notifyUser)
+                            .type(NotificationType.CLINIC_DOCTOR_INVITE_RESPONSE)
+                            .payload(payload)
+                            .sentAt(LocalDateTime.now())
+                            .build());
+                } catch (Exception e) {
+                    log.warn("Failed to log clinic invite response notification: {}", e.getMessage());
+                }
+            };
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        persist.run();
+                    }
+                });
+            } else {
+                persist.run();
+            }
+        }
+
+        String clinicEmail = clinic.getEmail();
+        if ((clinicEmail == null || clinicEmail.isBlank()) && clinic.getOwner() != null) {
+            clinicEmail = clinic.getOwner().getEmail();
+        }
+        zeptoMailService.sendClinicDoctorInviteResponseEmail(clinicEmail, clinic.getName(), invite.getDoctorName(),
+                invite.getEmail(), accepted);
+    }
+
+    private static boolean canRemindInvite(ClinicDoctorInvite invite) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime created = invite.getCreatedAt() != null ? invite.getCreatedAt() : now;
+        if (ChronoUnit.HOURS.between(created, now) < 24) {
+            return false;
+        }
+        if (invite.getLastRemindedAt() == null) {
+            return true;
+        }
+        return ChronoUnit.HOURS.between(invite.getLastRemindedAt(), now) >= 24;
     }
 
     private ClinicDoctorInvite requireInviteByToken(String token) {
@@ -781,9 +906,13 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private DoctorInviteModel inviteModel(ClinicDoctorInvite invite, boolean includeToken) {
+        String createdAt = invite.getCreatedAt() != null ? invite.getCreatedAt().toString() : null;
+        String lastRemindedAt = invite.getLastRemindedAt() != null ? invite.getLastRemindedAt().toString() : null;
+        Boolean canRemind = invite.getStatus() == ClinicDoctorInviteStatus.PENDING && canRemindInvite(invite);
         return new DoctorInviteModel(invite.getUuid(), invite.getEmail(), invite.getDoctorName(),
                 invite.getStatus().name(), invite.getExpiresAt().toString(), invite.getClinic().getUuid(),
-                invite.getClinic().getName(), includeToken ? invite.getToken() : null);
+                invite.getClinic().getName(), includeToken ? invite.getToken() : null, createdAt, lastRemindedAt,
+                canRemind);
     }
 
     @Override
@@ -792,9 +921,13 @@ public class ClinicServiceImpl implements ClinicService {
         Clinic clinic = access(clinicUuid, email);
         ensureDemoClinicPatients(clinic);
         ensureAffiliatedDoctorPatientsImported(clinic);
-        Map<String, PatientModel> merged = new HashMap<>(patientMap(clinic));
+        Map<String, PatientModel> activity = patientMap(clinic);
+        Map<String, PatientModel> merged = new HashMap<>(activity);
         for (Pet pet : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
-            merged.put(pet.getUuid(), toClinicPatientModel(pet));
+            PatientModel clinicPet = toClinicPatientModel(pet);
+            PatientModel prior = activity.get(pet.getUuid());
+            LocalDateTime last = laterOf(clinicPet.lastVisit(), prior == null ? null : prior.lastVisit());
+            merged.put(pet.getUuid(), withLastVisit(clinicPet, last));
         }
         return merged.values().stream()
                 .sorted(Comparator.comparing(PatientModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
@@ -918,6 +1051,112 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
+    public List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        if (q == null || q.isBlank()) {
+            return List.of();
+        }
+        String raw = q.trim();
+        // Block broad enumeration (single-letter harvest of the entire user table).
+        if (raw.length() < 3) {
+            return List.of();
+        }
+        // Strip LIKE wildcards — never let callers broaden the pattern.
+        String query = raw.replace("%", "").replace("_", "").trim();
+        if (query.length() < 3) {
+            return List.of();
+        }
+        // Fresh DB read — ROLE_USER only; includes accounts created moments ago.
+        List<User> users = userRepository.searchActiveUsers(query, PageRequest.of(0, 20));
+        return users.stream().map(u -> {
+            ClinicPetOwner existing = clinicPetOwnerRepository
+                    .findByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(), u.getId())
+                    .or(() -> {
+                        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(u.getEmail());
+                        if (ownerEmail == null) {
+                            return Optional.empty();
+                        }
+                        return clinicPetOwnerRepository.findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(
+                                clinic.getId(), ownerEmail);
+                    })
+                    .orElse(null);
+            String name = Stream.of(u.getFirstName(), u.getLastName())
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.joining(" "));
+            if (name.isBlank()) {
+                name = u.getEmail();
+            }
+            return new PlatformUserSearchModel(
+                    u.getUuid(),
+                    name,
+                    u.getEmail(),
+                    formatClinicPhone(u.getPhoneNumber()),
+                    existing == null ? null : existing.getUuid(),
+                    existing != null);
+        }).toList();
+    }
+
+    @Override
+    @Transactional
+    public ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        if (userUuid == null || userUuid.isBlank() || userUuid.length() > 64) {
+            throw new CustomException("Invalid user id", HttpStatus.BAD_REQUEST);
+        }
+        User platformUser = userRepository.findByUuid(userUuid.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("user", "uuid", userUuid));
+        if (Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled()) {
+            throw new CustomException("User account is not active", HttpStatus.BAD_REQUEST);
+        }
+        boolean isPetParent = platformUser.getUserRoles() != null && platformUser.getUserRoles().stream()
+                .anyMatch(ur -> ur.getRole() != null && ERole.ROLE_USER.equals(ur.getRole().getName()));
+        if (!isPetParent) {
+            throw new CustomException("Only pet-parent KittyP accounts can be added as clients",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        ClinicPetOwner owner = clinicPetOwnerRepository
+                .findByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(), platformUser.getId())
+                .orElse(null);
+        if (owner == null) {
+            String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
+            if (ownerEmail != null) {
+                owner = clinicPetOwnerRepository
+                        .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
+                        .orElse(null);
+            }
+        }
+        if (owner == null) {
+            String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
+            if (phone == null || !phone.matches("\\d{10}")) {
+                throw new CustomException(
+                        "This KittyP account has no valid phone on file. Ask them to update their profile, or add the client manually with a phone number.",
+                        HttpStatus.BAD_REQUEST);
+            }
+            owner = ClinicPetOwner.builder()
+                    .uuid(UUID.randomUUID().toString())
+                    .clinic(clinic)
+                    .firstName(platformUser.getFirstName() == null || platformUser.getFirstName().isBlank()
+                            ? "Client"
+                            : platformUser.getFirstName().trim())
+                    .lastName(platformUser.getLastName() == null ? "" : platformUser.getLastName().trim())
+                    .email(ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail()))
+                    .phone(phone)
+                    .linkedUser(platformUser)
+                    .build();
+            owner = clinicPetOwnerRepository.save(owner);
+            log.info("Created clinic owner {} linked to user {} (pets not force-attached)", owner.getUuid(),
+                    platformUser.getUuid());
+        } else if (owner.getLinkedUser() == null) {
+            owner.setLinkedUser(platformUser);
+            owner = clinicPetOwnerRepository.save(owner);
+        }
+        // Soft-link only — do not force-attach pets here (parent may have hidden them).
+        return toOwnerModel(owner);
+    }
+
+    @Override
     @Transactional
     public ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
@@ -1014,7 +1253,8 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     public ClinicPetMedicalProfileModel petMedicalProfile(String clinicUuid, String petUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
-        Pet pet = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
+        // Allow opening charts for soft-hidden pets (e.g. from visit history); lists still filter isActive.
+        Pet pet = petsRepository.findByUuidAndClinic_Id(petUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", petUuid));
         if (pet.getClinicOwner() == null) {
             throw new ResourceNotFoundException("pet", "uuid", petUuid);
@@ -1047,6 +1287,34 @@ public class ClinicServiceImpl implements ClinicService {
 
         return new ClinicPetMedicalProfileModel(petModel, ownerSummary, timeline, appointments, vaccines,
                 List.of(), List.of(), List.of(), invoices);
+    }
+
+    @Override
+    @Transactional
+    public void hidePet(String clinicUuid, String petUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        Pet pet = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", petUuid));
+        pet.setIsActive(false);
+        petsRepository.save(pet);
+        log.info("Soft-hid clinic pet {} at clinic {} (visits retained)", petUuid, clinicUuid);
+    }
+
+    @Override
+    @Transactional
+    public void hideOwner(String clinicUuid, String ownerUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
+        owner.setIsActive(false);
+        clinicPetOwnerRepository.save(owner);
+        for (Pet pet : petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId())) {
+            pet.setIsActive(false);
+            petsRepository.save(pet);
+        }
+        log.info("Soft-hid clinic owner {} (+pets) at clinic {} (data retained)", ownerUuid, clinicUuid);
     }
 
     private InvoiceSummaryModel invoiceSummary(ConsultationInvoice inv) {
@@ -1289,7 +1557,11 @@ public class ClinicServiceImpl implements ClinicService {
                 .filter(candidate -> candidate.id().equals(alertId)).findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("retention alert", "id", alertId));
         Pet pet = requirePet(alert.petUuid());
-        User owner = userDao.userByPetUuid(pet.getUuid());
+        User owner = resolveNotifiableOwner(pet);
+        if (owner == null) {
+            throw new CustomException("Owner has no KittyP account to notify — share the alert manually",
+                    HttpStatus.BAD_REQUEST);
+        }
         notificationLogRepository.save(NotificationLog.builder().user(owner).pet(pet).type(NotificationType.VACCINATION_DUE)
                 .payload(alert.message()).sentAt(LocalDateTime.now()).build());
     }
@@ -1370,12 +1642,41 @@ public class ClinicServiceImpl implements ClinicService {
                         (left, right) -> left.isAfter(right) ? left : right);
             }
         });
-        return petUuids.stream().collect(Collectors.toMap(uuid -> uuid, uuid -> {
+        Map<String, PatientModel> result = new HashMap<>();
+        for (String uuid : petUuids) {
             Pet pet = requirePet(uuid);
-            User owner = userDao.userByPetUuid(uuid);
-            return new PatientModel(uuid, pet.getName(), fullName(owner), owner.getEmail(), lastVisits.get(uuid),
-                    owner.getUuid(), formatPhone(owner), primaryAddress(owner), pet.getType(), pet.getBreed());
-        }));
+            result.put(uuid, patientModelForPet(pet, lastVisits.get(uuid)));
+        }
+        return result;
+    }
+
+    /** Platform parent pets or clinic-registered pets (no KittyP user required). */
+    private PatientModel patientModelForPet(Pet pet, LocalDateTime lastVisit) {
+        if (pet.getClinicOwner() != null) {
+            return withLastVisit(toClinicPatientModel(pet), lastVisit);
+        }
+        User owner = userDao.userByPetUuid(pet.getUuid());
+        return new PatientModel(pet.getUuid(), pet.getName(), fullName(owner), owner.getEmail(), lastVisit,
+                owner.getUuid(), formatPhone(owner), primaryAddress(owner), pet.getType(), pet.getBreed());
+    }
+
+    private PatientModel withLastVisit(PatientModel model, LocalDateTime lastVisit) {
+        LocalDateTime last = laterOf(model.lastVisit(), lastVisit);
+        if (Objects.equals(last, model.lastVisit())) {
+            return model;
+        }
+        return new PatientModel(model.petUuid(), model.petName(), model.ownerName(), model.ownerEmail(), last,
+                model.ownerUuid(), model.ownerPhone(), model.ownerAddress(), model.species(), model.breed());
+    }
+
+    private User resolveNotifiableOwner(Pet pet) {
+        if (pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null) {
+            return pet.getClinicOwner().getLinkedUser();
+        }
+        if (pet.getClinicOwner() != null) {
+            return null;
+        }
+        return userDao.userByPetUuid(pet.getUuid());
     }
 
     private String formatPhone(User user) {
@@ -1466,13 +1767,28 @@ public class ClinicServiceImpl implements ClinicService {
 
     private RetentionAlertModel vaccineAlert(PetVaccineSchedule schedule, LocalDate today) {
         Pet pet = schedule.getPet();
-        User owner = userDao.userByPetUuid(pet.getUuid());
+        String ownerName;
+        if (pet.getClinicOwner() != null) {
+            ownerName = clinicOwnerName(pet.getClinicOwner());
+        } else {
+            ownerName = fullName(userDao.userByPetUuid(pet.getUuid()));
+        }
         long days = ChronoUnit.DAYS.between(today, schedule.getDueDate());
         String status = days < 0 ? "OVERDUE" : "DUE_SOON";
         String message = days < 0 ? schedule.getVaccine().getName() + " vaccine is overdue."
                 : schedule.getVaccine().getName() + " vaccine is due in " + days + " days.";
-        return new RetentionAlertModel("vaccine-" + schedule.getId(), pet.getUuid(), pet.getName(), fullName(owner),
+        return new RetentionAlertModel("vaccine-" + schedule.getId(), pet.getUuid(), pet.getName(), ownerName,
                 "VACCINE", message, days, status);
+    }
+
+    private static LocalDateTime laterOf(LocalDateTime a, LocalDateTime b) {
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+        return a.isAfter(b) ? a : b;
     }
 
     private String fullName(User user) {

@@ -17,6 +17,8 @@ public interface ClinicDoctorInviteRepository extends JpaRepository<ClinicDoctor
 
 	List<ClinicDoctorInvite> findByClinic_IdAndStatus(Long clinicId, ClinicDoctorInviteStatus status);
 
+	List<ClinicDoctorInvite> findByClinic_IdOrderByCreatedAtDesc(Long clinicId);
+
 	Optional<ClinicDoctorInvite> findByClinic_IdAndEmailIgnoreCaseAndStatus(Long clinicId, String email,
 			ClinicDoctorInviteStatus status);
 

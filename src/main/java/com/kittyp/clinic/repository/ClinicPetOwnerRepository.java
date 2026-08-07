@@ -25,7 +25,13 @@ public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, 
 
 	List<ClinicPetOwner> findByLinkedUserIsNullAndIsActiveTrueAndPhone(String phone);
 
+	List<ClinicPetOwner> findByLinkedUserIsNullAndIsActiveTrueAndAlternatePhone(String alternatePhone);
+
+	List<ClinicPetOwner> findByLinkedUser_IdAndIsActiveTrue(Long linkedUserId);
+
 	boolean existsByClinic_IdAndLinkedUser_IdAndIsActiveTrue(Long clinicId, Long linkedUserId);
+
+	Optional<ClinicPetOwner> findByClinic_IdAndLinkedUser_IdAndIsActiveTrue(Long clinicId, Long linkedUserId);
 
 	@Query("""
 			SELECT o FROM ClinicPetOwner o

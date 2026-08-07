@@ -8,5 +8,9 @@ public enum NotificationType {
     APPOINTMENT_REMINDER,
     ORDER_STATUS_CHANGE,
     NEW_MESSAGE,
-    WEEKLY_DIGEST
+    WEEKLY_DIGEST,
+    /** Doctor accepted or declined a clinic invite. */
+    CLINIC_DOCTOR_INVITE_RESPONSE,
+    /** Clinic assigned / checked in a patient for this doctor. */
+    CLINIC_VISIT_ASSIGNED
 }

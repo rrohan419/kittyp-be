@@ -81,6 +81,10 @@ public class UserServiceImpl implements UserService {
 			return null;
 		}
 
+		// Ensure clinic-registered pets appear after late signup / soft-link.
+		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
+		user = userDao.userByEmail(email);
+
 		UserDetailsModel userDetailsModel = toUserDetailsModel(user);
 
 		logger.info("User details retrieved successfully for email: {}", email);
@@ -199,6 +203,8 @@ public class UserServiceImpl implements UserService {
 			userDetailsModel.setPhoneCountryCode("+91");
 		}
 
+		// Parent visibility is membership via user_uuid only. Clinic soft-hide uses pet.isActive
+		// and must not remove linked pets from the parent's My Pets view.
 		if (user.getPets() != null && !user.getPets().isEmpty()) {
 			Set<PetModel> petModels = user.getPets().stream()
 					.map(pet -> mapper.convert(pet, PetModel.class))

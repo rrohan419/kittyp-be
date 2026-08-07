@@ -341,6 +341,16 @@ public class AuthServiceImpl implements AuthService {
 		UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
 		List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
 
+		// Late clinic CRM link: parent may have been registered at a clinic months ago.
+		try {
+			User user = userDao.userByEmail(userDetails.getEmail());
+			if (user != null) {
+				clinicOwnerUserLinkService.linkUserToClinicOwners(user);
+			}
+		} catch (Exception ignored) {
+			// Login must not fail if linking has an edge-case conflict.
+		}
+
 		return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
 	}
 
@@ -381,6 +391,12 @@ public class AuthServiceImpl implements AuthService {
 				
 				// Send welcome email
 				zeptoMailService.sendWelcomeEmail(existingUser.getEmail());
+			}
+
+			try {
+				clinicOwnerUserLinkService.linkUserToClinicOwners(existingUser);
+			} catch (Exception ignored) {
+				// Do not fail Google sign-in on link edge cases
 			}
 			
 			// Create authentication token

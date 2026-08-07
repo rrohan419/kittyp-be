@@ -130,25 +130,49 @@ public class ApiUrl {
 	public static final String CLINIC_DOCTOR_INVITE = CLINIC_DOCTORS + "/invite";
 	public static final String CLINIC_DOCTOR_INVITES = CLINIC_DOCTORS + "/invites";
 	public static final String CLINIC_DOCTOR_INVITE_REVOKE = CLINIC_DOCTOR_INVITES + "/{inviteUuid}/revoke";
+	public static final String CLINIC_DOCTOR_INVITE_REMIND = CLINIC_DOCTOR_INVITES + "/{inviteUuid}/remind";
 	public static final String CLINIC_DOCTOR_LOOKUP = CLINIC_BASE_URL + "/doctors/lookup";
 	public static final String CLINIC_MY_INVITES = CLINIC_BASE_URL + "/my-doctor-invites";
 	public static final String CLINIC_INVITE_BY_TOKEN = CLINIC_BASE_URL + "/invites/{token}";
 	public static final String CLINIC_INVITE_ACCEPT = CLINIC_INVITE_BY_TOKEN + "/accept";
+	public static final String CLINIC_INVITE_REJECT = CLINIC_INVITE_BY_TOKEN + "/reject";
 	public static final String CLINIC_PATIENTS = CLINIC_BY_UUID + "/patients";
 	public static final String CLINIC_PATIENT_DETAIL = CLINIC_PATIENTS + "/{petUuid}";
 	public static final String CLINIC_PATIENT_ADD = CLINIC_PATIENTS;
 	public static final String CLINIC_OWNERS = CLINIC_BY_UUID + "/owners";
 	public static final String CLINIC_OWNER_DETAIL = CLINIC_OWNERS + "/{ownerUuid}";
 	public static final String CLINIC_OWNER_PETS = CLINIC_OWNER_DETAIL + "/pets";
+	public static final String CLINIC_OWNER_HIDE = CLINIC_OWNER_DETAIL + "/hide";
+	public static final String CLINIC_OWNER_FROM_USER = CLINIC_OWNERS + "/from-user";
+	public static final String CLINIC_USERS_SEARCH = CLINIC_BY_UUID + "/users/search";
 	public static final String CLINIC_PETS = CLINIC_BY_UUID + "/pets";
 	public static final String CLINIC_PET_DETAIL = CLINIC_PETS + "/{petUuid}";
+	public static final String CLINIC_PET_HIDE = CLINIC_PET_DETAIL + "/hide";
 	public static final String CLINIC_BOOKINGS = CLINIC_BY_UUID + "/bookings";
+	public static final String CLINIC_VISITS = CLINIC_BY_UUID + "/visits";
+	public static final String CLINIC_VISITS_WALK_IN = CLINIC_VISITS + "/walk-in";
+	public static final String CLINIC_VISIT_BY_UUID = CLINIC_VISITS + "/{visitUuid}";
+	public static final String CLINIC_PATIENT_VISITS = CLINIC_PATIENT_DETAIL + "/visits";
 	public static final String CLINIC_RETENTION_ALERTS = CLINIC_BY_UUID + "/retention-alerts";
 	public static final String CLINIC_RETENTION_ALERT_NOTIFY = CLINIC_RETENTION_ALERTS + "/{alertId}/notify";
 	public static final String CLINIC_PATIENT_HEALTH_EVENTS = CLINIC_PATIENT_DETAIL + "/health-events";
 	public static final String CLINIC_SHUTDOWN = CLINIC_BY_UUID + "/shutdown";
 	public static final String CLINIC_REOPEN = CLINIC_BY_UUID + "/reopen";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
+
+	public static final String DOCTOR_VISITS = DOCTOR_BASE_URL + "/visits";
+	public static final String DOCTOR_VISITS_MINE = DOCTOR_VISITS + "/mine";
+	public static final String DOCTOR_VISIT_BY_UUID = DOCTOR_VISITS + "/{visitUuid}";
+	public static final String DOCTOR_VISIT_START = DOCTOR_VISIT_BY_UUID + "/start";
+	public static final String DOCTOR_VISIT_CHART = DOCTOR_VISIT_BY_UUID + "/chart";
+	public static final String DOCTOR_VISIT_COMPLETE = DOCTOR_VISIT_BY_UUID + "/complete";
+	public static final String DOCTOR_VISIT_RETURN = DOCTOR_VISIT_BY_UUID + "/return-to-reception";
+	public static final String DOCTOR_ATTENDED_PATIENTS = DOCTOR_BASE_URL + "/patients/attended";
+	public static final String DOCTOR_BOOKINGS_MINE = DOCTOR_BASE_URL + "/bookings/mine";
+
+	public static final String PET_VISITS = PET_BY_UUID + "/visits";
+	public static final String USER_VISITS_MINE = "/user/visits/mine";
+	public static final String USER_BOOKINGS_MINE = "/user/bookings/mine";
 
 	// Consultation invoice controller
 	public static final String CONSULTATION_INVOICE_BASE_URL = "/invoice";

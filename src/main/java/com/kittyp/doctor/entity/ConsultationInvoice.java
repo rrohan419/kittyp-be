@@ -113,6 +113,9 @@ public class ConsultationInvoice extends BaseEntity {
     @Column(name = "transaction_id", length = 120)
     private String transactionId;
 
+    @Column(name = "visit_uuid", length = 64)
+    private String visitUuid;
+
     @Column(nullable = false, length = 3)
     @Builder.Default
     private String currency = "INR";
