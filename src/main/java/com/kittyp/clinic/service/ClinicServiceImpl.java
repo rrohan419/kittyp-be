@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -142,7 +143,7 @@ public class ClinicServiceImpl implements ClinicService {
         clinicStaffDao.findActiveByUserId(user.getId()).forEach(staff -> clinics.put(staff.getClinic().getId(), staff.getClinic()));
         clinicDoctorRepository.findByDoctor_User_IdAndIsActiveTrue(user.getId())
                 .forEach(affiliation -> clinics.put(affiliation.getClinic().getId(), affiliation.getClinic()));
-        return clinics.values().stream().map(this::clinicModel).toList();
+        return clinics.values().stream().map(c -> clinicModel(c, user.getId())).toList();
     }
 
     @Override
@@ -235,9 +236,7 @@ public class ClinicServiceImpl implements ClinicService {
         DoctorProfile doctor = affiliation.getDoctor();
         User user = doctor.getUser();
 
-        // Bring this doctor's patients (from their other clinics / personal pets) into this clinic CRM.
-        importDoctorPatientsIntoClinic(clinic, doctor);
-
+        // Attended pets only from THIS clinic's bookings/visits — never import other clinics or personal pets.
         Map<String, List<Booking>> bookingsByPet = bookingDao.findByClinic(clinic.getId()).stream()
                 .filter(b -> b.getDoctor() != null && doctor.getId().equals(b.getDoctor().getId()))
                 .filter(b -> b.getPet() != null)
@@ -326,76 +325,11 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     /**
-     * Copies pets (and their owners) from clinics this doctor owns/works at into the viewing clinic,
-     * and attaches the doctor's personal platform pets. Idempotent via patientNumber key.
+     * Previously copied pets from a doctor's other clinics / personal roster into this clinic.
+     * Disabled — clinic data must stay isolated from doctor personal branches.
      */
     private void importDoctorPatientsIntoClinic(Clinic target, DoctorProfile doctor) {
-        if (target == null || doctor == null || doctor.getUser() == null) {
-            return;
-        }
-        User doctorUser = doctor.getUser();
-        Set<Long> sourceClinicIds = new HashSet<>();
-        clinicDao.findAllByOwnerUserId(doctorUser.getId()).forEach(c -> sourceClinicIds.add(c.getId()));
-        clinicDoctorRepository.findByDoctor_User_IdAndIsActiveTrue(doctorUser.getId())
-                .forEach(a -> sourceClinicIds.add(a.getClinic().getId()));
-        sourceClinicIds.remove(target.getId());
-
-        Set<String> existingImportKeys = petsRepository.findByClinic_IdAndIsActiveTrue(target.getId()).stream()
-                .map(Pet::getPatientNumber)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        for (Long sourceClinicId : sourceClinicIds) {
-            for (Pet sourcePet : petsRepository.findByClinic_IdAndIsActiveTrue(sourceClinicId)) {
-                String importKey = "doc:" + doctor.getUuid() + ":" + sourcePet.getUuid();
-                if (existingImportKeys.contains(importKey)) {
-                    continue;
-                }
-                if (sourcePet.getClinicOwner() == null) {
-                    continue;
-                }
-                ClinicPetOwner targetOwner = findOrCreateImportedOwner(target, sourcePet.getClinicOwner(), doctor);
-                Pet copy = copyPetToClinic(target, targetOwner, sourcePet, importKey);
-                existingImportKeys.add(importKey);
-                petsRepository.save(copy);
-            }
-        }
-
-        // Personal pets owned by the doctor as a pet parent
-        User managed = userDao.userByUuid(doctorUser.getUuid());
-        if (managed.getPets() != null) {
-            for (Pet personal : managed.getPets()) {
-                if (personal == null || Boolean.FALSE.equals(personal.getIsActive())) {
-                    continue;
-                }
-                if (personal.getClinic() != null && target.getId().equals(personal.getClinic().getId())
-                        && personal.getClinicOwner() != null) {
-                    continue;
-                }
-                String importKey = "doc:" + doctor.getUuid() + ":user:" + personal.getUuid();
-                if (existingImportKeys.contains(importKey)) {
-                    continue;
-                }
-                ClinicPetOwner selfOwner = findOrCreateDoctorAsOwner(target, managed, doctor);
-                if (personal.getClinic() == null && personal.getClinicOwner() == null) {
-                    // Attach the same pet row to this clinic (single medical identity).
-                    personal.setClinic(target);
-                    personal.setClinicOwner(selfOwner);
-                    if (personal.getPatientNumber() == null || personal.getPatientNumber().isBlank()) {
-                        personal.setPatientNumber(importKey);
-                    }
-                    petsRepository.save(personal);
-                    if (managed.getPets().stream().noneMatch(p -> personal.getUuid().equals(p.getUuid()))) {
-                        managed.addPet(personal);
-                        userDao.saveUser(managed);
-                    }
-                } else {
-                    Pet copy = copyPetToClinic(target, selfOwner, personal, importKey);
-                    petsRepository.save(copy);
-                }
-                existingImportKeys.add(importKey);
-            }
-        }
+        // no-op
     }
 
     private ClinicPetOwner findOrCreateImportedOwner(Clinic target, ClinicPetOwner source, DoctorProfile doctor) {
@@ -798,7 +732,6 @@ public class ClinicServiceImpl implements ClinicService {
                     .filter(a -> a.getDoctor().getUser().getId().equals(user.getId()))
                     .findFirst()
                     .orElseThrow();
-            importDoctorPatientsIntoClinic(clinic, existing.getDoctor());
             return doctorModel(existing);
         }
 
@@ -814,8 +747,6 @@ public class ClinicServiceImpl implements ClinicService {
         invite.setStatus(ClinicDoctorInviteStatus.ACCEPTED);
         clinicDoctorInviteRepository.save(invite);
         notifyClinicOfInviteResponse(invite, true);
-
-        importDoctorPatientsIntoClinic(clinic, profile);
 
         return doctorModel(affiliation);
     }
@@ -920,10 +851,13 @@ public class ClinicServiceImpl implements ClinicService {
     public List<PatientModel> patients(String clinicUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         ensureDemoClinicPatients(clinic);
-        ensureAffiliatedDoctorPatientsImported(clinic);
+        hideLegacyDoctorImportPets(clinic);
         Map<String, PatientModel> activity = patientMap(clinic);
         Map<String, PatientModel> merged = new HashMap<>(activity);
         for (Pet pet : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
+            if (isLegacyDoctorImport(pet)) {
+                continue;
+            }
             PatientModel clinicPet = toClinicPatientModel(pet);
             PatientModel prior = activity.get(pet.getUuid());
             LocalDateTime last = laterOf(clinicPet.lastVisit(), prior == null ? null : prior.lastVisit());
@@ -1041,11 +975,14 @@ public class ClinicServiceImpl implements ClinicService {
     public List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email) {
         Clinic clinic = access(clinicUuid, email);
         ensureDemoClinicPatients(clinic);
+        hideLegacyDoctorImportPets(clinic);
         List<ClinicPetOwner> owners = (q == null || q.isBlank())
                 ? clinicPetOwnerRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())
                 : clinicPetOwnerRepository.searchByClinic(clinic.getId(), q.trim());
         return owners.stream()
                 .map(this::toOwnerModel)
+                // Drop empty shells left after soft-hiding legacy doctor imports.
+                .filter(o -> o.petCount() > 0)
                 .sorted(Comparator.comparing(ClinicOwnerModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
@@ -1234,20 +1171,54 @@ public class ClinicServiceImpl implements ClinicService {
     public List<ClinicPetListModel> listPets(String clinicUuid, String q, String email) {
         Clinic clinic = access(clinicUuid, email);
         ensureDemoClinicPatients(clinic);
-        ensureAffiliatedDoctorPatientsImported(clinic);
+        hideLegacyDoctorImportPets(clinic);
         List<Pet> pets = (q == null || q.isBlank())
                 ? petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())
                 : petsRepository.searchByClinic(clinic.getId(), q.trim());
         return pets.stream()
+                .filter(p -> !isLegacyDoctorImport(p))
                 .map(this::toPetListModel)
                 .sorted(Comparator.comparing(ClinicPetListModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
-    private void ensureAffiliatedDoctorPatientsImported(Clinic clinic) {
-        for (ClinicDoctor affiliation : clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
-            importDoctorPatientsIntoClinic(clinic, affiliation.getDoctor());
+    /**
+     * Soft-hide pets that were bulk-copied from a doctor's other clinics / personal roster.
+     * Clinic CRM must only show clients registered or walked-in at THIS clinic.
+     */
+    private void hideLegacyDoctorImportPets(Clinic clinic) {
+        for (Pet pet : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
+            if (!isLegacyDoctorImport(pet)) {
+                continue;
+            }
+            pet.setIsActive(false);
+            petsRepository.save(pet);
         }
+    }
+
+    private static boolean isLegacyDoctorImport(Pet pet) {
+        String pn = pet.getPatientNumber();
+        return pn != null && pn.startsWith("doc:");
+    }
+
+    /** Strip internal import tags from notes shown to clinic staff. */
+    private static String sanitizeOwnerNotes(String notes) {
+        if (notes == null || notes.isBlank()) {
+            return null;
+        }
+        String cleaned = notes.lines()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .filter(line -> !line.startsWith("doctor:"))
+                .filter(line -> !line.startsWith("Imported with doctor"))
+                .filter(line -> !line.equalsIgnoreCase("Doctor as pet owner"))
+                .collect(Collectors.joining("\n"))
+                .trim();
+        return cleaned.isEmpty() ? null : cleaned;
+    }
+
+    private void ensureAffiliatedDoctorPatientsImported(Clinic clinic) {
+        // Intentionally no-op: doctor personal / other-clinic patients must not mix into this clinic.
     }
 
     @Override
@@ -1345,7 +1316,9 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicOwnerModel toOwnerModel(ClinicPetOwner owner) {
-        List<Pet> pets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId());
+        List<Pet> pets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId()).stream()
+                .filter(p -> !isLegacyDoctorImport(p))
+                .toList();
         LocalDateTime lastVisit = pets.stream()
                 .map(Pet::getRegisteredAt)
                 .filter(d -> d != null)
@@ -1363,7 +1336,8 @@ public class ClinicServiceImpl implements ClinicService {
                 .toList();
         return new ClinicOwnerModel(owner.getUuid(), clinicOwnerName(owner), owner.getFirstName(), owner.getLastName(),
                 owner.getEmail(), formatClinicPhone(owner.getPhone()), formatClinicPhone(owner.getAlternatePhone()),
-                owner.getAddress(), owner.getNotes(), linked, linkedUuid, petModels.size(), lastVisit, petModels);
+                owner.getAddress(), sanitizeOwnerNotes(owner.getNotes()), linked, linkedUuid, petModels.size(), lastVisit,
+                petModels);
     }
 
     private ClinicPetListModel toPetListModel(Pet pet) {
@@ -1525,7 +1499,8 @@ public class ClinicServiceImpl implements ClinicService {
     public PaginationModel<BookingModel> bookings(String clinicUuid, String status, int page, int size, String email) {
         Clinic clinic = access(clinicUuid, email);
         BookingStatus bookingStatus = status == null || status.isBlank() ? null : BookingStatus.valueOf(status.toUpperCase());
-        Page<Booking> bookings = bookingDao.findByClinic(clinic.getId(), bookingStatus, PageRequest.of(page, size));
+        Page<Booking> bookings = bookingDao.findByClinic(clinic.getId(), bookingStatus,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "slotStart")));
         return PaginationModel.<BookingModel>builder().models(bookings.map(this::bookingModel).toList())
                 .totalPages(bookings.getTotalPages()).totalElements(bookings.getTotalElements()).isFirst(bookings.isFirst())
                 .isLast(bookings.isLast()).pageNumber(bookings.getNumber()).pageSize(bookings.getSize()).build();
@@ -1730,9 +1705,15 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicModel clinicModel(Clinic clinic) {
+        return clinicModel(clinic, null);
+    }
+
+    private ClinicModel clinicModel(Clinic clinic, Long viewerUserId) {
+        boolean personal = viewerUserId != null && clinic.getOwner() != null
+                && clinic.getOwner().getId().equals(viewerUserId);
         return new ClinicModel(clinic.getUuid(), clinic.getName(), clinic.getLicenseNumber(), clinic.getAddress(),
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
-                clinic.getStatus().name());
+                clinic.getStatus().name(), personal);
     }
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {
@@ -1744,10 +1725,18 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private BookingModel bookingModel(Booking booking) {
+        String ownerName = booking.getOwner() == null ? null : fullName(booking.getOwner());
+        if ((ownerName == null || ownerName.isBlank()) && booking.getPet() != null
+                && booking.getPet().getClinicOwner() != null) {
+            ClinicPetOwner co = booking.getPet().getClinicOwner();
+            String last = co.getLastName() == null ? "" : co.getLastName().trim();
+            ownerName = (co.getFirstName() + (last.isEmpty() ? "" : " " + last)).trim();
+        }
         return new BookingModel(booking.getUuid(), booking.getPet().getUuid(), booking.getPet().getName(),
-                fullName(booking.getOwner()), booking.getDoctor() == null ? null : booking.getDoctor().getUuid(),
+                ownerName, booking.getDoctor() == null ? null : booking.getDoctor().getUuid(),
                 booking.getSlotStart(), booking.getSlotEnd(), booking.getTimezone(), booking.getStatus(),
-                booking.getMode().name(), booking.getNotes());
+                booking.getMode() == null ? null : booking.getMode().name(), booking.getNotes(),
+                booking.getClinic() == null ? null : booking.getClinic().getUuid());
     }
 
     private List<HealthEventModel> healthEventsFor(Long clinicId, String petUuid) {

@@ -3,6 +3,7 @@
  */
 package com.kittyp.article.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -150,6 +151,7 @@ public class ArticleServiceImpl implements ArticleService {
 		if (article.getStatus() == null) {
 			article.setStatus(ArticleStatus.DRAFT);
 		}
+		applyScheduleRules(article);
 
 		article.setAuthor(author);
 
@@ -210,6 +212,14 @@ public class ArticleServiceImpl implements ArticleService {
 		if (articleEditDto.getStatus() != null) {
 			article.setStatus(articleEditDto.getStatus());
 		}
+
+		if (articleEditDto.getScheduledPublishAt() != null
+				|| articleEditDto.getStatus() == ArticleStatus.SCHEDULED
+				|| articleEditDto.getStatus() == ArticleStatus.PUBLISHED
+				|| articleEditDto.getStatus() == ArticleStatus.DRAFT) {
+			article.setScheduledPublishAt(articleEditDto.getScheduledPublishAt());
+		}
+		applyScheduleRules(article);
 
 		Article savedArticle = articleDao.saveArticle(article);
 
@@ -355,6 +365,36 @@ public class ArticleServiceImpl implements ArticleService {
 	    } else {
 	        return Boolean.FALSE;
 	    }
+	}
+
+	@Transactional
+	@Override
+	public int publishDueScheduledArticles() {
+		List<Article> due = articleDao.findDueScheduledArticles(LocalDateTime.now());
+		int n = 0;
+		for (Article article : due) {
+			article.setStatus(ArticleStatus.PUBLISHED);
+			article.setScheduledPublishAt(null);
+			articleDao.saveArticle(article);
+			n++;
+		}
+		return n;
+	}
+
+	private void applyScheduleRules(Article article) {
+		if (article.getStatus() == ArticleStatus.SCHEDULED) {
+			if (article.getScheduledPublishAt() == null) {
+				throw new CustomException("Scheduled publish date is required", HttpStatus.BAD_REQUEST);
+			}
+			if (!article.getScheduledPublishAt().isAfter(LocalDateTime.now())) {
+				article.setStatus(ArticleStatus.PUBLISHED);
+				article.setScheduledPublishAt(null);
+			}
+		} else if (article.getStatus() == ArticleStatus.PUBLISHED
+				|| article.getStatus() == ArticleStatus.DRAFT
+				|| article.getStatus() == ArticleStatus.ARCHIVED) {
+			article.setScheduledPublishAt(null);
+		}
 	}
 
 }

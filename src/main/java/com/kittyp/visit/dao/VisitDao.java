@@ -27,6 +27,8 @@ public interface VisitDao {
 
     List<Visit> findForParentByPetUuids(List<String> petUuids);
 
+    List<Visit> findForParentUser(Long userId, String userEmail, List<String> petUuids);
+
     List<Visit> findByClinicAndDoctor(Long clinicId, Long doctorId);
 
     List<Visit> findByDoctor(Long doctorId);

@@ -25,6 +25,7 @@ public class ArticleModel {
     private String coverImage;
     private String category;
     private ArticleStatus status;
+    private LocalDateTime scheduledPublishAt;
     private List<String> tags;
     private Integer readTime;
     private AuthorModel author;

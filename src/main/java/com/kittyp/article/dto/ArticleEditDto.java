@@ -3,19 +3,21 @@
  */
 package com.kittyp.article.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.kittyp.article.enums.ArticleStatus;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * @author rrohan419@gmail.com 
  */
 @Getter
+@Setter
 public class ArticleEditDto {
 
 	@NotBlank
@@ -40,4 +42,7 @@ public class ArticleEditDto {
     
     @NotNull
     private ArticleStatus status;
+
+    /** Required when status is SCHEDULED; clear when publishing immediately. */
+    private LocalDateTime scheduledPublishAt;
 }

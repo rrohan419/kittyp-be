@@ -22,7 +22,12 @@ public final class ClinicDtos {
     }
 
     public record ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
-            String timezone, String operatingHours, String status) {
+            String timezone, String operatingHours, String status, Boolean personal) {
+        /** Backward-compatible ctor without personal flag. */
+        public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
+                String timezone, String operatingHours, String status) {
+            this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, false);
+        }
     }
 
     public record DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
@@ -176,7 +181,13 @@ public final class ClinicDtos {
 
     public record BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
             LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
-            String notes) {
+            String notes, String clinicUuid) {
+        public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
+                LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
+                String notes) {
+            this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
+                    null);
+        }
     }
 
     public record RetentionAlertModel(String id, String petUuid, String petName, String ownerName, String type,

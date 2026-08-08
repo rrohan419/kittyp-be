@@ -47,6 +47,10 @@ public class ArticleSpecification {
 			if (articleFilterDto.getArticleStatus() != null) {
 				predicates
 						.add(builder.equal(root.get(KeyConstant.ARTICLE_STATUS), articleFilterDto.getArticleStatus()));
+			} else if (articleFilterDto.getAuthorId() == null) {
+				// Public browse: only published posts (scheduled stay private until due).
+				predicates.add(builder.equal(root.get(KeyConstant.ARTICLE_STATUS),
+						com.kittyp.article.enums.ArticleStatus.PUBLISHED));
 			}
 
 			if (articleFilterDto.getTags() != null && !articleFilterDto.getTags().isEmpty()) {

@@ -60,19 +60,28 @@ public class ClinicOwnerUserLinkService {
 		if (owner == null) {
 			return owner;
 		}
+		String email = normalizeEmail(owner.getEmail());
+		User emailMatch = email == null ? null : userRepository.findByEmail(email).orElse(null);
+
+		// Reclaim: if linked to the wrong user but email matches a real account, fix it.
 		if (owner.getLinkedUser() != null) {
-			// Already soft-linked — still ensure pets are on the user account.
-			attachPetsToUser(owner, owner.getLinkedUser());
+			User current = owner.getLinkedUser();
+			if (emailMatch != null && !emailMatch.getId().equals(current.getId())) {
+				log.warn("Reclaiming clinic owner {} from user {} → {} (email match)", owner.getUuid(),
+						current.getUuid(), emailMatch.getUuid());
+				owner.setLinkedUser(emailMatch);
+				owner = clinicPetOwnerRepository.save(owner);
+				attachPetsToUser(owner, emailMatch);
+				return owner;
+			}
+			attachPetsToUser(owner, current);
 			return owner;
 		}
-		String email = normalizeEmail(owner.getEmail());
+
 		String phone = normalizePhoneDigits(owner.getPhone());
 		String altPhone = normalizePhoneDigits(owner.getAlternatePhone());
 
-		User matched = null;
-		if (email != null) {
-			matched = userRepository.findByEmail(email).orElse(null);
-		}
+		User matched = emailMatch;
 		if (matched == null) {
 			matched = matchUniqueByPhone(phone);
 		}
@@ -90,10 +99,9 @@ public class ClinicOwnerUserLinkService {
 	}
 
 	/**
-	 * Called on parent signup / profile update. Finds unmatched clinic owners by
-	 * email or phone, links them, and attaches pets. Also re-attaches pets for
-	 * owners already soft-linked to this user (e.g. clinic created record while
-	 * account existed but pets were not yet on the parent profile).
+	 * Called on parent signup / profile update / visit history load. Finds clinic
+	 * owners by email (even if wrongly linked) or unmatched phone, links them, and
+	 * attaches pets.
 	 */
 	@Transactional
 	public int linkUserToClinicOwners(User user) {
@@ -103,9 +111,10 @@ public class ClinicOwnerUserLinkService {
 		String email = normalizeEmail(user.getEmail());
 		String phone = normalizePhoneDigits(user.getPhoneNumber());
 
+		// Include wrongly-linked owners with this email so visits become visible.
 		List<ClinicPetOwner> byEmail = email == null
 				? List.of()
-				: clinicPetOwnerRepository.findByLinkedUserIsNullAndIsActiveTrueAndEmailIgnoreCase(email);
+				: clinicPetOwnerRepository.findByIsActiveTrueAndEmailIgnoreCase(email);
 		List<ClinicPetOwner> byPhone = phone == null || !phone.matches("\\d{10}")
 				? List.of()
 				: clinicPetOwnerRepository.findByLinkedUserIsNullAndIsActiveTrueAndPhone(phone);
@@ -129,41 +138,56 @@ public class ClinicOwnerUserLinkService {
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
 
+		int linked = 0;
 		if (!emailIds.isEmpty() && !phoneIds.isEmpty()) {
 			Set<Long> intersection = new HashSet<>(emailIds);
 			intersection.retainAll(phoneIds);
 			if (intersection.isEmpty() && emails.size() > 1 && phones.size() > 1) {
-				log.warn("Ambiguous clinic-owner match for user {} (email vs phone conflict) — skipping auto-link",
+				log.warn("Ambiguous clinic-owner match for user {} (email vs phone conflict) — linking email matches only",
 						user.getUuid());
-				// Still attach pets for already-linked owners below.
+				linked += linkOrReclaimOwners(user, byEmail);
 			} else {
-				linkUnmatchedOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
+				linked += linkOrReclaimOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
 						.flatMap(List::stream)
 						.collect(Collectors.toMap(ClinicPetOwner::getId, o -> o, (a, b) -> a))
 						.values());
 			}
 		} else {
-			linkUnmatchedOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
+			linked += linkOrReclaimOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
 					.flatMap(List::stream)
 					.collect(Collectors.toMap(ClinicPetOwner::getId, o -> o, (a, b) -> a))
 					.values());
 		}
 
-		// Edge case: already soft-linked earlier without pets on the user account.
-		int attached = ensurePetsForAlreadyLinkedOwners(user);
-		return attached;
+		linked += ensurePetsForAlreadyLinkedOwners(user);
+		return linked;
 	}
 
-	private void linkUnmatchedOwners(User user, Iterable<ClinicPetOwner> owners) {
+	private int linkOrReclaimOwners(User user, Iterable<ClinicPetOwner> owners) {
+		int n = 0;
 		for (ClinicPetOwner owner : owners) {
-			if (owner.getLinkedUser() != null) {
+			User current = owner.getLinkedUser();
+			if (current != null && current.getId().equals(user.getId())) {
+				attachPetsToUser(owner, user);
 				continue;
+			}
+			if (current != null && !current.getId().equals(user.getId())) {
+				String ownerEmail = normalizeEmail(owner.getEmail());
+				String userEmail = normalizeEmail(user.getEmail());
+				// Only reclaim when email clearly belongs to this user.
+				if (ownerEmail == null || userEmail == null || !ownerEmail.equals(userEmail)) {
+					continue;
+				}
+				log.warn("Reclaiming clinic owner {} from user {} → {}", owner.getUuid(), current.getUuid(),
+						user.getUuid());
 			}
 			owner.setLinkedUser(user);
 			clinicPetOwnerRepository.save(owner);
 			attachPetsToUser(owner, user);
+			n++;
 			log.info("Late-linked clinic owner {} to user {}", owner.getUuid(), user.getUuid());
 		}
+		return n;
 	}
 
 	private int ensurePetsForAlreadyLinkedOwners(User user) {
@@ -209,7 +233,15 @@ public class ClinicOwnerUserLinkService {
 			if (Boolean.TRUE.equals(pet.getHiddenFromParent())) {
 				continue;
 			}
+			if (isLegacyDoctorImport(pet)) {
+				continue;
+			}
 			if (owned.contains(pet.getUuid())) {
+				continue;
+			}
+			// Prefer pets that already belong to this user or have no parent yet.
+			String parentUuid = pet.getParentUserUuid();
+			if (parentUuid != null && !parentUuid.isBlank() && !parentUuid.equals(managed.getUuid())) {
 				continue;
 			}
 			managed.addPet(pet);
@@ -217,7 +249,12 @@ public class ClinicOwnerUserLinkService {
 		}
 		if (changed) {
 			userDao.saveUser(managed);
-			log.info("Attached {} clinic pet(s) to user {}", clinicPets.size(), managed.getUuid());
+			log.info("Attached clinic pet(s) to user {}", managed.getUuid());
 		}
+	}
+
+	private static boolean isLegacyDoctorImport(Pet pet) {
+		String pn = pet.getPatientNumber();
+		return pn != null && pn.startsWith("doc:");
 	}
 }

@@ -39,8 +39,14 @@ public class DoctorVisitController {
     @GetMapping(ApiUrl.DOCTOR_VISITS_MINE)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<List<VisitModel>>> mine(
-            @RequestParam(required = false) LocalDate date) {
-        return success(visitService.listMyDoctorVisits(date, email()));
+            @RequestParam(required = false) LocalDate date,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(required = false) String clinicUuid) {
+        if (from != null || to != null) {
+            return success(visitService.listMyDoctorVisitsRange(from, to, clinicUuid, email()));
+        }
+        return success(visitService.listMyDoctorVisits(date, clinicUuid, email()));
     }
 
     @GetMapping(ApiUrl.DOCTOR_ATTENDED_PATIENTS)

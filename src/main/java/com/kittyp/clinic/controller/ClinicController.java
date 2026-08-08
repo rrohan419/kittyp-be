@@ -46,6 +46,8 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
+import com.kittyp.visit.service.VisitService;
 import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.model.PaginationModel;
 
@@ -61,6 +63,7 @@ public class ClinicController {
             + KeyConstant.IS_ROLE_CLINIC_STAFF + " or " + KeyConstant.IS_ROLE_DOCTOR;
 
     private final ClinicService clinicService;
+    private final VisitService visitService;
     private final ApiResponse<?> responseBuilder;
 
     @GetMapping(ApiUrl.CLINIC_MINE)
@@ -99,6 +102,19 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<ClinicDoctorDetailModel>> doctorDetail(
             @PathVariable String uuid, @PathVariable String doctorUuid) {
         return success(clinicService.doctorDetail(uuid, doctorUuid, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_DOCTOR_BUSY)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<BookingModel>>> doctorBusy(
+            @PathVariable String uuid,
+            @PathVariable String doctorUuid,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        java.time.LocalDateTime fromDt = from == null || from.isBlank() ? null
+                : java.time.LocalDateTime.parse(from);
+        java.time.LocalDateTime toDt = to == null || to.isBlank() ? null : java.time.LocalDateTime.parse(to);
+        return success(visitService.listDoctorBusySlots(uuid, doctorUuid, fromDt, toDt, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE)
@@ -263,6 +279,14 @@ public class ClinicController {
             @RequestParam(required = false) String status, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return success(clinicService.bookings(uuid, status, page, size, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_BOOKINGS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<BookingModel>> createBooking(@PathVariable String uuid,
+            @RequestBody @Valid ScheduleBookingCreateRequest request) {
+        return success(visitService.createScheduledBooking(uuid, request, email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_RETENTION_ALERTS)

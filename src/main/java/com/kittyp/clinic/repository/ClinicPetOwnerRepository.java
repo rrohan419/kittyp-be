@@ -23,6 +23,9 @@ public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, 
 
 	List<ClinicPetOwner> findByLinkedUserIsNullAndIsActiveTrueAndEmailIgnoreCase(String email);
 
+	/** All active clinic owners with this email (including already linked — for reclaim). */
+	List<ClinicPetOwner> findByIsActiveTrueAndEmailIgnoreCase(String email);
+
 	List<ClinicPetOwner> findByLinkedUserIsNullAndIsActiveTrueAndPhone(String phone);
 
 	List<ClinicPetOwner> findByLinkedUserIsNullAndIsActiveTrueAndAlternatePhone(String alternatePhone);

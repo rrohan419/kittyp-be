@@ -72,6 +72,53 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
     List<Visit> findForParentByPetUuids(@Param("petUuids") List<String> petUuids);
 
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
+    @Query("""
+            SELECT DISTINCT v FROM Visit v
+            WHERE v.isActive = true
+              AND (
+                  v.pet.uuid IN :petUuids
+                  OR (v.clinicOwner.linkedUser IS NOT NULL AND v.clinicOwner.linkedUser.id = :userId)
+                  OR (v.clinicOwner.email IS NOT NULL AND LOWER(v.clinicOwner.email) = LOWER(:userEmail))
+              )
+              AND v.status IN (
+                  com.kittyp.visit.enums.VisitStatus.WAITLIST,
+                  com.kittyp.visit.enums.VisitStatus.CHECKED_IN,
+                  com.kittyp.visit.enums.VisitStatus.IN_PROGRESS,
+                  com.kittyp.visit.enums.VisitStatus.CHECKING_OUT,
+                  com.kittyp.visit.enums.VisitStatus.COMPLETED,
+                  com.kittyp.visit.enums.VisitStatus.CANCELLED,
+                  com.kittyp.visit.enums.VisitStatus.NO_SHOW
+              )
+            ORDER BY v.createdAt DESC
+            """)
+    List<Visit> findForParentUser(
+            @Param("userId") Long userId,
+            @Param("userEmail") String userEmail,
+            @Param("petUuids") List<String> petUuids);
+
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
+    @Query("""
+            SELECT DISTINCT v FROM Visit v
+            WHERE v.isActive = true
+              AND (
+                  (v.clinicOwner.linkedUser IS NOT NULL AND v.clinicOwner.linkedUser.id = :userId)
+                  OR (v.clinicOwner.email IS NOT NULL AND LOWER(v.clinicOwner.email) = LOWER(:userEmail))
+              )
+              AND v.status IN (
+                  com.kittyp.visit.enums.VisitStatus.WAITLIST,
+                  com.kittyp.visit.enums.VisitStatus.CHECKED_IN,
+                  com.kittyp.visit.enums.VisitStatus.IN_PROGRESS,
+                  com.kittyp.visit.enums.VisitStatus.CHECKING_OUT,
+                  com.kittyp.visit.enums.VisitStatus.COMPLETED,
+                  com.kittyp.visit.enums.VisitStatus.CANCELLED,
+                  com.kittyp.visit.enums.VisitStatus.NO_SHOW
+              )
+            ORDER BY v.createdAt DESC
+            """)
+    List<Visit> findForParentByLinkedUserOrEmail(
+            @Param("userId") Long userId, @Param("userEmail") String userEmail);
+
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
     List<Visit> findByClinic_IdAndDoctor_IdOrderByCreatedAtDesc(Long clinicId, Long doctorId);
 
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })

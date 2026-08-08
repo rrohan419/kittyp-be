@@ -22,6 +22,7 @@ public class ArticleListModel {
     private Integer readTime;
     private LocalDateTime createdAt;
     private ArticleStatus status;
+    private LocalDateTime scheduledPublishAt;
     private List<String> tags;
     private AuthorModel author;
     private String category;

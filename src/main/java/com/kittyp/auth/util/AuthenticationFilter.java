@@ -61,7 +61,12 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 
 	@Override
 	protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
-		// Skip filtering for public endpoints (no JWT required)
+		// Skip JWT parsing only for endpoints that never need a SecurityContext.
+		// Do NOT skip /article/** or /product/** — public GETs stay permitAll in
+		// SecurityConfig, but authenticated routes under those prefixes (e.g.
+		// GET /article/author/me) must still receive a parsed JWT. Skipping them
+		// leaves the caller anonymous, @PreAuthorize fails as 401, and the FE
+		// interceptor clears a still-valid session.
 		String path = request.getRequestURI();
 		return path.startsWith("/api/v1/auth/")
 				|| path.startsWith("/api/v1/public/")
@@ -69,8 +74,6 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 				|| path.startsWith("/swagger-ui/")
 				|| path.startsWith("/v3/api-docs/")
 				|| path.startsWith("/actuator/")
-				|| path.startsWith("/api/v1/article/")
-				|| path.startsWith("/api/v1/product/")
 				|| path.startsWith("/api/v1/webhook/");
 	}
 }

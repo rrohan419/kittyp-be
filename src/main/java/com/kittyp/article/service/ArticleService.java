@@ -66,4 +66,7 @@ public interface ArticleService {
 	Long addLikeToComment(Long commentId, String email);
 
 	Boolean isArticleLikedByUser(Long articleId);
+
+	/** Publishes articles whose scheduledPublishAt is due. Returns count published. */
+	int publishDueScheduledArticles();
 }

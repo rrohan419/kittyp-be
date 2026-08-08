@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -21,9 +22,13 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kittyp.booking.entity.Booking;
 import com.kittyp.booking.enums.BookingMode;
+import com.kittyp.booking.enums.BookingStatus;
+import com.kittyp.booking.repository.BookingRepository;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
+import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.enums.ClinicStatus;
@@ -47,6 +52,7 @@ import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
+import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartModel;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
@@ -73,6 +79,9 @@ public class VisitServiceImpl implements VisitService {
             VisitStatus.WAITLIST, VisitStatus.CHECKED_IN);
     /** Doctor finish treatment → checkout (not final COMPLETED). */
     private static final Set<VisitStatus> FINISHABLE = EnumSet.of(VisitStatus.IN_PROGRESS);
+    private static final Set<BookingStatus> ACTIVE_BOOKING_STATUSES = EnumSet.of(
+            BookingStatus.PENDING, BookingStatus.CONFIRMED);
+    private static final int APPOINTMENT_MINUTES = 30;
 
     private final VisitDao visitDao;
     private final ClinicDao clinicDao;
@@ -85,6 +94,7 @@ public class VisitServiceImpl implements VisitService {
     private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
     private final HealthEventDao healthEventDao;
     private final NotificationLogRepository notificationLogRepository;
+    private final BookingRepository bookingRepository;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -118,6 +128,146 @@ public class VisitServiceImpl implements VisitService {
         if (doctor != null) {
             notifyDoctorOfPatient(visit, "assigned");
         }
+        return toModel(visit, true);
+    }
+
+    @Override
+    @Transactional
+    public BookingModel createScheduledBooking(String clinicUuid, ScheduleBookingCreateRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+
+        if (request.doctorUuid() == null || request.doctorUuid().isBlank()) {
+            throw new CustomException("Doctor is required to schedule an appointment", HttpStatus.BAD_REQUEST);
+        }
+        if (request.slotStart() == null) {
+            throw new CustomException("Appointment start time is required", HttpStatus.BAD_REQUEST);
+        }
+
+        DoctorProfile doctor = requireClinicDoctor(clinic, request.doctorUuid());
+        boolean selfBook = isSelfBooking(email, doctor);
+
+        // Always snap to half-hour grid; self-book may still stack in the same window.
+        LocalDateTime slotStart = snapToHalfHour(request.slotStart());
+        LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
+
+        if (!selfBook) {
+            List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
+                    doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
+            if (!conflicts.isEmpty()) {
+                throw new CustomException("Doctor not available for that time", HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        // Reuse walk-in pet/owner resolution (existing petUuid or new owner+pet).
+        WalkInCreateRequest petRequest = new WalkInCreateRequest(
+                request.petUuid(), request.owner(), request.newPet(), null, null, null);
+        Pet pet = resolvePetForWalkIn(clinic, petRequest);
+        ClinicPetOwner clinicOwner = pet.getClinicOwner();
+        if (clinicOwner != null) {
+            clinicOwner = clinicOwnerUserLinkService.linkOwnerIfUserExists(clinicOwner);
+        }
+        User ownerUser = clinicOwner != null ? clinicOwner.getLinkedUser() : null;
+
+        BookingMode mode = request.mode() == null ? BookingMode.IN_PERSON : request.mode();
+        String notes = blankToNull(request.notes());
+
+        Booking booking = Booking.builder()
+                .uuid(UUID.randomUUID().toString())
+                .pet(pet)
+                .owner(ownerUser)
+                .doctor(doctor)
+                .clinic(clinic)
+                .slotStart(slotStart)
+                .slotEnd(slotEnd)
+                .timezone(clinic.getTimezone())
+                .mode(mode)
+                .status(BookingStatus.CONFIRMED)
+                .notes(notes)
+                .build();
+        booking.setIsActive(true);
+        booking = bookingRepository.save(booking);
+
+        return toBookingModel(booking);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BookingModel> listDoctorBusySlots(String clinicUuid, String doctorUuid, LocalDateTime from,
+            LocalDateTime to, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        DoctorProfile doctor = requireClinicDoctor(clinic, doctorUuid);
+        LocalDateTime rangeFrom = from == null ? LocalDate.now().atStartOfDay() : from;
+        LocalDateTime rangeTo = to == null ? rangeFrom.plusDays(1) : to;
+        if (!rangeTo.isAfter(rangeFrom)) {
+            throw new CustomException("Busy range end must be after start", HttpStatus.BAD_REQUEST);
+        }
+        return bookingRepository
+                .findOverlappingForDoctor(doctor.getId(), rangeFrom, rangeTo, ACTIVE_BOOKING_STATUSES)
+                .stream()
+                .map(this::toBookingModel)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public VisitModel startTreatmentFromBooking(String bookingUuid, String email) {
+        DoctorProfile profile = requireDoctorProfile(email);
+        Booking booking = bookingRepository.findByUuid(bookingUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("booking", "uuid", bookingUuid));
+        if (booking.getDoctor() == null || !booking.getDoctor().getId().equals(profile.getId())) {
+            throw new AccessDeniedException("This booking is not assigned to you");
+        }
+        if (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.NO_SHOW) {
+            throw new CustomException("Cannot start treatment for a cancelled booking", HttpStatus.BAD_REQUEST);
+        }
+        if (booking.getClinic() == null || booking.getPet() == null) {
+            throw new CustomException("Booking is missing clinic or pet", HttpStatus.BAD_REQUEST);
+        }
+        requireOperational(booking.getClinic());
+
+        // Idempotent: booking already converted — return today's open visit for this pet if any.
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
+            LocalDateTime from = LocalDate.now().atStartOfDay();
+            LocalDateTime to = LocalDate.now().atTime(LocalTime.MAX);
+            Optional<Visit> open = visitDao.findByDoctorAndDay(profile.getId(), from, to).stream()
+                    .filter(v -> v.getPet() != null && v.getPet().getId().equals(booking.getPet().getId()))
+                    .filter(v -> v.getStatus() == VisitStatus.IN_PROGRESS
+                            || v.getStatus() == VisitStatus.CHECKING_OUT
+                            || v.getStatus() == VisitStatus.CHECKED_IN)
+                    .findFirst();
+            if (open.isPresent()) {
+                return toModel(open.get(), true);
+            }
+            throw new CustomException("Treatment already started for this booking", HttpStatus.BAD_REQUEST);
+        }
+
+        ClinicPetOwner owner = booking.getPet().getClinicOwner();
+        if (owner != null) {
+            owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Visit visit = Visit.builder()
+                .uuid(UUID.randomUUID().toString())
+                .clinic(booking.getClinic())
+                .pet(booking.getPet())
+                .clinicOwner(owner)
+                .doctor(profile)
+                .source(VisitSource.SCHEDULED)
+                .channel(booking.getMode() == null ? BookingMode.IN_PERSON : booking.getMode())
+                .status(VisitStatus.IN_PROGRESS)
+                .urgency(VisitUrgency.ROUTINE)
+                .reasonForVisit(blankToNull(booking.getNotes()))
+                .checkedInAt(now)
+                .startedAt(now)
+                .build();
+        visit.setIsActive(true);
+        visit = visitDao.save(visit);
+
+        booking.setStatus(BookingStatus.COMPLETED);
+        bookingRepository.save(booking);
+
         return toModel(visit, true);
     }
 
@@ -223,12 +373,27 @@ public class VisitServiceImpl implements VisitService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<VisitModel> listMyDoctorVisits(LocalDate date, String email) {
-        DoctorProfile profile = requireDoctorProfile(email);
+    public List<VisitModel> listMyDoctorVisits(LocalDate date, String clinicUuid, String email) {
         LocalDate day = date == null ? LocalDate.now() : date;
-        LocalDateTime from = day.atStartOfDay();
-        LocalDateTime to = day.atTime(LocalTime.MAX);
-        return visitDao.findByDoctorAndDay(profile.getId(), from, to).stream()
+        return listMyDoctorVisitsRange(day, day, clinicUuid, email);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<VisitModel> listMyDoctorVisitsRange(LocalDate from, LocalDate to, String clinicUuid, String email) {
+        DoctorProfile profile = requireDoctorProfile(email);
+        LocalDate start = from == null ? LocalDate.now() : from;
+        LocalDate end = to == null ? start : to;
+        if (end.isBefore(start)) {
+            LocalDate tmp = start;
+            start = end;
+            end = tmp;
+        }
+        LocalDateTime rangeFrom = start.atStartOfDay();
+        LocalDateTime rangeTo = end.atTime(LocalTime.MAX);
+        return visitDao.findByDoctorAndDay(profile.getId(), rangeFrom, rangeTo).stream()
+                .filter(v -> clinicUuid == null || clinicUuid.isBlank()
+                        || (v.getClinic() != null && clinicUuid.equals(v.getClinic().getUuid())))
                 .map(v -> toModel(v, true))
                 .toList();
     }
@@ -285,6 +450,10 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     public VisitModel completeVisit(String visitUuid, String email) {
         Visit visit = requireDoctorOwnedVisit(visitUuid, email);
+        // Idempotent: already finished treatment / closed.
+        if (visit.getStatus() == VisitStatus.CHECKING_OUT || visit.getStatus() == VisitStatus.COMPLETED) {
+            return toModel(visit, true);
+        }
         if (!FINISHABLE.contains(visit.getStatus())) {
             throw new CustomException(
                     "Finish treatment only while the visit is with the doctor (IN_PROGRESS). Current: "
@@ -334,7 +503,7 @@ public class VisitServiceImpl implements VisitService {
         User managed = userDao.userByUuid(user.getUuid());
         List<String> petUuids = managed.getPets() == null ? List.of()
                 : managed.getPets().stream().map(Pet::getUuid).filter(Objects::nonNull).distinct().toList();
-        return visitDao.findForParentByPetUuids(petUuids).stream()
+        return visitDao.findForParentUser(managed.getId(), managed.getEmail(), petUuids).stream()
                 .map(v -> toModel(v, false))
                 .toList();
     }
@@ -586,6 +755,31 @@ public class VisitServiceImpl implements VisitService {
         }
     }
 
+    private BookingModel toBookingModel(Booking booking) {
+        String ownerName = null;
+        if (booking.getOwner() != null) {
+            ownerName = ((booking.getOwner().getFirstName() == null ? "" : booking.getOwner().getFirstName()) + " "
+                    + (booking.getOwner().getLastName() == null ? "" : booking.getOwner().getLastName())).trim();
+        } else if (booking.getPet() != null && booking.getPet().getClinicOwner() != null) {
+            ownerName = clinicOwnerDisplayName(booking.getPet().getClinicOwner());
+        }
+        String petName = booking.getPet() == null ? "Pet" : booking.getPet().getName();
+        String petUuid = booking.getPet() == null ? null : booking.getPet().getUuid();
+        return new BookingModel(
+                booking.getUuid(),
+                petUuid,
+                petName,
+                ownerName,
+                booking.getDoctor() == null ? null : booking.getDoctor().getUuid(),
+                booking.getSlotStart(),
+                booking.getSlotEnd(),
+                booking.getTimezone(),
+                booking.getStatus(),
+                booking.getMode() == null ? null : booking.getMode().name(),
+                booking.getNotes(),
+                booking.getClinic() == null ? null : booking.getClinic().getUuid());
+    }
+
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {
         DoctorProfile profile = requireDoctorProfile(email);
         Visit visit = visitDao.findByUuid(visitUuid)
@@ -611,6 +805,32 @@ public class VisitServiceImpl implements VisitService {
             throw new CustomException("Doctor profile not found", HttpStatus.NOT_FOUND);
         }
         return profile;
+    }
+
+    private boolean isSelfBooking(String email, DoctorProfile assignedDoctor) {
+        if (assignedDoctor == null) {
+            return false;
+        }
+        try {
+            User user = userDao.userByEmail(email);
+            DoctorProfile actor = doctorProfileDao.findByUserId(user.getId());
+            return actor != null && actor.getId().equals(assignedDoctor.getId());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Minutes 0 stay :00; 1–30 → :30; >30 → next hour :00. */
+    private LocalDateTime snapToHalfHour(LocalDateTime t) {
+        LocalDateTime base = t.withSecond(0).withNano(0);
+        int minutes = base.getMinute();
+        if (minutes == 0) {
+            return base.withMinute(0);
+        }
+        if (minutes <= 30) {
+            return base.withMinute(30);
+        }
+        return base.plusHours(1).withMinute(0);
     }
 
     private DoctorProfile requireClinicDoctor(Clinic clinic, String doctorUuid) {

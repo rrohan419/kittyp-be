@@ -96,6 +96,10 @@ public class Pet extends BaseEntity {
     @ToString.Exclude
     private ClinicPetOwner clinicOwner;
 
+    /** Read-only mirror of pets.user_uuid (owned by User.pets JoinColumn). */
+    @Column(name = "user_uuid", insertable = false, updatable = false)
+    private String parentUserUuid;
+
     public int getAgeInMonths() {
         return dateOfBirth == null ? 0 : Period.between(dateOfBirth, LocalDate.now()).getMonths() +
                 (Period.between(dateOfBirth, LocalDate.now()).getYears() * 12);

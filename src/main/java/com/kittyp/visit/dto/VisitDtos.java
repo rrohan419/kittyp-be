@@ -11,6 +11,7 @@ import com.kittyp.visit.enums.VisitUrgency;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 public final class VisitDtos {
 
@@ -39,6 +40,19 @@ public final class VisitDtos {
             String reasonForVisit,
             VisitUrgency urgency,
             String doctorUuid) {
+    }
+
+    /** Clinic front-desk schedule: creates a Booking with a future slot. */
+    public record ScheduleBookingCreateRequest(
+            String petUuid,
+            @Valid WalkInOwnerRequest owner,
+            @Valid WalkInPetRequest newPet,
+            @NotBlank String doctorUuid,
+            @NotNull LocalDateTime slotStart,
+            LocalDateTime slotEnd,
+            Integer durationMinutes,
+            String notes,
+            BookingMode mode) {
     }
 
     public record VisitPatchRequest(
