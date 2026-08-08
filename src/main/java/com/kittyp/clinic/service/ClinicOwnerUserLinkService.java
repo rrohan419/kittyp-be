@@ -222,6 +222,17 @@ public class ClinicOwnerUserLinkService {
 		return null;
 	}
 
+	/**
+	 * True when {@code phone} uniquely matches {@code user} (no other accounts share those digits).
+	 */
+	public boolean isUniquePhoneMatch(User user, String phone) {
+		if (user == null || phone == null || !phone.matches("\\d{10}")) {
+			return false;
+		}
+		User matched = matchUniqueByPhone(phone);
+		return matched != null && matched.getId().equals(user.getId());
+	}
+
 	/** Attach clinic-registered pets (already in {@code pets}) to the platform user. */
 	private void attachPetsToUser(ClinicPetOwner owner, User user) {
 		List<Pet> clinicPets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId());

@@ -10,6 +10,8 @@ import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
 import com.kittyp.visit.dto.VisitDtos.VisitPatchRequest;
+import com.kittyp.visit.dto.VisitDtos.VisitRatingModel;
+import com.kittyp.visit.dto.VisitDtos.VisitRatingRequest;
 import com.kittyp.visit.dto.VisitDtos.WalkInCreateRequest;
 import com.kittyp.visit.enums.VisitStatus;
 
@@ -52,6 +54,8 @@ public interface VisitService {
 
     /** All clinic visits across pets owned/linked to this parent. */
     List<VisitModel> listMyParentVisits(String email);
+
+    VisitRatingModel rateVisit(String visitUuid, VisitRatingRequest request, String email);
 
     List<AttendedPatientModel> listMyAttendedPatients(String email);
 }

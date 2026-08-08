@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -39,6 +40,8 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorProfile;
+import com.kittyp.doctor.entity.DoctorReview;
+import com.kittyp.doctor.repository.DoctorReviewRepository;
 import com.kittyp.health.dao.HealthEventDao;
 import com.kittyp.health.entity.HealthEvent;
 import com.kittyp.health.enums.HealthEventStatus;
@@ -57,6 +60,8 @@ import com.kittyp.visit.dto.VisitDtos.VisitChartModel;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
 import com.kittyp.visit.dto.VisitDtos.VisitPatchRequest;
+import com.kittyp.visit.dto.VisitDtos.VisitRatingModel;
+import com.kittyp.visit.dto.VisitDtos.VisitRatingRequest;
 import com.kittyp.visit.dto.VisitDtos.WalkInCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.WalkInOwnerRequest;
 import com.kittyp.visit.dto.VisitDtos.WalkInPetRequest;
@@ -95,6 +100,7 @@ public class VisitServiceImpl implements VisitService {
     private final HealthEventDao healthEventDao;
     private final NotificationLogRepository notificationLogRepository;
     private final BookingRepository bookingRepository;
+    private final DoctorReviewRepository doctorReviewRepository;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -334,8 +340,12 @@ public class VisitServiceImpl implements VisitService {
             visit.setReasonForVisit(blankToNull(request.reasonForVisit()));
         }
         if (request.status() != null) {
-            if (request.status() == VisitStatus.CHECKED_IN && visit.getDoctor() == null) {
-                throw new CustomException("Assign a doctor before check-in so they can see this patient",
+            if (request.status() == VisitStatus.IN_PROGRESS && visit.getDoctor() == null) {
+                throw new CustomException("Assign a doctor before moving to With doctor",
+                        HttpStatus.BAD_REQUEST);
+            }
+            if (request.status() == VisitStatus.COMPLETED && visit.getDoctor() == null) {
+                throw new CustomException("Assign a doctor before completing the visit",
                         HttpStatus.BAD_REQUEST);
             }
             applyStatusTransition(visit, request.status());
@@ -509,6 +519,91 @@ public class VisitServiceImpl implements VisitService {
     }
 
     @Override
+    @Transactional
+    public VisitRatingModel rateVisit(String visitUuid, VisitRatingRequest request, String email) {
+        if (request == null || request.stars() == null || request.stars() < 1 || request.stars() > 5) {
+            throw new CustomException("Stars must be between 1 and 5", HttpStatus.BAD_REQUEST);
+        }
+        User user = userDao.userByEmail(email);
+        Visit visit = visitDao.findByUuid(visitUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("visit", "uuid", visitUuid));
+        requireParentOwnsPet(user, visit.getPet().getUuid());
+        if (visit.getStatus() != VisitStatus.COMPLETED) {
+            throw new CustomException("Only completed visits can be rated", HttpStatus.BAD_REQUEST);
+        }
+        DoctorProfile doctor = visit.getDoctor();
+        if (doctor == null) {
+            throw new CustomException("This visit has no assigned doctor to rate", HttpStatus.BAD_REQUEST);
+        }
+        if (doctorReviewRepository.existsByVisit_Uuid(visitUuid)) {
+            throw new CustomException("This visit was already rated", HttpStatus.CONFLICT);
+        }
+        String comment = request.comment() == null ? null : request.comment().trim();
+        if (comment != null && comment.isEmpty()) {
+            comment = null;
+        }
+        if (comment != null && comment.length() > 1000) {
+            throw new CustomException("Comment must be at most 1000 characters", HttpStatus.BAD_REQUEST);
+        }
+        DoctorReview review = DoctorReview.builder()
+                .uuid(UUID.randomUUID().toString())
+                .doctor(doctor)
+                .clinic(visit.getClinic())
+                .visit(visit)
+                .reviewer(user)
+                .stars(request.stars())
+                .comment(comment)
+                .build();
+        review.setIsActive(true);
+        try {
+            doctorReviewRepository.save(review);
+        } catch (DataIntegrityViolationException ex) {
+            throw new CustomException("This visit was already rated", HttpStatus.CONFLICT);
+        }
+        recomputeDoctorRating(doctor);
+        return new VisitRatingModel(
+                visit.getUuid(),
+                doctor.getUuid(),
+                request.stars(),
+                ratingLabel(request.stars().doubleValue()),
+                doctor.getRating(),
+                doctor.getReviewsCount());
+    }
+
+    private void recomputeDoctorRating(DoctorProfile doctor) {
+        List<DoctorReview> reviews = doctorReviewRepository.findByDoctor_IdAndIsActiveTrue(doctor.getId());
+        if (reviews.isEmpty()) {
+            doctor.setRating(null);
+            doctor.setReviewsCount(0);
+        } else {
+            double avg = reviews.stream().mapToInt(DoctorReview::getStars).average().orElse(0);
+            doctor.setRating(Math.round(avg * 10.0) / 10.0);
+            doctor.setReviewsCount(reviews.size());
+        }
+        doctorProfileDao.save(doctor);
+    }
+
+    private static String ratingLabel(Double rating) {
+        if (rating == null || rating <= 0) {
+            return "Not rated yet";
+        }
+        int n = (int) Math.round(rating);
+        if (n <= 1) {
+            return "Still warming up";
+        }
+        if (n == 2) {
+            return "Gentle paws";
+        }
+        if (n == 3) {
+            return "Trusted companion";
+        }
+        if (n == 4) {
+            return "Clinic favorite";
+        }
+        return "Legend of care";
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<AttendedPatientModel> listMyAttendedPatients(String email) {
         DoctorProfile profile = requireDoctorProfile(email);
@@ -654,13 +749,21 @@ public class VisitServiceImpl implements VisitService {
             return;
         }
         boolean allowed;
-        if (target == VisitStatus.CHECKED_IN) {
-            allowed = current == VisitStatus.WAITLIST || current == VisitStatus.IN_PROGRESS
-                    || current == VisitStatus.CHECKING_OUT;
-        } else if (target == VisitStatus.IN_PROGRESS) {
-            allowed = current == VisitStatus.WAITLIST || current == VisitStatus.CHECKED_IN;
-        } else if (target == VisitStatus.CHECKING_OUT) {
-            allowed = current == VisitStatus.IN_PROGRESS;
+        Set<VisitStatus> flow = EnumSet.of(
+                VisitStatus.WAITLIST, VisitStatus.CHECKED_IN, VisitStatus.IN_PROGRESS, VisitStatus.CHECKING_OUT);
+        if (flow.contains(target) && flow.contains(current)) {
+            // Clinic front desk may drag between flow columns freely.
+            allowed = true;
+        } else if (flow.contains(target) && current == VisitStatus.COMPLETED) {
+            // Reopen within 30 minutes of completion (e.g. dragged back from done).
+            LocalDateTime completedAt = visit.getCompletedAt();
+            allowed = completedAt != null
+                    && !completedAt.isBefore(LocalDateTime.now().minusMinutes(30));
+            if (allowed && doctorReviewRepository.existsByVisit_Uuid(visit.getUuid())) {
+                throw new CustomException(
+                        "Cannot reopen a visit that already has a parent rating",
+                        HttpStatus.BAD_REQUEST);
+            }
         } else if (target == VisitStatus.COMPLETED) {
             allowed = current == VisitStatus.CHECKING_OUT;
         } else if (target == VisitStatus.CANCELLED || target == VisitStatus.NO_SHOW) {
@@ -686,7 +789,27 @@ public class VisitServiceImpl implements VisitService {
         }
         if (target == VisitStatus.COMPLETED) {
             visit.setCompletedAt(now);
+        } else if (current == VisitStatus.COMPLETED && flow.contains(target)) {
+            visit.setCompletedAt(null);
+            clearHealthEventForReopen(visit);
+        } else if (current == VisitStatus.CHECKING_OUT
+                && (target == VisitStatus.WAITLIST || target == VisitStatus.CHECKED_IN
+                        || target == VisitStatus.IN_PROGRESS)) {
+            // Doctor finish already wrote a health event; undo if pulled back into active flow.
+            clearHealthEventForReopen(visit);
         }
+    }
+
+    private void clearHealthEventForReopen(Visit visit) {
+        String eventUuid = visit.getHealthEventUuid();
+        if (eventUuid == null) {
+            return;
+        }
+        healthEventDao.findByUuid(eventUuid).ifPresent(event -> {
+            event.setIsActive(false);
+            healthEventDao.save(event);
+        });
+        visit.setHealthEventUuid(null);
     }
 
     private void ensureHealthEvent(Visit visit) {
@@ -878,6 +1001,11 @@ public class VisitServiceImpl implements VisitService {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
             return;
         }
+        // Already linked to a different platform user — do not claim via email/phone.
+        if (owner != null && owner.getLinkedUser() != null
+                && !owner.getLinkedUser().getId().equals(user.getId())) {
+            throw new AccessDeniedException("You do not have access to this pet");
+        }
         if (owner != null) {
             String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(owner.getEmail());
             String userEmail = ClinicOwnerUserLinkService.normalizeEmail(user.getEmail());
@@ -885,9 +1013,11 @@ public class VisitServiceImpl implements VisitService {
                 clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
                 return;
             }
+            // Phone claim only when the digits uniquely match this user (same rule as link service).
             String ownerPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(owner.getPhone());
             String userPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(user.getPhoneNumber());
-            if (ownerPhone != null && ownerPhone.equals(userPhone) && ownerPhone.matches("\\d{10}")) {
+            if (ownerPhone != null && ownerPhone.equals(userPhone) && ownerPhone.matches("\\d{10}")
+                    && clinicOwnerUserLinkService.isUniquePhoneMatch(user, ownerPhone)) {
                 clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
                 return;
             }
@@ -921,6 +1051,9 @@ public class VisitServiceImpl implements VisitService {
                 visit.getNextVisitNotes(),
                 readVitals(visit.getVitalsJson()),
                 includeInternal ? visit.getInternalNotes() : null);
+        Integer parentRating = doctorReviewRepository.findByVisit_Uuid(visit.getUuid())
+                .map(DoctorReview::getStars)
+                .orElse(null);
         return new VisitModel(
                 visit.getUuid(),
                 visit.getClinic().getUuid(),
@@ -945,7 +1078,8 @@ public class VisitServiceImpl implements VisitService {
                 visit.getCreatedAt(),
                 chart,
                 visit.getInvoiceUuid(),
-                visit.getHealthEventUuid());
+                visit.getHealthEventUuid(),
+                parentRating);
     }
 
     private String buildPublicSummary(Visit visit) {

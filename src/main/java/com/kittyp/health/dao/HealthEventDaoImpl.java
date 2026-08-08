@@ -1,6 +1,7 @@
 package com.kittyp.health.dao;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
 
@@ -18,6 +19,11 @@ public class HealthEventDaoImpl implements HealthEventDao {
     @Override
     public HealthEvent save(HealthEvent healthEvent) {
         return healthEventRepository.save(healthEvent);
+    }
+
+    @Override
+    public Optional<HealthEvent> findByUuid(String uuid) {
+        return healthEventRepository.findByUuid(uuid);
     }
 
     @Override

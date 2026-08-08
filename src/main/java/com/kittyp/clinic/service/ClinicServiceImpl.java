@@ -218,7 +218,20 @@ public class ClinicServiceImpl implements ClinicService {
         Clinic clinic = access(clinicUuid, email);
         long diagnosed = healthEventDao.countDistinctPetsByClinic(clinic.getId());
         long patients = patientMap(clinic).size();
-        return new ClinicStatsModel(diagnosed, patients);
+        List<ClinicDoctor> affiliations = clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
+        double weightedSum = 0;
+        long weight = 0;
+        for (ClinicDoctor affiliation : affiliations) {
+            DoctorProfile d = affiliation.getDoctor();
+            if (d == null || d.getRating() == null || d.getReviewsCount() == null || d.getReviewsCount() <= 0) {
+                continue;
+            }
+            weightedSum += d.getRating() * d.getReviewsCount();
+            weight += d.getReviewsCount();
+        }
+        Double clinicRating = weight == 0 ? null : Math.round((weightedSum / weight) * 10.0) / 10.0;
+        String label = ratingLabel(clinicRating);
+        return new ClinicStatsModel(diagnosed, patients, clinicRating, weight, label);
     }
 
     @Override
@@ -321,6 +334,9 @@ public class ClinicServiceImpl implements ClinicService {
                 doctor.getSubmittedAt() == null ? null : doctor.getSubmittedAt().toString(),
                 doctor.getReviewedAt() == null ? null : doctor.getReviewedAt().toString(),
                 doctor.getReviewNotes(),
+                doctor.getRating(),
+                doctor.getReviewsCount(),
+                ratingLabel(doctor.getRating()),
                 patientList);
     }
 
@@ -1718,10 +1734,33 @@ public class ClinicServiceImpl implements ClinicService {
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {
         var doctor = affiliation.getDoctor();
+        Double rating = doctor.getRating();
+        Integer reviews = doctor.getReviewsCount();
         return new DoctorModel(doctor.getUuid(), doctor.getUser().getUuid(), fullName(doctor.getUser()),
                 doctor.getUser().getEmail(), doctor.getSpecialization() == null ? null : doctor.getSpecialization().name(),
                 affiliation.getRole(), affiliation.getIsActive(),
-                doctor.getStatus() == null ? null : doctor.getStatus().name(), doctor.getPhotoUrl());
+                doctor.getStatus() == null ? null : doctor.getStatus().name(), doctor.getPhotoUrl(),
+                rating, reviews, ratingLabel(rating));
+    }
+
+    private static String ratingLabel(Double rating) {
+        if (rating == null || rating <= 0) {
+            return "Not rated yet";
+        }
+        int n = (int) Math.round(rating);
+        if (n <= 1) {
+            return "Still warming up";
+        }
+        if (n == 2) {
+            return "Gentle paws";
+        }
+        if (n == 3) {
+            return "Trusted companion";
+        }
+        if (n == 4) {
+            return "Clinic favorite";
+        }
+        return "Legend of care";
     }
 
     private BookingModel bookingModel(Booking booking) {

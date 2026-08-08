@@ -31,10 +31,17 @@ public final class ClinicDtos {
     }
 
     public record DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
-            String role, Boolean isActive, String status, String photoUrl) {
+            String role, Boolean isActive, String status, String photoUrl, Double rating, Integer reviewsCount,
+            String ratingLabel) {
         public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
                 String role, Boolean isActive) {
-            this(doctorUuid, userUuid, name, email, specialization, role, isActive, null, null);
+            this(doctorUuid, userUuid, name, email, specialization, role, isActive, null, null, null, null, null);
+        }
+
+        public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
+                String role, Boolean isActive, String status, String photoUrl) {
+            this(doctorUuid, userUuid, name, email, specialization, role, isActive, status, photoUrl, null, null,
+                    null);
         }
     }
 
@@ -76,6 +83,9 @@ public final class ClinicDtos {
             String submittedAt,
             String reviewedAt,
             String reviewNotes,
+            Double rating,
+            Integer reviewsCount,
+            String ratingLabel,
             List<ClinicDoctorPatientModel> patients) {
     }
 
@@ -201,7 +211,11 @@ public final class ClinicDtos {
     public record SwitchClinicRequest(@NotBlank String clinicUuid) {
     }
 
-    public record ClinicStatsModel(long diagnosedPetCount, long patientCount) {
+    public record ClinicStatsModel(long diagnosedPetCount, long patientCount, Double clinicRating,
+            Long clinicReviewsCount, String clinicRatingLabel) {
+        public ClinicStatsModel(long diagnosedPetCount, long patientCount) {
+            this(diagnosedPetCount, patientCount, null, 0L, "Not rated yet");
+        }
     }
 
     public record DoctorInviteRequest(String name, String email, String doctorUuid) {

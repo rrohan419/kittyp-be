@@ -8,6 +8,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,8 +19,11 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
+import com.kittyp.visit.dto.VisitDtos.VisitRatingModel;
+import com.kittyp.visit.dto.VisitDtos.VisitRatingRequest;
 import com.kittyp.visit.service.VisitService;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -39,6 +44,14 @@ public class ParentVisitController {
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<List<VisitModel>>> myVisits() {
         return success(visitService.listMyParentVisits(email()));
+    }
+
+    @PostMapping(ApiUrl.USER_VISIT_RATING)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<VisitRatingModel>> rateVisit(
+            @PathVariable String visitUuid,
+            @Valid @RequestBody VisitRatingRequest request) {
+        return success(visitService.rateVisit(visitUuid, request, email()));
     }
 
     private String email() {

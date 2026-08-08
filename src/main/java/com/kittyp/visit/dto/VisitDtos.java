@@ -10,8 +10,11 @@ import com.kittyp.visit.enums.VisitUrgency;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public final class VisitDtos {
 
@@ -104,7 +107,52 @@ public final class VisitDtos {
             LocalDateTime createdAt,
             VisitChartModel chart,
             String invoiceUuid,
-            String healthEventUuid) {
+            String healthEventUuid,
+            Integer parentRating) {
+        public VisitModel(
+                String uuid,
+                String clinicUuid,
+                String clinicName,
+                String petUuid,
+                String petName,
+                String ownerName,
+                String ownerEmail,
+                String ownerPhone,
+                String doctorUuid,
+                String doctorName,
+                String doctorSpecialization,
+                Double doctorExperienceYears,
+                VisitSource source,
+                BookingMode channel,
+                VisitStatus status,
+                VisitUrgency urgency,
+                String reasonForVisit,
+                LocalDateTime checkedInAt,
+                LocalDateTime startedAt,
+                LocalDateTime completedAt,
+                LocalDateTime createdAt,
+                VisitChartModel chart,
+                String invoiceUuid,
+                String healthEventUuid) {
+            this(uuid, clinicUuid, clinicName, petUuid, petName, ownerName, ownerEmail, ownerPhone, doctorUuid,
+                    doctorName, doctorSpecialization, doctorExperienceYears, source, channel, status, urgency,
+                    reasonForVisit, checkedInAt, startedAt, completedAt, createdAt, chart, invoiceUuid,
+                    healthEventUuid, null);
+        }
+    }
+
+    public record VisitRatingRequest(
+            @NotNull @Min(1) @Max(5) Integer stars,
+            @Size(max = 1000) String comment) {
+    }
+
+    public record VisitRatingModel(
+            String visitUuid,
+            String doctorUuid,
+            Integer stars,
+            String ratingLabel,
+            Double doctorRating,
+            Integer doctorReviewsCount) {
     }
 
     /** Aggregated pet + owner rows for doctor/clinic "attended patients" lists. */
