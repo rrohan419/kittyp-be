@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,6 +48,7 @@ import com.kittyp.clinic.dto.ClinicDtos.ClinicStatsModel;
 import com.kittyp.clinic.dto.ClinicDtos.CreateOwnerRequest;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorInvitePreview;
+import com.kittyp.notification.service.WhatsAppSettingsSupport;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteRequest;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
@@ -175,6 +177,7 @@ public class ClinicServiceImpl implements ClinicService {
     @Transactional
     public ClinicModel update(String clinicUuid, ClinicRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
         requireOperational(clinic);
         clinic.setName(request.name());
         clinic.setAddress(request.address());
@@ -182,6 +185,12 @@ public class ClinicServiceImpl implements ClinicService {
         clinic.setTimezone(request.timezone());
         clinic.setOperatingHours(request.operatingHours());
         return clinicModel(clinicDao.saveClinic(clinic));
+    }
+
+    @Override
+    public void requireClinicManager(String clinicUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
     }
 
     @Override
@@ -249,31 +258,12 @@ public class ClinicServiceImpl implements ClinicService {
         DoctorProfile doctor = affiliation.getDoctor();
         User user = doctor.getUser();
 
-        // Attended pets only from THIS clinic's bookings/visits — never import other clinics or personal pets.
-        Map<String, List<Booking>> bookingsByPet = bookingDao.findByClinic(clinic.getId()).stream()
-                .filter(b -> b.getDoctor() != null && doctor.getId().equals(b.getDoctor().getId()))
-                .filter(b -> b.getPet() != null)
-                .collect(Collectors.groupingBy(b -> b.getPet().getUuid()));
-
+        // Pets this doctor actually treated at this clinic (not waitlist / bookings-only).
         Map<String, ClinicDoctorPatientModel> patients = new HashMap<>();
-
-        for (Map.Entry<String, List<Booking>> entry : bookingsByPet.entrySet()) {
-            Pet pet = entry.getValue().get(0).getPet();
-            if (pet.getClinic() == null || !clinic.getId().equals(pet.getClinic().getId()) || pet.getClinicOwner() == null) {
-                continue;
-            }
-            LocalDateTime lastAppt = entry.getValue().stream()
-                    .map(Booking::getSlotStart)
-                    .filter(Objects::nonNull)
-                    .max(LocalDateTime::compareTo)
-                    .orElse(null);
-            patients.put(pet.getUuid(), new ClinicDoctorPatientModel(toPetListModel(pet), ownerSummary(pet.getClinicOwner()),
-                    entry.getValue().size(), lastAppt));
-        }
-
-        // Pets this doctor actually attended via walk-in / clinic-flow visits (pet + owner).
+        Set<VisitStatus> treated = EnumSet.of(
+                VisitStatus.IN_PROGRESS, VisitStatus.CHECKING_OUT, VisitStatus.COMPLETED);
         for (Visit visit : visitDao.findByClinicAndDoctor(clinic.getId(), doctor.getId())) {
-            if (visit.getStatus() == VisitStatus.CANCELLED || visit.getStatus() == VisitStatus.NO_SHOW) {
+            if (!treated.contains(visit.getStatus())) {
                 continue;
             }
             Pet pet = visit.getPet();
@@ -1613,7 +1603,7 @@ public class ClinicServiceImpl implements ClinicService {
         if (clinicAdmin && doctorHere) {
             return;
         }
-        throw new CustomException("You do not have permission to invite doctors for this clinic",
+        throw new CustomException("You do not have permission to manage this clinic",
                 HttpStatus.FORBIDDEN);
     }
 
@@ -1727,9 +1717,13 @@ public class ClinicServiceImpl implements ClinicService {
     private ClinicModel clinicModel(Clinic clinic, Long viewerUserId) {
         boolean personal = viewerUserId != null && clinic.getOwner() != null
                 && clinic.getOwner().getId().equals(viewerUserId);
+        boolean waConfigured = WhatsAppSettingsSupport.isConfigured(
+                clinic.getWhatsappPhoneNumberId(),
+                clinic.getWhatsappBusinessAccountId(),
+                clinic.getWhatsappToken());
         return new ClinicModel(clinic.getUuid(), clinic.getName(), clinic.getLicenseNumber(), clinic.getAddress(),
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
-                clinic.getStatus().name(), personal);
+                clinic.getStatus().name(), personal, waConfigured);
     }
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {
@@ -1740,7 +1734,10 @@ public class ClinicServiceImpl implements ClinicService {
                 doctor.getUser().getEmail(), doctor.getSpecialization() == null ? null : doctor.getSpecialization().name(),
                 affiliation.getRole(), affiliation.getIsActive(),
                 doctor.getStatus() == null ? null : doctor.getStatus().name(), doctor.getPhotoUrl(),
-                rating, reviews, ratingLabel(rating));
+                rating, reviews, ratingLabel(rating),
+                affiliation.getJoinedAt() == null ? null : affiliation.getJoinedAt().toString(),
+                doctor.getExperienceYears(),
+                doctor.getRegistrationNumber());
     }
 
     private static String ratingLabel(Double rating) {
@@ -1775,7 +1772,8 @@ public class ClinicServiceImpl implements ClinicService {
                 ownerName, booking.getDoctor() == null ? null : booking.getDoctor().getUuid(),
                 booking.getSlotStart(), booking.getSlotEnd(), booking.getTimezone(), booking.getStatus(),
                 booking.getMode() == null ? null : booking.getMode().name(), booking.getNotes(),
-                booking.getClinic() == null ? null : booking.getClinic().getUuid());
+                booking.getClinic() == null ? null : booking.getClinic().getUuid(),
+                booking.getClinic() == null ? null : booking.getClinic().getName());
     }
 
     private List<HealthEventModel> healthEventsFor(Long clinicId, String petUuid) {

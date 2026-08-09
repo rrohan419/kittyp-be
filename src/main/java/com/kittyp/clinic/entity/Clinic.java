@@ -1,12 +1,15 @@
 package com.kittyp.clinic.entity;
 
-import org.hibernate.annotations.DynamicUpdate;
-
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.kittyp.common.crypto.EncryptedStringConverter;
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.user.entity.User;
 
+import org.hibernate.annotations.DynamicUpdate;
+
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -57,6 +60,20 @@ public class Clinic extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String operatingHours;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "profile_image_url", columnDefinition = "TEXT")
     private String profileImageUrl;
+
+    /** Meta WhatsApp Cloud API Phone Number ID for this clinic's sender (never mixed with doctor). */
+    @Column(name = "whatsapp_phone_number_id", length = 64)
+    private String whatsappPhoneNumberId;
+
+    /** Meta WhatsApp Business Account (WABA) ID for this clinic. */
+    @Column(name = "whatsapp_business_account_id", length = 64)
+    private String whatsappBusinessAccountId;
+
+    /** Meta permanent token for this clinic's WABA number (write-only via API; encrypted at rest). */
+    @JsonIgnore
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "whatsapp_token", columnDefinition = "TEXT")
+    private String whatsappToken;
 }

@@ -605,11 +605,18 @@ public class VisitServiceImpl implements VisitService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AttendedPatientModel> listMyAttendedPatients(String email) {
+    public List<AttendedPatientModel> listMyAttendedPatients(String email, String clinicUuid) {
         DoctorProfile profile = requireDoctorProfile(email);
         Map<String, AttendedPatientModel> byPet = new HashMap<>();
+        // Only visits where this doctor actually treated the pet (not waitlist assignment alone).
+        Set<VisitStatus> seenStatuses = EnumSet.of(
+                VisitStatus.IN_PROGRESS, VisitStatus.CHECKING_OUT, VisitStatus.COMPLETED);
         for (Visit visit : visitDao.findByDoctor(profile.getId())) {
-            if (visit.getStatus() == VisitStatus.CANCELLED || visit.getStatus() == VisitStatus.NO_SHOW) {
+            if (!seenStatuses.contains(visit.getStatus())) {
+                continue;
+            }
+            if (clinicUuid != null && !clinicUuid.isBlank()
+                    && (visit.getClinic() == null || !clinicUuid.equals(visit.getClinic().getUuid()))) {
                 continue;
             }
             Pet pet = visit.getPet();
@@ -751,9 +758,17 @@ public class VisitServiceImpl implements VisitService {
         boolean allowed;
         Set<VisitStatus> flow = EnumSet.of(
                 VisitStatus.WAITLIST, VisitStatus.CHECKED_IN, VisitStatus.IN_PROGRESS, VisitStatus.CHECKING_OUT);
+        Set<VisitStatus> earlierThanCheckout = EnumSet.of(
+                VisitStatus.WAITLIST, VisitStatus.CHECKED_IN, VisitStatus.IN_PROGRESS);
         if (flow.contains(target) && flow.contains(current)) {
-            // Clinic front desk may drag between flow columns freely.
-            allowed = true;
+            if (current == VisitStatus.CHECKING_OUT && earlierThanCheckout.contains(target)) {
+                // Leave Checkout only within 30 minutes of entering it.
+                LocalDateTime checkingOutAt = visit.getCheckingOutAt();
+                allowed = checkingOutAt != null
+                        && !checkingOutAt.isBefore(LocalDateTime.now().minusMinutes(30));
+            } else {
+                allowed = true;
+            }
         } else if (flow.contains(target) && current == VisitStatus.COMPLETED) {
             // Reopen within 30 minutes of completion (e.g. dragged back from done).
             LocalDateTime completedAt = visit.getCompletedAt();
@@ -787,14 +802,16 @@ public class VisitServiceImpl implements VisitService {
                 visit.setStartedAt(now);
             }
         }
+        if (target == VisitStatus.CHECKING_OUT) {
+            visit.setCheckingOutAt(now);
+        }
         if (target == VisitStatus.COMPLETED) {
             visit.setCompletedAt(now);
         } else if (current == VisitStatus.COMPLETED && flow.contains(target)) {
             visit.setCompletedAt(null);
             clearHealthEventForReopen(visit);
-        } else if (current == VisitStatus.CHECKING_OUT
-                && (target == VisitStatus.WAITLIST || target == VisitStatus.CHECKED_IN
-                        || target == VisitStatus.IN_PROGRESS)) {
+        } else if (current == VisitStatus.CHECKING_OUT && earlierThanCheckout.contains(target)) {
+            visit.setCheckingOutAt(null);
             // Doctor finish already wrote a health event; undo if pulled back into active flow.
             clearHealthEventForReopen(visit);
         }
@@ -900,7 +917,8 @@ public class VisitServiceImpl implements VisitService {
                 booking.getStatus(),
                 booking.getMode() == null ? null : booking.getMode().name(),
                 booking.getNotes(),
-                booking.getClinic() == null ? null : booking.getClinic().getUuid());
+                booking.getClinic() == null ? null : booking.getClinic().getUuid(),
+                booking.getClinic() == null ? null : booking.getClinic().getName());
     }
 
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {
@@ -1075,6 +1093,7 @@ public class VisitServiceImpl implements VisitService {
                 visit.getCheckedInAt(),
                 visit.getStartedAt(),
                 visit.getCompletedAt(),
+                visit.getCheckingOutAt(),
                 visit.getCreatedAt(),
                 chart,
                 visit.getInvoiceUuid(),

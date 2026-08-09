@@ -18,9 +18,12 @@ import com.kittyp.common.exception.CustomException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -82,10 +85,26 @@ public class S3StorageService {
         return key;
     }
 
+    public byte[] downloadTreatmentInvoice(String invoiceUuid) {
+        String key = "treatment-invoices/" + invoiceUuid + ".pdf";
+        try {
+            ResponseBytes<GetObjectResponse> bytes = s3.getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(invoiceBucket)
+                    .key(key)
+                    .build());
+            return bytes.asByteArray();
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                throw new CustomException("Treatment invoice PDF not found", HttpStatus.NOT_FOUND);
+            }
+            throw new CustomException("Failed to download treatment invoice PDF", HttpStatus.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
     public URL presignedTreatmentInvoiceUrl(String invoiceUuid, Duration ttl) {
         String key = "treatment-invoices/" + invoiceUuid + ".pdf";
         try {
-            s3Client.headObject(HeadObjectRequest.builder()
+            s3.headObject(HeadObjectRequest.builder()
                     .bucket(invoiceBucket)
                     .key(key)
                     .build());

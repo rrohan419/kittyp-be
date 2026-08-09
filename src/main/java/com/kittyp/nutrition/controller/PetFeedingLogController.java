@@ -28,6 +28,7 @@ import com.kittyp.nutrition.entity.PetFeedingLog;
 import com.kittyp.nutrition.model.PetFeedingLogModel;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.service.PetAccessGuard;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class PetFeedingLogController {
     private final ApiResponse<?> responseBuilder;
     private final PetFeedingLogDao petFeedingLogDao;
     private final UserDao userDao;
+    private final PetAccessGuard petAccessGuard;
 
     @GetMapping(ApiUrl.PET_FEEDING_LOGS)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
@@ -47,7 +49,7 @@ public class PetFeedingLogController {
             @PathVariable String petUuid,
             @RequestParam(required = false) LocalDateTime from,
             @RequestParam(required = false) LocalDateTime to) {
-        assertCanViewFeeding(petUuid);
+        petAccessGuard.requirePetAccess(currentUser(), petUuid);
         LocalDateTime start = from == null ? LocalDate.now().minusDays(30).atStartOfDay() : from;
         LocalDateTime end = to == null ? LocalDateTime.now() : to;
         if (end.isBefore(start)) {
@@ -64,7 +66,8 @@ public class PetFeedingLogController {
     public ResponseEntity<SuccessResponse<PetFeedingLogModel>> addFeedingLog(
             @PathVariable String petUuid,
             @RequestBody @Valid PetFeedingLogRequest request) {
-        User user = ownerOf(petUuid);
+        User user = currentUser();
+        petAccessGuard.requireOwner(user, petUuid);
         PetFeedingLog log = PetFeedingLog.builder()
                 .petUuid(petUuid)
                 .userUuid(user.getUuid())
@@ -78,28 +81,9 @@ public class PetFeedingLogController {
                 ResponseMessage.SUCCESS, HttpStatus.CREATED);
     }
 
-    private void assertCanViewFeeding(String petUuid) {
+    private User currentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        User authenticatedUser = userDao.userByEmail(email);
-        User petOwner = userDao.userByPetUuid(petUuid);
-        if (authenticatedUser.getUuid().equals(petOwner.getUuid())) {
-            return;
-        }
-        boolean isDoctor = authenticatedUser.getUserRoles() != null && authenticatedUser.getUserRoles().stream()
-                .anyMatch(ur -> ur.getRole() != null && ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_DOCTOR);
-        if (!isDoctor) {
-            throw new CustomException("You are not authorized to access this pet", HttpStatus.FORBIDDEN);
-        }
-    }
-
-    private User ownerOf(String petUuid) {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        User authenticatedUser = userDao.userByEmail(email);
-        User petOwner = userDao.userByPetUuid(petUuid);
-        if (!authenticatedUser.getUuid().equals(petOwner.getUuid())) {
-            throw new CustomException("You are not authorized to access this pet", HttpStatus.FORBIDDEN);
-        }
-        return authenticatedUser;
+        return userDao.userByEmail(email);
     }
 
     private PetFeedingLogModel toModel(PetFeedingLog log) {

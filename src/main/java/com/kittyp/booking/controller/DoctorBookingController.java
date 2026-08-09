@@ -120,7 +120,8 @@ public class DoctorBookingController {
                 booking.getStatus(),
                 booking.getMode() == null ? null : booking.getMode().name(),
                 booking.getNotes(),
-                booking.getClinic() == null ? null : booking.getClinic().getUuid());
+                booking.getClinic() == null ? null : booking.getClinic().getUuid(),
+                booking.getClinic() == null ? null : booking.getClinic().getName());
     }
 
     private DoctorProfile currentDoctor() {

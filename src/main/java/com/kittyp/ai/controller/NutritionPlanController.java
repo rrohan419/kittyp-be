@@ -26,10 +26,12 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
-import com.kittyp.common.model.PaginationModel;
+import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.UserRepository;
+import com.kittyp.user.service.PetAccessGuard;
 
 import lombok.RequiredArgsConstructor;
 
@@ -41,13 +43,17 @@ public class NutritionPlanController {
     private final ApiResponse<?> responseBuilder;
     private final NutritionPlanService nutritionPlanService;
     private final UserRepository userRepository;
+    private final PetAccessGuard petAccessGuard;
 
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     @PostMapping("/ai/nutrition/plan/save")
     public ResponseEntity<SuccessResponse<String>> saveNutritionPlanAsync(
             @RequestBody SaveNutritionPlanDto saveNutritionPlanDto) {
+        User caller = currentUser();
+        petAccessGuard.requirePetAccess(caller, saveNutritionPlanDto.getPetUuid());
+        // Always bind ownership to the authenticated caller — ignore client userUuid.
         nutritionPlanService.saveNutritionPlanAsync(saveNutritionPlanDto.getPetUuid(),
-                saveNutritionPlanDto.getUserUuid(), saveNutritionPlanDto.getRecommendationResponse(),
+                caller.getUuid(), saveNutritionPlanDto.getRecommendationResponse(),
                 saveNutritionPlanDto.getEnvironmentDataDto(),
                 saveNutritionPlanDto.getPetName() + "'s Nutrition Plan" + "-" + LocalDate.now());
 
@@ -71,11 +77,42 @@ public class NutritionPlanController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) List<String> tags) {
 
+        User caller = currentUser();
+        String scopedUserUuid = userUuid;
+        String scopedDoctorUuid = doctorUserUuid;
+
+        if (!petAccessGuard.isAdmin(caller)) {
+            if (petUuid != null && !petUuid.isBlank()) {
+                petAccessGuard.requirePetAccess(caller, petUuid);
+            }
+
+            if (petAccessGuard.isDoctorLike(caller)) {
+                // Doctors may only query their own doctor scope or a pet they can access.
+                if (scopedDoctorUuid != null && !scopedDoctorUuid.equals(caller.getUuid())) {
+                    scopedDoctorUuid = caller.getUuid();
+                }
+                if (scopedUserUuid != null && !scopedUserUuid.equals(caller.getUuid())
+                        && (petUuid == null || petUuid.isBlank())) {
+                    throw new CustomException("You are not authorized to list plans for that user",
+                            HttpStatus.FORBIDDEN);
+                }
+                if ((petUuid == null || petUuid.isBlank())
+                        && (scopedUserUuid == null || scopedUserUuid.isBlank())
+                        && (scopedDoctorUuid == null || scopedDoctorUuid.isBlank())) {
+                    scopedDoctorUuid = caller.getUuid();
+                }
+            } else {
+                // Pet parents: always scoped to self; never honor foreign userUuid.
+                scopedUserUuid = caller.getUuid();
+                scopedDoctorUuid = null;
+            }
+        }
+
         NutritionPlanFilter nutritionPlanFilter = NutritionPlanFilter.builder()
                 .petUuid(petUuid)
                 .uuid(uuid)
-                .userUuid(userUuid)
-                .doctorUserUuid(doctorUserUuid)
+                .userUuid(scopedUserUuid)
+                .doctorUserUuid(scopedDoctorUuid)
                 .isActive(isActive)
                 .status(status)
                 .searchText(searchText)
@@ -109,8 +146,10 @@ public class NutritionPlanController {
     @GetMapping(ApiUrl.NUTRITION_PLAN_ACTIVE)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<NutritionPlan>> activePlan(@RequestParam String petUuid) {
+        User caller = currentUser();
+        petAccessGuard.requirePetAccess(caller, petUuid);
         return responseBuilder.buildSuccessResponse(
-                nutritionPlanService.getActivePlanForParent(petUuid, currentUser().getUuid()),
+                nutritionPlanService.getActivePlanForParent(petUuid, caller.getUuid()),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

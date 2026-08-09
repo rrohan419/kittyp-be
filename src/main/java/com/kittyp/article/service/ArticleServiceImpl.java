@@ -135,12 +135,17 @@ public class ArticleServiceImpl implements ArticleService {
 	public ArticleModel saveArticle(ArticleDto articleDto) {
 		Article article = mapper.convert(articleDto, Article.class);
 
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		User user = userDao.userByEmail(email);
+		boolean admin = user.getUserRoles() != null && user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_ADMIN);
+
 		Author author;
-		if (articleDto.getAuthorId() != null) {
+		if (admin && articleDto.getAuthorId() != null) {
 			author = authorDao.authorById(articleDto.getAuthorId());
 		} else {
-			String email = SecurityContextHolder.getContext().getAuthentication().getName();
-			User user = userDao.userByEmail(email);
+			// Force author from authenticated user — ignore client authorId unless admin.
 			String displayName = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
 					+ (user.getLastName() != null ? user.getLastName() : "")).trim();
 			AuthorModel authorModel = authorService.getOrCreateForUser(user.getUuid(), displayName,
@@ -180,6 +185,8 @@ public class ArticleServiceImpl implements ArticleService {
 			throw new CustomException(String.format(env.getProperty(ExceptionConstant.ARTICLE_NOT_FOUND), slug),
 					HttpStatus.NOT_FOUND);
 		}
+
+		requireArticleOwnerOrAdmin(article);
 
 		if (articleEditDto.getTitle() != null && !articleEditDto.getTitle().isEmpty()) {
 			article.setTitle(articleEditDto.getTitle());
@@ -394,6 +401,21 @@ public class ArticleServiceImpl implements ArticleService {
 				|| article.getStatus() == ArticleStatus.DRAFT
 				|| article.getStatus() == ArticleStatus.ARCHIVED) {
 			article.setScheduledPublishAt(null);
+		}
+	}
+
+	private void requireArticleOwnerOrAdmin(Article article) {
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		User user = userDao.userByEmail(email);
+		boolean admin = user.getUserRoles() != null && user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_ADMIN);
+		if (admin) {
+			return;
+		}
+		Author author = article.getAuthor();
+		if (author == null || author.getUserUuid() == null || !author.getUserUuid().equals(user.getUuid())) {
+			throw new CustomException("You are not authorized to edit this article", HttpStatus.FORBIDDEN);
 		}
 	}
 

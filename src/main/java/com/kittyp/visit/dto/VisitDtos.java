@@ -104,6 +104,7 @@ public final class VisitDtos {
             LocalDateTime checkedInAt,
             LocalDateTime startedAt,
             LocalDateTime completedAt,
+            LocalDateTime checkingOutAt,
             LocalDateTime createdAt,
             VisitChartModel chart,
             String invoiceUuid,
@@ -136,7 +137,7 @@ public final class VisitDtos {
                 String healthEventUuid) {
             this(uuid, clinicUuid, clinicName, petUuid, petName, ownerName, ownerEmail, ownerPhone, doctorUuid,
                     doctorName, doctorSpecialization, doctorExperienceYears, source, channel, status, urgency,
-                    reasonForVisit, checkedInAt, startedAt, completedAt, createdAt, chart, invoiceUuid,
+                    reasonForVisit, checkedInAt, startedAt, completedAt, null, createdAt, chart, invoiceUuid,
                     healthEventUuid, null);
         }
     }

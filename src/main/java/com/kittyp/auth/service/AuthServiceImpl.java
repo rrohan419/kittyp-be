@@ -72,6 +72,7 @@ public class AuthServiceImpl implements AuthService {
 	private final VerificationCodeService verificationCodeService;
 	private final SmsService smsService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
+	private final LoginRateLimiter loginRateLimiter;
 
 	@Transactional
 	@Override
@@ -330,28 +331,34 @@ public class AuthServiceImpl implements AuthService {
 	}
 
 	@Override
-	public JwtResponseModel loginUser(LoginRequestDto loginRequestDto) {
-		
-		Authentication authentication = authenticationManager.authenticate(
-				new UsernamePasswordAuthenticationToken(loginRequestDto.getEmail(), loginRequestDto.getPassword()));
-
-		SecurityContextHolder.getContext().setAuthentication(authentication);
-		String jwt = jwtUtils.generateJwtToken(authentication);
-
-		UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-		List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
-
-		// Late clinic CRM link: parent may have been registered at a clinic months ago.
+	public JwtResponseModel loginUser(LoginRequestDto loginRequestDto, String clientIp) {
+		loginRateLimiter.assertAllowed(clientIp, loginRequestDto.getEmail());
 		try {
-			User user = userDao.userByEmail(userDetails.getEmail());
-			if (user != null) {
-				clinicOwnerUserLinkService.linkUserToClinicOwners(user);
-			}
-		} catch (Exception ignored) {
-			// Login must not fail if linking has an edge-case conflict.
-		}
+			Authentication authentication = authenticationManager.authenticate(
+					new UsernamePasswordAuthenticationToken(loginRequestDto.getEmail(), loginRequestDto.getPassword()));
 
-		return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
+			SecurityContextHolder.getContext().setAuthentication(authentication);
+			String jwt = jwtUtils.generateJwtToken(authentication);
+
+			UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+			List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
+
+			// Late clinic CRM link: parent may have been registered at a clinic months ago.
+			try {
+				User user = userDao.userByEmail(userDetails.getEmail());
+				if (user != null) {
+					clinicOwnerUserLinkService.linkUserToClinicOwners(user);
+				}
+			} catch (Exception ignored) {
+				// Login must not fail if linking has an edge-case conflict.
+			}
+
+			loginRateLimiter.clear(clientIp, loginRequestDto.getEmail());
+			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
+		} catch (org.springframework.security.core.AuthenticationException ex) {
+			loginRateLimiter.recordFailure(clientIp, loginRequestDto.getEmail());
+			throw ex;
+		}
 	}
 
 	@Override

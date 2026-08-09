@@ -6,7 +6,9 @@ import java.util.Set;
 
 import org.hibernate.annotations.DynamicUpdate;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.common.crypto.EncryptedStringConverter;
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.common.enums.DoctorSpecialization;
 import com.kittyp.doctor.enums.DoctorStatus;
@@ -14,6 +16,7 @@ import com.kittyp.user.entity.User;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -51,6 +54,20 @@ public class DoctorProfile extends BaseEntity {
     private String registrationNumber;
 
     private String phoneNumber;
+
+    /** Meta WhatsApp Cloud API Phone Number ID for this doctor's personal sender. */
+    @Column(name = "whatsapp_phone_number_id", length = 64)
+    private String whatsappPhoneNumberId;
+
+    /** Meta WhatsApp Business Account (WABA) ID. */
+    @Column(name = "whatsapp_business_account_id", length = 64)
+    private String whatsappBusinessAccountId;
+
+    /** Meta permanent token for this doctor's WABA number (write-only via API; encrypted at rest). */
+    @JsonIgnore
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "whatsapp_token", columnDefinition = "TEXT")
+    private String whatsappToken;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 50)

@@ -24,7 +24,7 @@ public interface AuthService {
 
 	Map<String, Boolean> verifySignupOtp(SignupOtpVerifyRequest request);
 	
-	JwtResponseModel loginUser(LoginRequestDto loginRequestDto);
+	JwtResponseModel loginUser(LoginRequestDto loginRequestDto, String clientIp);
 
 	JwtResponseModel googleUserSignin(SocialSso socialSso);
 }

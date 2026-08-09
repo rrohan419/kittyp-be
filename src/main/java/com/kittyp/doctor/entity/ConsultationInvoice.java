@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 
 import org.hibernate.annotations.DynamicUpdate;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.doctor.enums.ConsultationInvoiceStatus;
@@ -33,6 +35,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ConsultationInvoice extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -41,10 +44,12 @@ public class ConsultationInvoice extends BaseEntity {
     @Column(name = "invoice_number", unique = true, length = 40)
     private String invoiceNumber;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "doctor_user_id", nullable = false)
     private User doctor;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "clinic_id")
     private Clinic clinic;
@@ -52,6 +57,7 @@ public class ConsultationInvoice extends BaseEntity {
     @Column(name = "pet_uuid")
     private String petUuid;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_user_id")
     private User owner;

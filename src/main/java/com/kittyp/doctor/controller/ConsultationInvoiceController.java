@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -46,29 +48,34 @@ public class ConsultationInvoiceController {
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> createInvoice(
             @Valid @RequestBody CreateConsultationInvoiceDto request) {
-        ConsultationInvoice invoice = treatmentInvoiceService.create(currentUser(), request);
+        ConsultationInvoice invoice = treatmentInvoiceService.createAndOptionallySendWhatsApp(currentUser(), request);
         return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.CREATED);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_MINE)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<List<ConsultationInvoice>>> myInvoices() {
-        return responseBuilder.buildSuccessResponse(
-                consultationInvoiceRepository.findAllByDoctor_IdOrderByCreatedAtDesc(currentUser().getId()),
-                ResponseMessage.SUCCESS, HttpStatus.OK);
+        User doctor = currentUser();
+        List<ConsultationInvoice> mine = consultationInvoiceRepository
+                .findAllByDoctor_IdOrderByCreatedAtDesc(doctor.getId())
+                .stream()
+                .filter(inv -> isDoctorPersonalInvoice(inv, doctor))
+                .toList();
+        return responseBuilder.buildSuccessResponse(mine, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_BY_UUID)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> getInvoice(@PathVariable String uuid) {
-        return responseBuilder.buildSuccessResponse(requireOwnedInvoice(uuid), ResponseMessage.SUCCESS, HttpStatus.OK);
+        return responseBuilder.buildSuccessResponse(requireDoctorOperableInvoice(uuid), ResponseMessage.SUCCESS,
+                HttpStatus.OK);
     }
 
     @PatchMapping(ApiUrl.CONSULTATION_INVOICE_STATUS)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> updateStatus(
             @PathVariable String uuid, @Valid @RequestBody UpdateConsultationInvoiceStatusDto request) {
-        ConsultationInvoice invoice = requireOwnedInvoice(uuid);
+        ConsultationInvoice invoice = requireDoctorOperableInvoice(uuid);
         invoice.setStatus(request.getStatus());
         return responseBuilder.buildSuccessResponse(consultationInvoiceRepository.save(invoice),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -77,14 +84,22 @@ public class ConsultationInvoiceController {
     @PostMapping(ApiUrl.CONSULTATION_INVOICE_GENERATE_PDF)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> generatePdf(@PathVariable String uuid) {
-        ConsultationInvoice invoice = treatmentInvoiceService.generateAndAttachPdf(requireOwnedInvoice(uuid));
+        ConsultationInvoice invoice = treatmentInvoiceService.generateAndAttachPdf(requireDoctorOperableInvoice(uuid));
+        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.CONSULTATION_INVOICE_SEND_WHATSAPP)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ConsultationInvoice>> sendWhatsApp(@PathVariable String uuid) {
+        ConsultationInvoice invoice = treatmentInvoiceService.sendInvoiceWhatsApp(
+                requireDoctorOperableInvoice(uuid), null);
         return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_PDF)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<Map<String, String>>> getPdfUrl(@PathVariable String uuid) {
-        ConsultationInvoice invoice = requireOwnedInvoice(uuid);
+        ConsultationInvoice invoice = requireDoctorOperableInvoice(uuid);
         String url = treatmentInvoiceService.getPresignedPdfUrl(invoice);
         return responseBuilder.buildSuccessResponse(Map.of("url", url), ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -95,8 +110,25 @@ public class ConsultationInvoiceController {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
     }
 
-    private ConsultationInvoice requireOwnedInvoice(String uuid) {
-        return consultationInvoiceRepository.findByUuidAndDoctor_Id(uuid, currentUser().getId())
+    /**
+     * Doctor may only read/mutate/send invoices for personal practice (no clinic, or clinic they own).
+     * Clinic-branch invoices must go through clinic APIs (prevents wrong WhatsApp sender + status IDOR).
+     */
+    private ConsultationInvoice requireDoctorOperableInvoice(String uuid) {
+        User doctor = currentUser();
+        ConsultationInvoice invoice = consultationInvoiceRepository.findByUuidAndDoctor_Id(uuid, doctor.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Consultation invoice", "uuid", uuid));
+        if (!isDoctorPersonalInvoice(invoice, doctor)) {
+            throw new AccessDeniedException("Clinic invoices must be managed from the clinic portal.");
+        }
+        return invoice;
+    }
+
+    private static boolean isDoctorPersonalInvoice(ConsultationInvoice invoice, User doctor) {
+        Clinic clinic = invoice.getClinic();
+        if (clinic == null) {
+            return true;
+        }
+        return clinic.getOwner() != null && clinic.getOwner().getId().equals(doctor.getId());
     }
 }

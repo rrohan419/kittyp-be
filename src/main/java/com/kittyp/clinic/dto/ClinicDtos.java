@@ -22,26 +22,32 @@ public final class ClinicDtos {
     }
 
     public record ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
-            String timezone, String operatingHours, String status, Boolean personal) {
-        /** Backward-compatible ctor without personal flag. */
+            String timezone, String operatingHours, String status, Boolean personal, Boolean whatsappConfigured) {
+        /** Backward-compatible ctor without personal / whatsapp flags. */
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status) {
-            this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, false);
+            this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, false, false);
+        }
+
+        public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
+                String timezone, String operatingHours, String status, Boolean personal) {
+            this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal, false);
         }
     }
 
     public record DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
             String role, Boolean isActive, String status, String photoUrl, Double rating, Integer reviewsCount,
-            String ratingLabel) {
+            String ratingLabel, String joinedAt, Double experienceYears, String registrationNumber) {
         public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
                 String role, Boolean isActive) {
-            this(doctorUuid, userUuid, name, email, specialization, role, isActive, null, null, null, null, null);
+            this(doctorUuid, userUuid, name, email, specialization, role, isActive, null, null, null, null, null,
+                    null, null, null);
         }
 
         public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
                 String role, Boolean isActive, String status, String photoUrl) {
             this(doctorUuid, userUuid, name, email, specialization, role, isActive, status, photoUrl, null, null,
-                    null);
+                    null, null, null, null);
         }
     }
 
@@ -191,12 +197,19 @@ public final class ClinicDtos {
 
     public record BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
             LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
-            String notes, String clinicUuid) {
+            String notes, String clinicUuid, String clinicName) {
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    null);
+                    null, null);
+        }
+
+        public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
+                LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
+                String notes, String clinicUuid) {
+            this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
+                    clinicUuid, null);
         }
     }
 

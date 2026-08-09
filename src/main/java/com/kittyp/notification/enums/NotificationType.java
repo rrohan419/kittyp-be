@@ -12,5 +12,13 @@ public enum NotificationType {
     /** Doctor accepted or declined a clinic invite. */
     CLINIC_DOCTOR_INVITE_RESPONSE,
     /** Clinic assigned / checked in a patient for this doctor. */
-    CLINIC_VISIT_ASSIGNED
+    CLINIC_VISIT_ASSIGNED,
+    /** Treatment / consultation invoice sent to owner (e.g. WhatsApp). */
+    INVOICE_SENT,
+    /** Vaccination due reminder (WhatsApp / push / email). */
+    VACCINE_REMINDER,
+    /** Routine checkup / follow-up reminder. */
+    CHECKUP_REMINDER,
+    /** Clinic or platform promotional offer. */
+    PROMO_OFFER
 }

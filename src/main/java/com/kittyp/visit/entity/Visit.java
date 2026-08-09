@@ -86,6 +86,9 @@ public class Visit extends BaseEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "checking_out_at")
+    private LocalDateTime checkingOutAt;
+
     @Column(name = "examination_notes", columnDefinition = "TEXT")
     private String examinationNotes;
 

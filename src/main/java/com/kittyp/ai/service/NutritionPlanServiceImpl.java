@@ -38,11 +38,15 @@ import com.kittyp.ai.model.NutritionRecommendationResponse.RecommendedProduct;
 import com.kittyp.ai.model.NutritionRecommendationResponse.SpecialConsideration;
 import com.kittyp.ai.repository.NutritionPlanRepository;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.nutrition.entity.PetDailyPlan;
 import com.kittyp.nutrition.enums.ItemType;
 import com.kittyp.nutrition.service.PetDailyPlanService;
+import com.kittyp.user.entity.User;
+import com.kittyp.user.repository.UserRepository;
+import com.kittyp.user.service.PetAccessGuard;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +60,8 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     private final NutritionPlanDao nutritionPlanDao;
     private final Mapper mapper;
     private final PetDailyPlanService petDailyPlanService;
+    private final PetAccessGuard petAccessGuard;
+    private final UserRepository userRepository;
 
     @Async("taskExecutor")
     @Override
@@ -298,6 +304,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     @Override
     public NutritionPlan approvePlan(String planUuid, String doctorUserUuid) {
         NutritionPlan plan = getPlan(planUuid);
+        assertDoctorClinicalAccess(doctorUserUuid, plan.getPetUuid());
         plan.setDoctorUserUuid(doctorUserUuid);
         plan.setStatus(NutritionPlanStatus.APPROVED);
         plan.setApprovedAt(LocalDateTime.now());
@@ -308,6 +315,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     @Override
     public NutritionPlan sendPlan(String planUuid, String doctorUserUuid) {
         NutritionPlan plan = getPlan(planUuid);
+        assertDoctorClinicalAccess(doctorUserUuid, plan.getPetUuid());
         plan.setDoctorUserUuid(doctorUserUuid);
         if (plan.getApprovedAt() == null) {
             plan.setApprovedAt(LocalDateTime.now());
@@ -352,6 +360,12 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     private NutritionPlan getPlan(String planUuid) {
         return nutritionPlanRepository.findByUuid(planUuid)
                 .orElseThrow(() -> new CustomException("Nutrition plan not found with UUID: " + planUuid));
+    }
+
+    private void assertDoctorClinicalAccess(String doctorUserUuid, String petUuid) {
+        User doctor = userRepository.findByUuid(doctorUserUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "uuid", doctorUserUuid));
+        petAccessGuard.requireClinicalAccess(doctor, petUuid);
     }
 
     private String generateDefaultPlanName() {

@@ -31,6 +31,7 @@ import com.kittyp.common.model.MessageResponse;
 import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.service.UserService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
@@ -48,9 +49,10 @@ public class AuthController {
 
 	@PostMapping(ApiUrl.SIGNIN)
 	public ResponseEntity<SuccessResponse<JwtResponseModel>> authenticateUser(
-			@Valid @RequestBody LoginRequestDto loginRequest) {
+			@Valid @RequestBody LoginRequestDto loginRequest,
+			HttpServletRequest request) {
 
-		JwtResponseModel response = authService.loginUser(loginRequest);
+		JwtResponseModel response = authService.loginUser(loginRequest, clientIp(request));
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
@@ -120,5 +122,13 @@ public class AuthController {
 		// Always return success to prevent email enumeration
 		userService.sendResetPasswordCode(email);
 		return responseBuilder.buildSuccessResponse(true, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	private static String clientIp(HttpServletRequest request) {
+		String forwarded = request.getHeader("X-Forwarded-For");
+		if (forwarded != null && !forwarded.isBlank()) {
+			return forwarded.split(",")[0].trim();
+		}
+		return request.getRemoteAddr();
 	}
 }

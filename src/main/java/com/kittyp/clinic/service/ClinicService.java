@@ -38,6 +38,9 @@ public interface ClinicService {
 
     ClinicModel update(String clinicUuid, ClinicRequest request, String email);
 
+    /** Owner or staff/admin of this clinic (not affiliated-only doctors). */
+    void requireClinicManager(String clinicUuid, String email);
+
     List<DoctorModel> doctors(String clinicUuid, String email);
 
     ClinicDoctorDetailModel doctorDetail(String clinicUuid, String doctorUuid, String email);

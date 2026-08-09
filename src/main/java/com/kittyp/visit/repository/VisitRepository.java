@@ -1,6 +1,7 @@
 package com.kittyp.visit.repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -123,4 +124,7 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
 
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
     List<Visit> findByDoctor_IdOrderByCreatedAtDesc(Long doctorId);
+
+    boolean existsByDoctor_IdAndPet_UuidAndIsActiveTrueAndStatusIn(
+            Long doctorId, String petUuid, Collection<VisitStatus> statuses);
 }

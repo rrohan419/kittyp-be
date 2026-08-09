@@ -60,5 +60,10 @@ public class CreateConsultationInvoiceDto {
     private String ownerEmail;
     private String ownerAddress;
 
+    private String visitUuid;
+
     private Boolean generatePdf;
+
+    /** When true with generatePdf, upload PDF to Meta and send invoice_receipt template. */
+    private Boolean sendWhatsApp;
 }

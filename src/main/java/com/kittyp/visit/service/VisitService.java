@@ -57,5 +57,6 @@ public interface VisitService {
 
     VisitRatingModel rateVisit(String visitUuid, VisitRatingRequest request, String email);
 
-    List<AttendedPatientModel> listMyAttendedPatients(String email);
+    /** Pets this doctor attended across clinics (or one clinic when clinicUuid is set). */
+    List<AttendedPatientModel> listMyAttendedPatients(String email, String clinicUuid);
 }

@@ -51,8 +51,9 @@ public class DoctorVisitController {
 
     @GetMapping(ApiUrl.DOCTOR_ATTENDED_PATIENTS)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<List<AttendedPatientModel>>> attendedPatients() {
-        return success(visitService.listMyAttendedPatients(email()));
+    public ResponseEntity<SuccessResponse<List<AttendedPatientModel>>> attendedPatients(
+            @RequestParam(required = false) String clinicUuid) {
+        return success(visitService.listMyAttendedPatients(email(), clinicUuid));
     }
 
     @PostMapping(ApiUrl.DOCTOR_VISIT_START)

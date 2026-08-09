@@ -29,14 +29,21 @@ import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
 import com.kittyp.doctor.dto.TreatmentInvoiceData;
 import com.kittyp.doctor.dto.TreatmentLineItemDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
+import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.ConsultationInvoiceStatus;
 import com.kittyp.doctor.enums.TreatmentInvoiceItemType;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
+import com.kittyp.doctor.repository.DoctorProfileRepository;
 import com.kittyp.payment.util.PdfGenerator;
+import com.kittyp.notification.service.OutboundMessageService;
+import com.kittyp.notification.service.WhatsAppPhones;
+import com.kittyp.notification.service.WhatsAppSenderCredentials;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
+import com.kittyp.visit.dao.VisitDao;
+import com.kittyp.visit.entity.Visit;
 
 import lombok.RequiredArgsConstructor;
 
@@ -52,9 +59,12 @@ public class TreatmentInvoiceService {
     private final ClinicPetOwnerRepository clinicPetOwnerRepository;
     private final PetsRepository petsRepository;
     private final UserRepository userRepository;
+    private final DoctorProfileRepository doctorProfileRepository;
+    private final VisitDao visitDao;
     private final ObjectMapper objectMapper;
     private final PdfGenerator pdfGenerator;
     private final S3StorageService s3StorageService;
+    private final OutboundMessageService outboundMessageService;
 
     @Transactional
     public ConsultationInvoice create(User doctor, CreateConsultationInvoiceDto request) {
@@ -70,20 +80,29 @@ public class TreatmentInvoiceService {
         BigDecimal cgst = nz(request.getCgst());
         BigDecimal sgst = nz(request.getSgst());
         BigDecimal igst = nz(request.getIgst());
-        BigDecimal tax = request.getTax() != null ? request.getTax() : cgst.add(sgst).add(igst);
-        BigDecimal subtotal = request.getSubtotal() != null ? request.getSubtotal() : computed;
-        BigDecimal grandTotal = request.getAmount() != null
-                ? request.getAmount()
-                : subtotal.subtract(discount).add(tax).max(BigDecimal.ZERO);
         BigDecimal paid = nz(request.getPaidAmount());
-        BigDecimal balance = request.getBalance() != null
-                ? request.getBalance()
-                : grandTotal.subtract(paid).max(BigDecimal.ZERO);
+        // Always derive money server-side — never trust client amount/balance/subtotal/tax totals.
+        BigDecimal subtotal = computed;
+        rejectNegativeMoney(discount, cgst, sgst, igst, paid);
+        if (discount.compareTo(subtotal) > 0) {
+            throw new CustomException("Discount cannot exceed subtotal", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal tax = cgst.add(sgst).add(igst);
+        BigDecimal grandTotal = subtotal.subtract(discount).add(tax).max(BigDecimal.ZERO);
+        if (paid.compareTo(grandTotal) > 0) {
+            throw new CustomException("Paid amount cannot exceed grand total", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal balance = grandTotal.subtract(paid).max(BigDecimal.ZERO);
 
         Clinic clinic = null;
         if (request.getClinicUuid() != null && !request.getClinicUuid().isBlank()) {
             clinic = requireClinic(request.getClinicUuid());
             requireDoctorAffiliated(clinic, doctor);
+            // Doctor portal may only bill personal (owned) practice — not affiliated clinics.
+            if (clinic.getOwner() == null || !clinic.getOwner().getId().equals(doctor.getId())) {
+                throw new AccessDeniedException(
+                        "Clinic-branch invoices must be created from the clinic portal.");
+            }
         }
 
         User owner = null;
@@ -109,6 +128,7 @@ public class TreatmentInvoiceService {
         }
 
         String invoiceNumber = nextInvoiceNumber();
+        String visitUuid = blankToNull(request.getVisitUuid());
 
         ConsultationInvoice invoice = ConsultationInvoice.builder()
                 .uuid(UUID.randomUUID().toString())
@@ -117,6 +137,7 @@ public class TreatmentInvoiceService {
                 .clinic(clinic)
                 .petUuid(petUuid)
                 .owner(owner)
+                .visitUuid(visitUuid)
                 .lineItems(writeJson(items))
                 .petSnapshot(writeJson(petSnapshot(request)))
                 .ownerSnapshot(writeJson(ownerSnapshot(request, owner)))
@@ -146,10 +167,309 @@ public class TreatmentInvoiceService {
 
         invoice = invoiceRepository.save(invoice);
 
-        if (Boolean.TRUE.equals(request.getGeneratePdf())) {
+        if (visitUuid != null) {
+            Visit visit = visitDao.findByUuid(visitUuid)
+                    .orElseThrow(() -> new ResourceNotFoundException("visit", "uuid", visitUuid));
+            if (visit.getDoctor() == null || visit.getDoctor().getUser() == null
+                    || !visit.getDoctor().getUser().getId().equals(doctor.getId())) {
+                throw new AccessDeniedException("Visit is not owned by this doctor");
+            }
+            visit.setInvoiceUuid(invoice.getUuid());
+            visitDao.save(visit);
+        }
+
+        if (Boolean.TRUE.equals(request.getGeneratePdf()) || Boolean.TRUE.equals(request.getSendWhatsApp())) {
             invoice = generateAndAttachPdf(invoice);
         }
         return invoice;
+    }
+
+    /**
+     * Persists invoice (+ PDF when requested), then sends WhatsApp outside the create transaction
+     * so a Meta/config failure does not roll back the saved invoice.
+     */
+    public ConsultationInvoice createAndOptionallySendWhatsApp(User doctor, CreateConsultationInvoiceDto request) {
+        boolean sendWa = Boolean.TRUE.equals(request.getSendWhatsApp());
+        ConsultationInvoice invoice = create(doctor, request);
+        if (sendWa) {
+            // Destination is always the phone frozen on the invoice — never a client override.
+            invoice = sendInvoiceWhatsApp(invoice, null, doctorSender(doctor));
+        }
+        return invoice;
+    }
+
+    @Transactional
+    public ConsultationInvoice createForClinic(Clinic clinic, User actor, CreateConsultationInvoiceDto request) {
+        if (request.getClinicUuid() == null || request.getClinicUuid().isBlank()) {
+            request.setClinicUuid(clinic.getUuid());
+        } else if (!clinic.getUuid().equals(request.getClinicUuid())) {
+            throw new CustomException("clinicUuid does not match path", HttpStatus.BAD_REQUEST);
+        }
+        User billingDoctor = resolveClinicBillingDoctor(clinic, request);
+        return createAsClinicBilling(billingDoctor, clinic, request);
+    }
+
+    public ConsultationInvoice createForClinicAndOptionallySend(
+            Clinic clinic, User actor, CreateConsultationInvoiceDto request) {
+        boolean sendWa = Boolean.TRUE.equals(request.getSendWhatsApp());
+        ConsultationInvoice invoice = createForClinic(clinic, actor, request);
+        if (sendWa) {
+            invoice = sendInvoiceWhatsApp(invoice, null, clinicSender(clinic));
+        }
+        return invoice;
+    }
+
+    @Transactional
+    public ConsultationInvoice sendInvoiceWhatsApp(
+            ConsultationInvoice invoice, String overridePhone, WhatsAppSenderCredentials sender) {
+        outboundMessageService.requireSenderReady(sender, senderOwnerLabel(invoice));
+        ConsultationInvoice managed = invoice.getUuid() != null
+                ? invoiceRepository.findByUuid(invoice.getUuid()).orElse(invoice)
+                : invoice;
+        if (managed.getPdfUrl() == null || managed.getPdfUrl().isBlank()) {
+            managed = generateAndAttachPdf(managed);
+        }
+        String phone = resolveOwnerPhone(managed, overridePhone);
+        byte[] pdf = s3StorageService.downloadTreatmentInvoice(managed.getUuid());
+        String filename = (managed.getInvoiceNumber() != null ? managed.getInvoiceNumber() : managed.getUuid())
+                + ".pdf";
+        Map<String, Object> pet = readMap(managed.getPetSnapshot());
+        Map<String, Object> ownerSnap = readMap(managed.getOwnerSnapshot());
+        String ownerName = stringVal(ownerSnap.get("ownerName"), "Pet parent");
+        String clinicName = managed.getClinic() != null && managed.getClinic().getName() != null
+                ? managed.getClinic().getName()
+                : "KittyP Clinic";
+        String petName = stringVal(pet.get("petName"), "your pet");
+        String invoiceNo = managed.getInvoiceNumber() != null ? managed.getInvoiceNumber() : managed.getUuid();
+        String amount = managed.getAmount() != null
+                ? managed.getAmount().setScale(2, RoundingMode.HALF_UP).toPlainString()
+                : "0.00";
+
+        Pet petEntity = null;
+        if (managed.getPetUuid() != null) {
+            petEntity = petsRepository.findByUuid(managed.getPetUuid());
+        }
+
+        outboundMessageService.sendInvoicePdfWhatsApp(
+                sender,
+                phone,
+                pdf,
+                filename,
+                List.of(ownerName, clinicName, petName, invoiceNo, amount),
+                managed.getOwner(),
+                petEntity);
+        return managed;
+    }
+
+    /** Doctor personal send — DoctorProfile credentials only. */
+    public ConsultationInvoice sendInvoiceWhatsApp(ConsultationInvoice invoice, String overridePhone) {
+        return sendInvoiceWhatsApp(invoice, overridePhone, doctorSender(invoice.getDoctor()));
+    }
+
+    public List<ConsultationInvoice> listForClinic(Clinic clinic) {
+        return invoiceRepository.findAllByClinic_IdOrderByCreatedAtDesc(clinic.getId());
+    }
+
+    public ConsultationInvoice requireClinicInvoice(Clinic clinic, String invoiceUuid) {
+        return invoiceRepository.findByUuidAndClinic_Id(invoiceUuid, clinic.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Consultation invoice", "uuid", invoiceUuid));
+    }
+
+    public WhatsAppSenderCredentials doctorSender(User doctor) {
+        if (doctor == null) {
+            return WhatsAppSenderCredentials.of(null, null);
+        }
+        DoctorProfile profile = doctorProfileRepository.findByUser_Id(doctor.getId());
+        if (profile == null) {
+            return WhatsAppSenderCredentials.of(null, null);
+        }
+        return WhatsAppSenderCredentials.of(profile.getWhatsappToken(), profile.getWhatsappPhoneNumberId());
+    }
+
+    public WhatsAppSenderCredentials clinicSender(Clinic clinic) {
+        if (clinic == null) {
+            return WhatsAppSenderCredentials.of(null, null);
+        }
+        return WhatsAppSenderCredentials.of(clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
+    }
+
+    private String senderOwnerLabel(ConsultationInvoice invoice) {
+        if (invoice.getClinic() != null && invoice.getClinic().getOwner() != null
+                && invoice.getDoctor() != null
+                && !invoice.getClinic().getOwner().getId().equals(invoice.getDoctor().getId())) {
+            return "clinic";
+        }
+        return "doctor";
+    }
+
+    private User resolveClinicBillingDoctor(Clinic clinic, CreateConsultationInvoiceDto request) {
+        String visitUuid = blankToNull(request.getVisitUuid());
+        if (visitUuid != null) {
+            Visit visit = visitDao.findByUuid(visitUuid)
+                    .orElseThrow(() -> new ResourceNotFoundException("visit", "uuid", visitUuid));
+            if (visit.getClinic() == null || !visit.getClinic().getId().equals(clinic.getId())) {
+                throw new AccessDeniedException("Visit does not belong to this clinic");
+            }
+            if (visit.getDoctor() != null && visit.getDoctor().getUser() != null) {
+                return visit.getDoctor().getUser();
+            }
+        }
+        if (clinic.getOwner() != null) {
+            return clinic.getOwner();
+        }
+        throw new CustomException("Assign a doctor to the visit before creating an invoice", HttpStatus.BAD_REQUEST);
+    }
+
+    @Transactional
+    protected ConsultationInvoice createAsClinicBilling(
+            User doctor, Clinic clinic, CreateConsultationInvoiceDto request) {
+        List<TreatmentLineItemDto> items = normalizeItems(request);
+        if (items.isEmpty()) {
+            throw new CustomException("At least one invoice line item is required", HttpStatus.BAD_REQUEST);
+        }
+
+        BigDecimal computed = items.stream()
+                .map(this::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discount = nz(request.getDiscount());
+        BigDecimal cgst = nz(request.getCgst());
+        BigDecimal sgst = nz(request.getSgst());
+        BigDecimal igst = nz(request.getIgst());
+        BigDecimal paid = nz(request.getPaidAmount());
+        // Always derive money server-side — never trust client amount/balance/subtotal/tax totals.
+        BigDecimal subtotal = computed;
+        rejectNegativeMoney(discount, cgst, sgst, igst, paid);
+        if (discount.compareTo(subtotal) > 0) {
+            throw new CustomException("Discount cannot exceed subtotal", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal tax = cgst.add(sgst).add(igst);
+        BigDecimal grandTotal = subtotal.subtract(discount).add(tax).max(BigDecimal.ZERO);
+        if (paid.compareTo(grandTotal) > 0) {
+            throw new CustomException("Paid amount cannot exceed grand total", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal balance = grandTotal.subtract(paid).max(BigDecimal.ZERO);
+
+        User owner = null;
+        if (request.getOwnerUserUuid() != null && !request.getOwnerUserUuid().isBlank()) {
+            owner = userRepository.findByUuid(request.getOwnerUserUuid())
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "uuid", request.getOwnerUserUuid()));
+            if (!clinicPetOwnerRepository.existsByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(),
+                    owner.getId())) {
+                throw new CustomException("Owner is not a client of this clinic.", HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        String petUuid = blankToNull(request.getPetUuid());
+        if (petUuid != null) {
+            Pet pet = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
+                    .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+            if (owner != null && pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null
+                    && !pet.getClinicOwner().getLinkedUser().getId().equals(owner.getId())) {
+                throw new CustomException("Pet does not belong to the specified owner at this clinic.",
+                        HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        String invoiceNumber = nextInvoiceNumber();
+        String visitUuid = blankToNull(request.getVisitUuid());
+
+        ConsultationInvoice invoice = ConsultationInvoice.builder()
+                .uuid(UUID.randomUUID().toString())
+                .invoiceNumber(invoiceNumber)
+                .doctor(doctor)
+                .clinic(clinic)
+                .petUuid(petUuid)
+                .owner(owner)
+                .visitUuid(visitUuid)
+                .lineItems(writeJson(items))
+                .petSnapshot(writeJson(petSnapshot(request)))
+                .ownerSnapshot(writeJson(ownerSnapshot(request, owner)))
+                .consultationDate(request.getConsultationDate() != null
+                        ? request.getConsultationDate()
+                        : LocalDate.now())
+                .reason(request.getReason())
+                .diagnosis(request.getDiagnosis())
+                .amount(grandTotal)
+                .subtotal(subtotal)
+                .discount(discount)
+                .tax(tax)
+                .cgst(cgst)
+                .sgst(sgst)
+                .igst(igst)
+                .paidAmount(paid)
+                .balance(balance)
+                .paymentStatus(blankTo(request.getPaymentStatus(), paid.compareTo(BigDecimal.ZERO) > 0 ? "PARTIAL" : "UNPAID"))
+                .paymentMode(request.getPaymentMode())
+                .transactionId(request.getTransactionId())
+                .currency(blankTo(request.getCurrency(), "INR").toUpperCase())
+                .status(ConsultationInvoiceStatus.DRAFT)
+                .notes(request.getNotes())
+                .doctorNotes(request.getDoctorNotes())
+                .nextVisitNotes(request.getNextVisitNotes())
+                .build();
+
+        invoice = invoiceRepository.save(invoice);
+
+        if (visitUuid != null) {
+            Visit visit = visitDao.findByUuid(visitUuid)
+                    .orElseThrow(() -> new ResourceNotFoundException("visit", "uuid", visitUuid));
+            visit.setInvoiceUuid(invoice.getUuid());
+            visitDao.save(visit);
+        }
+
+        if (Boolean.TRUE.equals(request.getGeneratePdf()) || Boolean.TRUE.equals(request.getSendWhatsApp())) {
+            invoice = generateAndAttachPdf(invoice);
+        }
+        return invoice;
+    }
+
+    /**
+     * WhatsApp destination must be the invoice owner phone (snapshot or linked user).
+     * A client-supplied override is allowed only when it normalizes to the same E.164 digits
+     * (formatting differences), never an arbitrary third-party number.
+     */
+    private String resolveOwnerPhone(ConsultationInvoice invoice, String overridePhone) {
+        String canonical = canonicalOwnerPhone(invoice);
+        if (overridePhone == null || overridePhone.isBlank()) {
+            return canonical;
+        }
+        String overrideDigits = WhatsAppPhones.toE164Digits(overridePhone, "91");
+        String canonicalDigits = WhatsAppPhones.toE164Digits(canonical, "91");
+        if (overrideDigits == null || canonicalDigits == null || !overrideDigits.equals(canonicalDigits)) {
+            throw new CustomException(
+                    "WhatsApp destination must match the invoice owner phone",
+                    HttpStatus.BAD_REQUEST);
+        }
+        return canonical;
+    }
+
+    private String canonicalOwnerPhone(ConsultationInvoice invoice) {
+        Map<String, Object> ownerSnap = readMap(invoice.getOwnerSnapshot());
+        String fromSnap = stringVal(ownerSnap.get("ownerPhone"), null);
+        if (fromSnap != null && !fromSnap.isBlank()) {
+            return fromSnap;
+        }
+        if (invoice.getOwner() != null && invoice.getOwner().getPhoneNumber() != null
+                && !invoice.getOwner().getPhoneNumber().isBlank()) {
+            return invoice.getOwner().getPhoneNumber();
+        }
+        throw new CustomException("Owner phone is required to send invoice on WhatsApp", HttpStatus.BAD_REQUEST);
+    }
+
+    private static void rejectNegativeMoney(BigDecimal... amounts) {
+        for (BigDecimal amount : amounts) {
+            if (amount != null && amount.signum() < 0) {
+                throw new CustomException("Money fields cannot be negative", HttpStatus.BAD_REQUEST);
+            }
+        }
+    }
+
+    private static String stringVal(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String s = String.valueOf(value).trim();
+        return s.isEmpty() ? fallback : s;
     }
 
     @Transactional
@@ -320,22 +640,50 @@ public class TreatmentInvoiceService {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("ownerName", request.getOwnerName() != null ? request.getOwnerName()
                 : owner != null ? fullName(owner) : null);
-        map.put("ownerPhone", request.getOwnerPhone() != null ? request.getOwnerPhone()
-                : owner != null ? owner.getPhoneNumber() : null);
+        map.put("ownerPhone", resolveSnapshotPhone(request, owner));
         map.put("ownerEmail", request.getOwnerEmail() != null ? request.getOwnerEmail()
                 : owner != null ? owner.getEmail() : null);
         map.put("ownerAddress", request.getOwnerAddress());
         return map;
     }
 
-    private BigDecimal lineTotal(TreatmentLineItemDto item) {
-        if (item.getTotal() != null) {
-            return item.getTotal();
+    /**
+     * When a linked platform user exists, prefer their phone and reject a mismatched client value
+     * so create+send cannot retarget WhatsApp to an arbitrary number.
+     */
+    private String resolveSnapshotPhone(CreateConsultationInvoiceDto request, User owner) {
+        String fromOwner = owner != null ? blankToNull(owner.getPhoneNumber()) : null;
+        String fromReq = blankToNull(request.getOwnerPhone());
+        if (fromOwner != null && fromReq != null) {
+            String ownerDigits = WhatsAppPhones.toE164Digits(fromOwner, "91");
+            String reqDigits = WhatsAppPhones.toE164Digits(fromReq, "91");
+            if (!ownerDigits.equals(reqDigits)) {
+                throw new CustomException(
+                        "Owner phone must match the linked patient phone",
+                        HttpStatus.BAD_REQUEST);
+            }
+            return fromOwner;
         }
+        return fromOwner != null ? fromOwner : fromReq;
+    }
+
+    /** Always derive line total from qty × rate − discount — never trust client {@code total}. */
+    private BigDecimal lineTotal(TreatmentLineItemDto item) {
         BigDecimal qty = nz(item.getQuantity(), BigDecimal.ONE);
+        if (qty.signum() <= 0) {
+            throw new CustomException("Line item quantity must be positive", HttpStatus.BAD_REQUEST);
+        }
         BigDecimal rate = nz(item.getUnitPrice());
+        if (rate.signum() < 0) {
+            throw new CustomException("Line item unit price cannot be negative", HttpStatus.BAD_REQUEST);
+        }
         BigDecimal disc = nz(item.getDiscount());
-        return qty.multiply(rate).subtract(disc).setScale(2, RoundingMode.HALF_UP).max(BigDecimal.ZERO);
+        if (disc.signum() < 0) {
+            throw new CustomException("Line item discount cannot be negative", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal total = qty.multiply(rate).subtract(disc).setScale(2, RoundingMode.HALF_UP).max(BigDecimal.ZERO);
+        item.setTotal(total);
+        return total;
     }
 
     private Clinic requireClinic(String uuid) {

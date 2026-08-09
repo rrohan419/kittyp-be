@@ -159,6 +159,13 @@ public class ApiUrl {
 	public static final String CLINIC_SHUTDOWN = CLINIC_BY_UUID + "/shutdown";
 	public static final String CLINIC_REOPEN = CLINIC_BY_UUID + "/reopen";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
+	public static final String CLINIC_INVOICES = CLINIC_BY_UUID + "/invoices";
+	public static final String CLINIC_INVOICE_BY_UUID = CLINIC_INVOICES + "/{invoiceUuid}";
+	public static final String CLINIC_INVOICE_GENERATE_PDF = CLINIC_INVOICE_BY_UUID + "/generate-pdf";
+	public static final String CLINIC_INVOICE_PDF = CLINIC_INVOICE_BY_UUID + "/pdf";
+	public static final String CLINIC_INVOICE_SEND_WHATSAPP = CLINIC_INVOICE_BY_UUID + "/send-whatsapp";
+	public static final String CLINIC_WHATSAPP_SETTINGS = CLINIC_BY_UUID + "/whatsapp-settings";
+	public static final String DOCTOR_WHATSAPP_SETTINGS = "/doctor/whatsapp-settings";
 
 	public static final String DOCTOR_VISITS = DOCTOR_BASE_URL + "/visits";
 	public static final String DOCTOR_VISITS_MINE = DOCTOR_VISITS + "/mine";
@@ -187,4 +194,5 @@ public class ApiUrl {
 	public static final String CONSULTATION_INVOICE_STATUS = CONSULTATION_INVOICE_BY_UUID + "/status";
 	public static final String CONSULTATION_INVOICE_GENERATE_PDF = CONSULTATION_INVOICE_BY_UUID + "/generate-pdf";
 	public static final String CONSULTATION_INVOICE_PDF = CONSULTATION_INVOICE_BY_UUID + "/pdf";
+	public static final String CONSULTATION_INVOICE_SEND_WHATSAPP = CONSULTATION_INVOICE_BY_UUID + "/send-whatsapp";
 }
