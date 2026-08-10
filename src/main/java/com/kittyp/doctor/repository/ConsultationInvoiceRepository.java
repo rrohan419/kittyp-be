@@ -22,6 +22,12 @@ public interface ConsultationInvoiceRepository extends JpaRepository<Consultatio
 
     List<ConsultationInvoice> findAllByOwner_IdAndClinic_IdOrderByCreatedAtDesc(Long ownerId, Long clinicId);
 
+    Optional<ConsultationInvoice> findFirstByVisitUuidAndDoctor_IdAndIsActiveTrueOrderByCreatedAtDesc(
+            String visitUuid, Long doctorId);
+
+    Optional<ConsultationInvoice> findFirstByVisitUuidAndClinic_IdAndIsActiveTrueOrderByCreatedAtDesc(
+            String visitUuid, Long clinicId);
+
     long countByOwner_Id(Long ownerId);
 
     long countByOwner_IdAndClinic_Id(Long ownerId, Long clinicId);

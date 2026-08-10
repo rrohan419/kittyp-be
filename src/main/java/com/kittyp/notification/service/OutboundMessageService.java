@@ -49,6 +49,9 @@ public class OutboundMessageService {
     @Value("${whatsapp.promo-template:promo_offer}")
     private String promoTemplate;
 
+    @Value("${whatsapp.appointment-template:checkup_reminder}")
+    private String appointmentTemplate;
+
     @Value("${whatsapp.invoice-template-lang:en}")
     private String defaultLang;
 
@@ -105,6 +108,26 @@ public class OutboundMessageService {
             User auditUser,
             Pet auditPet) {
         sendText(sender, ownerPhone, promoTemplate, bodyParams, NotificationType.PROMO_OFFER, auditUser, auditPet);
+    }
+
+    /**
+     * Best-effort appointment notice. Uses checkup template by default; never throws if WhatsApp is off.
+     */
+    public void trySendAppointmentNotice(
+            WhatsAppSenderCredentials sender,
+            String phone,
+            List<String> bodyParams,
+            User auditUser,
+            Pet auditPet) {
+        if (!whatsAppService.isConfigured(sender)) {
+            return;
+        }
+        try {
+            sendText(sender, phone, appointmentTemplate, bodyParams, NotificationType.APPOINTMENT_REMINDER,
+                    auditUser, auditPet);
+        } catch (Exception e) {
+            log.warn("WhatsApp appointment notice skipped: {}", e.getMessage());
+        }
     }
 
     private void sendText(

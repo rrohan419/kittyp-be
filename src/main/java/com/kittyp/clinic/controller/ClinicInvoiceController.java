@@ -27,6 +27,7 @@ import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
+import com.kittyp.doctor.dto.CreateInvoiceResultDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.service.TreatmentInvoiceService;
 import com.kittyp.notification.service.WhatsAppCredentialsVerifier;
@@ -64,12 +65,12 @@ public class ClinicInvoiceController {
 
     @PostMapping(ApiUrl.CLINIC_INVOICES)
     @PreAuthorize(CLINIC_BILLING)
-    public ResponseEntity<SuccessResponse<ConsultationInvoice>> create(
+    public ResponseEntity<SuccessResponse<CreateInvoiceResultDto>> create(
             @PathVariable String uuid, @Valid @RequestBody CreateConsultationInvoiceDto request) {
         Clinic clinic = requireAccessibleClinic(uuid);
-        ConsultationInvoice invoice = treatmentInvoiceService.createForClinicAndOptionallySend(
+        CreateInvoiceResultDto result = treatmentInvoiceService.createForClinicAndOptionallySend(
                 clinic, currentUser(), request);
-        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.CREATED);
+        return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.CREATED);
     }
 
     @PostMapping(ApiUrl.CLINIC_INVOICE_GENERATE_PDF)

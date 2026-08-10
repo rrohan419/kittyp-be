@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
+import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
@@ -21,6 +22,12 @@ public interface VisitService {
 
     /** Schedule a future appointment (Booking) for a clinic patient. */
     BookingModel createScheduledBooking(String clinicUuid, ScheduleBookingCreateRequest request, String email);
+
+    /** Parent self-serve booking for an owned pet at a discoverable clinic. */
+    BookingModel createParentBooking(ParentBookingCreateRequest request, String email);
+
+    /** Free half-hour slots for a clinic doctor on a given date (availability minus busy). */
+    List<LocalDateTime> listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date, String email);
 
     /** Busy intervals for a clinic doctor across all clinics (active bookings overlapping the range). */
     List<BookingModel> listDoctorBusySlots(String clinicUuid, String doctorUuid, LocalDateTime from,

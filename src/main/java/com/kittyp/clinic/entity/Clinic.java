@@ -43,6 +43,16 @@ public class Clinic extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String address;
 
+    /** Normalized city/area for discovery when GPS coords are missing. */
+    @Column(length = 120)
+    private String city;
+
+    /** WGS84 latitude for nearby ranking (optional). */
+    private Double latitude;
+
+    /** WGS84 longitude for nearby ranking (optional). */
+    private Double longitude;
+
     private String phone;
 
     private String email;

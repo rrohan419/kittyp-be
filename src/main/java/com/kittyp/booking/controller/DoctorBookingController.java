@@ -108,6 +108,25 @@ public class DoctorBookingController {
         }
         String petName = booking.getPet() == null ? "Pet" : booking.getPet().getName();
         String petUuid = booking.getPet() == null ? null : booking.getPet().getUuid();
+        String doctorName = null;
+        String doctorSpecialization = null;
+        String doctorPhotoUrl = null;
+        if (booking.getDoctor() != null) {
+            doctorPhotoUrl = booking.getDoctor().getPhotoUrl();
+            if (booking.getDoctor().getSpecialization() != null) {
+                doctorSpecialization = booking.getDoctor().getSpecialization().name();
+            }
+            if (booking.getDoctor().getUser() != null) {
+                doctorName = ((booking.getDoctor().getUser().getFirstName() == null ? ""
+                        : booking.getDoctor().getUser().getFirstName())
+                        + " "
+                        + (booking.getDoctor().getUser().getLastName() == null ? ""
+                                : booking.getDoctor().getUser().getLastName())).trim();
+                if (doctorName.isBlank()) {
+                    doctorName = null;
+                }
+            }
+        }
         return new BookingModel(
                 booking.getUuid(),
                 petUuid,
@@ -121,7 +140,10 @@ public class DoctorBookingController {
                 booking.getMode() == null ? null : booking.getMode().name(),
                 booking.getNotes(),
                 booking.getClinic() == null ? null : booking.getClinic().getUuid(),
-                booking.getClinic() == null ? null : booking.getClinic().getName());
+                booking.getClinic() == null ? null : booking.getClinic().getName(),
+                doctorName,
+                doctorSpecialization,
+                doctorPhotoUrl);
     }
 
     private DoctorProfile currentDoctor() {

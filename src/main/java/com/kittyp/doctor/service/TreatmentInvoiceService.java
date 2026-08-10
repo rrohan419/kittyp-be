@@ -9,8 +9,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -19,13 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.service.S3StorageService;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
+import com.kittyp.doctor.dto.CreateInvoiceResultDto;
 import com.kittyp.doctor.dto.TreatmentInvoiceData;
 import com.kittyp.doctor.dto.TreatmentLineItemDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
@@ -33,6 +39,7 @@ import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.ConsultationInvoiceStatus;
 import com.kittyp.doctor.enums.TreatmentInvoiceItemType;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
+import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorProfileRepository;
 import com.kittyp.payment.util.PdfGenerator;
 import com.kittyp.notification.service.OutboundMessageService;
@@ -51,12 +58,15 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class TreatmentInvoiceService {
 
+    private static final Logger log = LoggerFactory.getLogger(TreatmentInvoiceService.class);
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
     private final ConsultationInvoiceRepository invoiceRepository;
     private final ClinicRepository clinicRepository;
     private final ClinicDoctorRepository clinicDoctorRepository;
     private final ClinicPetOwnerRepository clinicPetOwnerRepository;
+    private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
+    private final DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
     private final PetsRepository petsRepository;
     private final UserRepository userRepository;
     private final DoctorProfileRepository doctorProfileRepository;
@@ -110,6 +120,7 @@ public class TreatmentInvoiceService {
             owner = userRepository.findByUuid(request.getOwnerUserUuid())
                     .orElseThrow(() -> new ResourceNotFoundException("User", "uuid", request.getOwnerUserUuid()));
             if (clinic != null
+                    && (clinic.getOwner() == null || !clinic.getOwner().getId().equals(doctor.getId()))
                     && !clinicPetOwnerRepository.existsByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(),
                             owner.getId())) {
                 throw new CustomException("Owner is not a client of this clinic.", HttpStatus.BAD_REQUEST);
@@ -118,8 +129,7 @@ public class TreatmentInvoiceService {
 
         String petUuid = blankToNull(request.getPetUuid());
         if (petUuid != null && clinic != null) {
-            Pet pet = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
-                    .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+            Pet pet = requireInvoiceClinicPet(clinic, doctor, petUuid);
             if (owner != null && pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null
                     && !pet.getClinicOwner().getLinkedUser().getId().equals(owner.getId())) {
                 throw new CustomException("Pet does not belong to the specified owner at this clinic.",
@@ -185,17 +195,49 @@ public class TreatmentInvoiceService {
     }
 
     /**
-     * Persists invoice (+ PDF when requested), then sends WhatsApp outside the create transaction
-     * so a Meta/config failure does not roll back the saved invoice.
+     * Persists invoice (+ PDF when requested), then optionally sends WhatsApp.
+     * WhatsApp failure does not fail the create — returns invoice with whatsappError.
+     * When sendWhatsApp and visitUuid already has an invoice, reuses that row.
      */
-    public ConsultationInvoice createAndOptionallySendWhatsApp(User doctor, CreateConsultationInvoiceDto request) {
+    public CreateInvoiceResultDto createAndOptionallySendWhatsApp(User doctor, CreateConsultationInvoiceDto request) {
         boolean sendWa = Boolean.TRUE.equals(request.getSendWhatsApp());
-        ConsultationInvoice invoice = create(doctor, request);
-        if (sendWa) {
-            // Destination is always the phone frozen on the invoice — never a client override.
-            invoice = sendInvoiceWhatsApp(invoice, null, doctorSender(doctor));
+        ConsultationInvoice invoice = resolveOrCreateDoctorInvoice(doctor, request, sendWa);
+        if (!sendWa) {
+            return CreateInvoiceResultDto.of(invoice);
         }
-        return invoice;
+        try {
+            invoice = sendInvoiceWhatsApp(invoice, null, doctorSender(doctor));
+            return CreateInvoiceResultDto.sent(invoice);
+        } catch (Exception e) {
+            String msg = e.getMessage() != null && !e.getMessage().isBlank()
+                    ? e.getMessage()
+                    : "WhatsApp send failed";
+            log.warn("Invoice {} saved but WhatsApp send failed: {}", invoice.getUuid(), msg);
+            return CreateInvoiceResultDto.sendFailed(invoice, msg);
+        }
+    }
+
+    private ConsultationInvoice resolveOrCreateDoctorInvoice(
+            User doctor, CreateConsultationInvoiceDto request, boolean sendWa) {
+        String visitUuid = blankToNull(request.getVisitUuid());
+        if (sendWa && visitUuid != null) {
+            Optional<ConsultationInvoice> existing = invoiceRepository
+                    .findFirstByVisitUuidAndDoctor_IdAndIsActiveTrueOrderByCreatedAtDesc(visitUuid, doctor.getId());
+            if (existing.isPresent()) {
+                ConsultationInvoice inv = existing.get();
+                // Only reuse personal-practice invoices (same rule as doctor portal).
+                if (inv.getClinic() == null
+                        || (inv.getClinic().getOwner() != null
+                                && inv.getClinic().getOwner().getId().equals(doctor.getId()))) {
+                    if (Boolean.TRUE.equals(request.getGeneratePdf())
+                            && (inv.getPdfUrl() == null || inv.getPdfUrl().isBlank())) {
+                        inv = generateAndAttachPdf(inv);
+                    }
+                    return inv;
+                }
+            }
+        }
+        return create(doctor, request);
     }
 
     @Transactional
@@ -209,14 +251,41 @@ public class TreatmentInvoiceService {
         return createAsClinicBilling(billingDoctor, clinic, request);
     }
 
-    public ConsultationInvoice createForClinicAndOptionallySend(
+    public CreateInvoiceResultDto createForClinicAndOptionallySend(
             Clinic clinic, User actor, CreateConsultationInvoiceDto request) {
         boolean sendWa = Boolean.TRUE.equals(request.getSendWhatsApp());
-        ConsultationInvoice invoice = createForClinic(clinic, actor, request);
-        if (sendWa) {
-            invoice = sendInvoiceWhatsApp(invoice, null, clinicSender(clinic));
+        ConsultationInvoice invoice = resolveOrCreateClinicInvoice(clinic, actor, request, sendWa);
+        if (!sendWa) {
+            return CreateInvoiceResultDto.of(invoice);
         }
-        return invoice;
+        try {
+            invoice = sendInvoiceWhatsApp(invoice, null, clinicSender(clinic));
+            return CreateInvoiceResultDto.sent(invoice);
+        } catch (Exception e) {
+            String msg = e.getMessage() != null && !e.getMessage().isBlank()
+                    ? e.getMessage()
+                    : "WhatsApp send failed";
+            log.warn("Clinic invoice {} saved but WhatsApp send failed: {}", invoice.getUuid(), msg);
+            return CreateInvoiceResultDto.sendFailed(invoice, msg);
+        }
+    }
+
+    private ConsultationInvoice resolveOrCreateClinicInvoice(
+            Clinic clinic, User actor, CreateConsultationInvoiceDto request, boolean sendWa) {
+        String visitUuid = blankToNull(request.getVisitUuid());
+        if (sendWa && visitUuid != null) {
+            Optional<ConsultationInvoice> existing = invoiceRepository
+                    .findFirstByVisitUuidAndClinic_IdAndIsActiveTrueOrderByCreatedAtDesc(visitUuid, clinic.getId());
+            if (existing.isPresent()) {
+                ConsultationInvoice inv = existing.get();
+                if (Boolean.TRUE.equals(request.getGeneratePdf())
+                        && (inv.getPdfUrl() == null || inv.getPdfUrl().isBlank())) {
+                    inv = generateAndAttachPdf(inv);
+                }
+                return inv;
+            }
+        }
+        return createForClinic(clinic, actor, request);
     }
 
     @Transactional
@@ -361,8 +430,7 @@ public class TreatmentInvoiceService {
 
         String petUuid = blankToNull(request.getPetUuid());
         if (petUuid != null) {
-            Pet pet = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
-                    .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+            Pet pet = requireInvoiceClinicPet(clinic, doctor, petUuid);
             if (owner != null && pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null
                     && !pet.getClinicOwner().getLinkedUser().getId().equals(owner.getId())) {
                 throw new CustomException("Pet does not belong to the specified owner at this clinic.",
@@ -692,6 +760,36 @@ public class TreatmentInvoiceService {
             throw new ResourceNotFoundException("Clinic", "uuid", uuid);
         }
         return clinic;
+    }
+
+    /**
+     * Clinic patient if registered ({@code clinic_id}), multi-clinic enrolled, or
+     * (personal practice only) on the doctor's patient roster.
+     */
+    private Pet requireInvoiceClinicPet(Clinic clinic, User doctorUser, String petUuid) {
+        return petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
+                .or(() -> clinicPetEnrollmentRepository
+                        .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), petUuid)
+                        .map(ClinicPetEnrollment::getPet)
+                        .filter(p -> Boolean.TRUE.equals(p.getIsActive())))
+                .or(() -> {
+                    boolean personal = clinic.getOwner() != null && doctorUser != null
+                            && clinic.getOwner().getId().equals(doctorUser.getId());
+                    if (!personal) {
+                        return java.util.Optional.empty();
+                    }
+                    DoctorProfile profile = doctorProfileRepository.findByUser_Id(doctorUser.getId());
+                    if (profile == null) {
+                        return java.util.Optional.empty();
+                    }
+                    if (!doctorPatientEnrollmentRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrue(profile.getId(),
+                            petUuid)) {
+                        return java.util.Optional.empty();
+                    }
+                    return petsRepository.findOptionalByUuid(petUuid)
+                            .filter(p -> Boolean.TRUE.equals(p.getIsActive()));
+                })
+                .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
     }
 
     private void requireDoctorAffiliated(Clinic clinic, User doctor) {

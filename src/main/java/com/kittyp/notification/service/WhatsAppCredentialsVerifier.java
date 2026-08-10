@@ -1,5 +1,6 @@
 package com.kittyp.notification.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class WhatsAppCredentialsVerifier {
     private final String apiVersion;
     private final String graphBaseUrl;
 
+    @Autowired
     public WhatsAppCredentialsVerifier(
             ObjectMapper objectMapper,
             @Value("${whatsapp.api-version:v21.0}") String apiVersion) {

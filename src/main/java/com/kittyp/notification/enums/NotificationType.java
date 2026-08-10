@@ -20,5 +20,7 @@ public enum NotificationType {
     /** Routine checkup / follow-up reminder. */
     CHECKUP_REMINDER,
     /** Clinic or platform promotional offer. */
-    PROMO_OFFER
+    PROMO_OFFER,
+    /** Parent booked an appointment with a doctor. */
+    BOOKING_CREATED
 }

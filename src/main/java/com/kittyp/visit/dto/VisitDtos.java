@@ -58,6 +58,16 @@ public final class VisitDtos {
             BookingMode mode) {
     }
 
+    /** Parent self-book: owned pet + clinic doctor + slot. */
+    public record ParentBookingCreateRequest(
+            @NotBlank String clinicUuid,
+            @NotBlank String doctorUuid,
+            @NotBlank String petUuid,
+            @NotNull LocalDateTime slotStart,
+            String notes,
+            BookingMode mode) {
+    }
+
     public record VisitPatchRequest(
             VisitStatus status,
             String doctorUuid,

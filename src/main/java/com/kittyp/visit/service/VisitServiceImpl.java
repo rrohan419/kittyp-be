@@ -1,8 +1,10 @@
 package com.kittyp.visit.service;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -24,23 +26,29 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.booking.entity.Booking;
+import com.kittyp.booking.entity.DoctorAvailability;
 import com.kittyp.booking.enums.BookingMode;
 import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.booking.repository.BookingRepository;
+import com.kittyp.booking.repository.DoctorAvailabilityRepository;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
+import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.entity.DoctorReview;
+import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorReviewRepository;
 import com.kittyp.health.dao.HealthEventDao;
 import com.kittyp.health.entity.HealthEvent;
@@ -49,12 +57,17 @@ import com.kittyp.health.enums.HealthEventType;
 import com.kittyp.notification.entity.NotificationLog;
 import com.kittyp.notification.enums.NotificationType;
 import com.kittyp.notification.repository.NotificationLogRepository;
+import com.kittyp.notification.service.OutboundMessageService;
+import com.kittyp.notification.service.WhatsAppSenderCredentials;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
+import com.kittyp.user.service.PetAccessGuard;
+import com.kittyp.user.service.UserService;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
+import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartModel;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
@@ -101,7 +114,14 @@ public class VisitServiceImpl implements VisitService {
     private final NotificationLogRepository notificationLogRepository;
     private final BookingRepository bookingRepository;
     private final DoctorReviewRepository doctorReviewRepository;
+    private final DoctorAvailabilityRepository doctorAvailabilityRepository;
+    private final PetAccessGuard petAccessGuard;
+    private final UserService userService;
+    private final OutboundMessageService outboundMessageService;
     private final ObjectMapper objectMapper;
+    private final ParentBookingEnrollmentService parentBookingEnrollmentService;
+    private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
+    private final DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
 
     @Override
     @Transactional
@@ -131,6 +151,7 @@ public class VisitServiceImpl implements VisitService {
                 .build();
         visit.setIsActive(true);
         visit = visitDao.save(visit);
+        parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         if (doctor != null) {
             notifyDoctorOfPatient(visit, "assigned");
         }
@@ -161,7 +182,8 @@ public class VisitServiceImpl implements VisitService {
             List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
                     doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
             if (!conflicts.isEmpty()) {
-                throw new CustomException("Doctor not available for that time", HttpStatus.BAD_REQUEST);
+                throw new CustomException("This time is already booked. Please try another slot.",
+                        HttpStatus.CONFLICT);
             }
         }
 
@@ -194,7 +216,228 @@ public class VisitServiceImpl implements VisitService {
         booking.setIsActive(true);
         booking = bookingRepository.save(booking);
 
+        parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
+        notifyDoctorOfBooking(booking);
         return toBookingModel(booking);
+    }
+
+    @Override
+    @Transactional
+    public BookingModel createParentBooking(ParentBookingCreateRequest request, String email) {
+        User owner = userDao.userByEmail(email);
+        petAccessGuard.requireOwner(owner, request.petUuid());
+
+        Clinic clinic = clinicDao.findByUuid(request.clinicUuid());
+        if (clinic == null || Boolean.FALSE.equals(clinic.getIsActive())) {
+            throw new ResourceNotFoundException("clinic", "uuid", request.clinicUuid());
+        }
+        requireOperational(clinic);
+
+        DoctorProfile doctor = requireClinicDoctor(clinic, request.doctorUuid());
+        Pet pet = petsRepository.findOptionalByUuid(request.petUuid())
+                .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", request.petUuid()));
+
+        LocalDateTime slotStart = snapToHalfHour(request.slotStart());
+        if (slotStart.isBefore(LocalDateTime.now().minusMinutes(5))) {
+            throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
+        }
+        LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
+
+        List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
+                doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
+        if (!conflicts.isEmpty()) {
+            throw new CustomException("This time is already booked. Please try another slot.", HttpStatus.CONFLICT);
+        }
+
+        parentBookingEnrollmentService.enrollAfterParentBooking(clinic, doctor, pet, owner);
+
+        BookingMode mode = request.mode() == null ? BookingMode.IN_PERSON : request.mode();
+        Booking booking = Booking.builder()
+                .uuid(UUID.randomUUID().toString())
+                .pet(pet)
+                .owner(owner)
+                .doctor(doctor)
+                .clinic(clinic)
+                .slotStart(slotStart)
+                .slotEnd(slotEnd)
+                .timezone(clinic.getTimezone() == null ? "Asia/Kolkata" : clinic.getTimezone())
+                .mode(mode)
+                .status(BookingStatus.CONFIRMED)
+                .notes(blankToNull(request.notes()))
+                .build();
+        booking.setIsActive(true);
+        booking = bookingRepository.save(booking);
+
+        notifyDoctorOfBooking(booking);
+        return toBookingModel(booking);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LocalDateTime> listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date,
+            String email) {
+        // Authenticated caller only — no clinic staff check for discovery slots.
+        userDao.userByEmail(email);
+        Clinic clinic = clinicDao.findByUuid(clinicUuid);
+        if (clinic == null || Boolean.FALSE.equals(clinic.getIsActive())) {
+            throw new ResourceNotFoundException("clinic", "uuid", clinicUuid);
+        }
+        requireOperational(clinic);
+        DoctorProfile doctor = requireClinicDoctor(clinic, doctorUuid);
+        LocalDate day = date == null ? LocalDate.now() : date;
+        if (day.isBefore(LocalDate.now())) {
+            return List.of();
+        }
+
+        int duration = APPOINTMENT_MINUTES;
+        DoctorAvailability availability = doctorAvailabilityRepository.findByDoctor_Id(doctor.getId()).orElse(null);
+        if (availability != null && availability.getSlotDurationMinutes() != null
+                && availability.getSlotDurationMinutes() > 0) {
+            duration = availability.getSlotDurationMinutes();
+        }
+
+        List<LocalTime[]> windows = availabilityWindowsForDay(availability, day.getDayOfWeek());
+        if (windows.isEmpty()) {
+            windows = new ArrayList<>();
+            windows.add(new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(18, 0) });
+        }
+
+        LocalDateTime rangeFrom = day.atStartOfDay();
+        LocalDateTime rangeTo = day.plusDays(1).atStartOfDay();
+        List<Booking> busy = bookingRepository.findOverlappingForDoctor(
+                doctor.getId(), rangeFrom, rangeTo, ACTIVE_BOOKING_STATUSES);
+
+        List<LocalDateTime> free = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+        for (LocalTime[] window : windows) {
+            LocalDateTime cursor = day.atTime(window[0]);
+            LocalDateTime windowEnd = day.atTime(window[1]);
+            while (!cursor.plusMinutes(duration).isAfter(windowEnd)) {
+                LocalDateTime slotEnd = cursor.plusMinutes(duration);
+                if (!cursor.isBefore(now)) {
+                    LocalDateTime start = cursor;
+                    boolean conflict = busy.stream()
+                            .anyMatch(b -> b.getSlotStart().isBefore(slotEnd) && b.getSlotEnd().isAfter(start));
+                    if (!conflict) {
+                        free.add(start);
+                    }
+                }
+                cursor = cursor.plusMinutes(duration);
+            }
+        }
+        return free;
+    }
+
+    private List<LocalTime[]> availabilityWindowsForDay(DoctorAvailability availability, DayOfWeek dayOfWeek) {
+        if (availability == null || availability.getWeeklyScheduleJson() == null
+                || availability.getWeeklyScheduleJson().isBlank()) {
+            return List.of();
+        }
+        try {
+            List<Map<String, Object>> schedule = objectMapper.readValue(
+                    availability.getWeeklyScheduleJson(), new TypeReference<List<Map<String, Object>>>() {
+                    });
+            int dow = dayOfWeek.getValue(); // Monday=1 … Sunday=7
+            List<LocalTime[]> windows = new ArrayList<>();
+            for (Map<String, Object> slot : schedule) {
+                Object active = slot.get("isActive");
+                if (active instanceof Boolean b && !b) {
+                    continue;
+                }
+                Object dayVal = slot.get("dayOfWeek");
+                if (dayVal == null) {
+                    continue;
+                }
+                int slotDay = dayVal instanceof Number n ? n.intValue() : Integer.parseInt(dayVal.toString());
+                if (slotDay != dow && !(slotDay == 0 && dow == 7)) {
+                    continue;
+                }
+                String start = Objects.toString(slot.get("startTime"), null);
+                String end = Objects.toString(slot.get("endTime"), null);
+                if (start == null || end == null) {
+                    continue;
+                }
+                windows.add(new LocalTime[] { LocalTime.parse(start), LocalTime.parse(end) });
+            }
+            windows.sort(Comparator.comparing(w -> w[0]));
+            return windows;
+        } catch (Exception e) {
+            log.warn("Failed to parse doctor availability schedule: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private void notifyDoctorOfBooking(Booking booking) {
+        DoctorProfile doctor = booking.getDoctor();
+        if (doctor == null || doctor.getUser() == null) {
+            return;
+        }
+        User doctorUser = doctor.getUser();
+        Pet pet = booking.getPet();
+        String petName = pet != null ? pet.getName() : "a pet";
+        String clinicName = booking.getClinic() != null ? booking.getClinic().getName() : "Clinic";
+        String when = booking.getSlotStart() == null ? "soon" : booking.getSlotStart().toString();
+        String title = "New appointment booked";
+        String body = String.format("%s booked %s at %s (%s)", clinicName, petName, when,
+                booking.getMode() == null ? "IN_PERSON" : booking.getMode().name());
+
+        Runnable notify = () -> {
+            try {
+                notificationLogRepository.save(NotificationLog.builder()
+                        .user(doctorUser)
+                        .pet(pet)
+                        .type(NotificationType.BOOKING_CREATED)
+                        .payload(body)
+                        .sentAt(LocalDateTime.now())
+                        .build());
+            } catch (Exception e) {
+                log.warn("Failed to log booking notification: {}", e.getMessage());
+            }
+            try {
+                if (doctorUser.getEmail() != null) {
+                    userService.sendPushNotification(doctorUser.getEmail(), title, body);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to push booking notification: {}", e.getMessage());
+            }
+            try {
+                WhatsAppSenderCredentials sender = resolveBookingWhatsAppSender(booking);
+                String phone = doctor.getPhoneNumber() != null ? doctor.getPhoneNumber() : doctorUser.getPhoneNumber();
+                if (sender != null && sender.isConfigured() && phone != null && !phone.isBlank()) {
+                    outboundMessageService.trySendAppointmentNotice(
+                            sender, phone, List.of(petName, clinicName, when), doctorUser, pet);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to WhatsApp booking notification: {}", e.getMessage());
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    notify.run();
+                }
+            });
+        } else {
+            notify.run();
+        }
+    }
+
+    private WhatsAppSenderCredentials resolveBookingWhatsAppSender(Booking booking) {
+        Clinic clinic = booking.getClinic();
+        if (clinic != null) {
+            WhatsAppSenderCredentials clinicSender = WhatsAppSenderCredentials.of(
+                    clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
+            if (clinicSender.isConfigured()) {
+                return clinicSender;
+            }
+        }
+        DoctorProfile doctor = booking.getDoctor();
+        if (doctor != null) {
+            return WhatsAppSenderCredentials.of(doctor.getWhatsappToken(), doctor.getWhatsappPhoneNumberId());
+        }
+        return WhatsAppSenderCredentials.of(null, null);
     }
 
     @Override
@@ -658,10 +901,57 @@ public class VisitServiceImpl implements VisitService {
                             laterVisit(existing.lastVisitAt(), added.lastVisitAt()),
                             preferText(added.lastAssessment(), existing.lastAssessment())));
         }
+        mergeDoctorEnrollments(profile, clinicUuid, byPet);
         return byPet.values().stream()
                 .sorted(Comparator.comparing(AttendedPatientModel::lastVisitAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
+    }
+
+    private void mergeDoctorEnrollments(DoctorProfile profile, String clinicUuid,
+            Map<String, AttendedPatientModel> byPet) {
+        boolean includeEnrollments;
+        if (clinicUuid == null || clinicUuid.isBlank()) {
+            includeEnrollments = true;
+        } else {
+            Clinic scoped = clinicDao.findByUuid(clinicUuid);
+            includeEnrollments = ParentBookingEnrollmentService.isPersonalPractice(scoped, profile);
+        }
+        if (!includeEnrollments) {
+            return;
+        }
+        for (DoctorPatientEnrollment enrollment : doctorPatientEnrollmentRepository
+                .findByDoctor_IdAndIsActiveTrue(profile.getId())) {
+            Pet pet = enrollment.getPet();
+            User owner = enrollment.getOwnerUser();
+            if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || owner == null) {
+                continue;
+            }
+            byPet.putIfAbsent(pet.getUuid(), new AttendedPatientModel(
+                    pet.getUuid(),
+                    pet.getName(),
+                    pet.getType(),
+                    pet.getBreed(),
+                    owner.getUuid(),
+                    doctorEnrollmentOwnerName(owner),
+                    owner.getEmail(),
+                    owner.getPhoneNumber(),
+                    null,
+                    null,
+                    0,
+                    enrollment.getCreatedAt(),
+                    null));
+        }
+    }
+
+    private static String doctorEnrollmentOwnerName(User user) {
+        if (user == null) {
+            return null;
+        }
+        String last = user.getLastName() == null ? "" : user.getLastName().trim();
+        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
+        String name = (first + (last.isEmpty() ? "" : " " + last)).trim();
+        return name.isEmpty() ? user.getEmail() : name;
     }
 
     private static LocalDateTime laterVisit(LocalDateTime a, LocalDateTime b) {
@@ -688,7 +978,15 @@ public class VisitServiceImpl implements VisitService {
 
     private Pet resolvePetForWalkIn(Clinic clinic, WalkInCreateRequest request) {
         if (request.petUuid() != null && !request.petUuid().isBlank()) {
-            return petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(request.petUuid(), clinic.getId())
+            Optional<Pet> byClinic = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(request.petUuid(),
+                    clinic.getId());
+            if (byClinic.isPresent()) {
+                return byClinic.get();
+            }
+            return clinicPetEnrollmentRepository
+                    .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), request.petUuid())
+                    .map(ClinicPetEnrollment::getPet)
+                    .filter(p -> Boolean.TRUE.equals(p.getIsActive()))
                     .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", request.petUuid()));
         }
 
@@ -905,6 +1203,25 @@ public class VisitServiceImpl implements VisitService {
         }
         String petName = booking.getPet() == null ? "Pet" : booking.getPet().getName();
         String petUuid = booking.getPet() == null ? null : booking.getPet().getUuid();
+        String doctorName = null;
+        String doctorSpecialization = null;
+        String doctorPhotoUrl = null;
+        if (booking.getDoctor() != null) {
+            doctorPhotoUrl = booking.getDoctor().getPhotoUrl();
+            if (booking.getDoctor().getSpecialization() != null) {
+                doctorSpecialization = booking.getDoctor().getSpecialization().name();
+            }
+            if (booking.getDoctor().getUser() != null) {
+                doctorName = ((booking.getDoctor().getUser().getFirstName() == null ? ""
+                        : booking.getDoctor().getUser().getFirstName())
+                        + " "
+                        + (booking.getDoctor().getUser().getLastName() == null ? ""
+                                : booking.getDoctor().getUser().getLastName())).trim();
+                if (doctorName.isBlank()) {
+                    doctorName = null;
+                }
+            }
+        }
         return new BookingModel(
                 booking.getUuid(),
                 petUuid,
@@ -918,7 +1235,10 @@ public class VisitServiceImpl implements VisitService {
                 booking.getMode() == null ? null : booking.getMode().name(),
                 booking.getNotes(),
                 booking.getClinic() == null ? null : booking.getClinic().getUuid(),
-                booking.getClinic() == null ? null : booking.getClinic().getName());
+                booking.getClinic() == null ? null : booking.getClinic().getName(),
+                doctorName,
+                doctorSpecialization,
+                doctorPhotoUrl);
     }
 
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {

@@ -24,6 +24,7 @@ import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
+import com.kittyp.doctor.dto.CreateInvoiceResultDto;
 import com.kittyp.doctor.dto.UpdateConsultationInvoiceStatusDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
@@ -46,10 +47,10 @@ public class ConsultationInvoiceController {
 
     @PostMapping(ApiUrl.CONSULTATION_INVOICE_BASE_URL)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<ConsultationInvoice>> createInvoice(
+    public ResponseEntity<SuccessResponse<CreateInvoiceResultDto>> createInvoice(
             @Valid @RequestBody CreateConsultationInvoiceDto request) {
-        ConsultationInvoice invoice = treatmentInvoiceService.createAndOptionallySendWhatsApp(currentUser(), request);
-        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.CREATED);
+        CreateInvoiceResultDto result = treatmentInvoiceService.createAndOptionallySendWhatsApp(currentUser(), request);
+        return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.CREATED);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_MINE)

@@ -186,6 +186,15 @@ public class ApiUrl {
 	public static final String USER_VISIT_BY_UUID = "/user/visits/{visitUuid}";
 	public static final String USER_VISIT_RATING = USER_VISIT_BY_UUID + "/rating";
 	public static final String USER_BOOKINGS_MINE = "/user/bookings/mine";
+	public static final String USER_BOOKINGS = "/user/bookings";
+	public static final String USER_DOCTOR_SLOTS = "/user/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
+	public static final String USER_REMINDERS = "/user/reminders";
+	public static final String USER_REMINDER_BY_UUID = USER_REMINDERS + "/{reminderUuid}";
+
+	public static final String DISCOVER_BASE = "/discover";
+	public static final String DISCOVER_CLINICS = DISCOVER_BASE + "/clinics";
+	public static final String DISCOVER_DOCTORS = DISCOVER_BASE + "/doctors";
+	public static final String DISCOVER_CLINIC_DOCTORS = DISCOVER_CLINICS + "/{clinicUuid}/doctors";
 
 	// Consultation invoice controller
 	public static final String CONSULTATION_INVOICE_BASE_URL = "/invoice";
