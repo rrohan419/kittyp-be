@@ -1013,7 +1013,8 @@ public class ClinicServiceImpl implements ClinicService {
 
         Pet pet = saveClinicPet(clinic, owner, request.petName().trim(), blankToNull(request.petType()),
                 blankToNull(request.petBreed()), blankToNull(request.petGender()), request.petDateOfBirth(),
-                blankToNull(request.petWeight()), blankToNull(request.petMicrochipNumber()), null, null);
+                blankToNull(request.petWeight()), blankToNull(request.petMicrochipNumber()),
+                blankToNull(request.petPhotoUrl()), null);
         if (owner.getLinkedUser() != null) {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
         }

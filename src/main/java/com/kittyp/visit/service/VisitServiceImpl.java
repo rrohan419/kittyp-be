@@ -1037,6 +1037,7 @@ public class VisitServiceImpl implements VisitService {
                 .type(blankToNull(petReq.species()))
                 .breed(blankToNull(petReq.breed()))
                 .gender(blankToNull(petReq.gender()))
+                .profilePicture(blankToNull(petReq.photoUrl()))
                 .registeredAt(LocalDate.now())
                 .isNeutered(false)
                 .build();

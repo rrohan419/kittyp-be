@@ -282,6 +282,7 @@ public final class ClinicDtos {
             String petGender,
             LocalDate petDateOfBirth,
             String petWeight,
-            String petMicrochipNumber) {
+            String petMicrochipNumber,
+            String petPhotoUrl) {
     }
 }

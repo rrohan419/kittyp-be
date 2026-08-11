@@ -33,7 +33,8 @@ public final class VisitDtos {
             @NotBlank String name,
             String species,
             String breed,
-            String gender) {
+            String gender,
+            String photoUrl) {
     }
 
     public record WalkInCreateRequest(
