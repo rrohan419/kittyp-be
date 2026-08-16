@@ -68,7 +68,6 @@ class PetAccessGuardTest {
 
     @Test
     void ownerCanAccessOwnPet() {
-        when(petsRepository.findOptionalByUuid("pet-uuid")).thenReturn(Optional.of(pet));
         assertTrue(guard.canAccessPet(owner, "pet-uuid"));
         guard.requirePetAccess(owner, "pet-uuid");
     }
