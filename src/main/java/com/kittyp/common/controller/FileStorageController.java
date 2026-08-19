@@ -23,6 +23,7 @@ import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.FileUploadRequest;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.service.ImageUploadSanitizer;
 import com.kittyp.common.service.S3StorageService;
 import com.kittyp.common.util.VerificationCodeService;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ public class FileStorageController {
 	private final ApiResponse<?> responseBuilder;
 	private final S3StorageService s3StorageService;
 	private final VerificationCodeService verificationCodeService;
+	private final ImageUploadSanitizer imageUploadSanitizer;
 
 	@PostMapping(value = "/upload/public-url", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
@@ -129,7 +131,7 @@ public class FileStorageController {
 		return files.stream().map(file -> {
 			try {
 				String name = file.getOriginalFilename() == null ? "upload.bin" : file.getOriginalFilename();
-				return new FileUploadRequest(name.replaceAll("[^a-zA-Z0-9._-]", "_"), file.getBytes(),
+				return imageUploadSanitizer.sanitize(name.replaceAll("[^a-zA-Z0-9._-]", "_"), file.getBytes(),
 						file.getContentType());
 			} catch (IOException e) {
 				throw new CustomException("Failed to read file", HttpStatus.BAD_REQUEST);

@@ -31,9 +31,11 @@ import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.LoginRequestDto;
+import com.kittyp.common.dto.PublicSignupRequestDto;
 import com.kittyp.common.dto.SignupClinicRequestDto;
 import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.dto.SignupRequestDto;
+import com.kittyp.common.enums.SignupRole;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceAlreadyExistsException;
 import com.kittyp.common.model.JwtResponseModel;
@@ -76,6 +78,17 @@ public class AuthServiceImpl implements AuthService {
 
 	@Transactional
 	@Override
+	public MessageResponse register(PublicSignupRequestDto signupRequestDto) {
+		SignupRole role = signupRequestDto.getRole() != null ? signupRequestDto.getRole() : SignupRole.USER;
+		return switch (role) {
+			case USER -> registerUser(signupRequestDto);
+			case DOCTOR -> registerDoctor(signupRequestDto.toDoctorRequest());
+			case CLINIC -> registerClinic(signupRequestDto.toClinicRequest());
+		};
+	}
+
+	@Transactional
+	@Override
 	public MessageResponse registerUser(SignupRequestDto signupRequestDto) {
 
 		if (userDao.userPresentByEmail(signupRequestDto.getEmail())) {
@@ -84,14 +97,13 @@ public class AuthServiceImpl implements AuthService {
 
 		// Create new user
 		User user = User.builder()
-				.uuid(UUID.randomUUID().toString())
 				.email(signupRequestDto.getEmail()).password(encoder.encode(signupRequestDto.getPassword()))
 				.firstName(signupRequestDto.getFirstName()).lastName(signupRequestDto.getLastName()).build();
 
 		user = userDao.saveUser(user);
 
-		// Never trust client-supplied roles — public signup always gets ROLE_USER only.
-		// Elevated roles must be assigned via admin-only endpoints.
+		// Pet-parent path only. Client SignupRole.DOCTOR/CLINIC is dispatched in register().
+		// The legacy Set<String> roles field is ignored and cannot escalate privileges.
 		Role userRole = roleDao.roleByName(ERole.ROLE_USER);
 		if (userRole == null) {
 			throw new CustomException("Default ROLE_USER not found", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -149,7 +161,6 @@ public class AuthServiceImpl implements AuthService {
 		Clinic clinic = null;
 		if (invite == null && req.getClinicName() != null && !req.getClinicName().isBlank()) {
 			clinic = clinicDao.saveClinic(Clinic.builder()
-					.uuid(UUID.randomUUID().toString())
 					.name(req.getClinicName())
 					.licenseNumber(req.getRegistrationNumber())
 					.address(req.getClinicAddress())
@@ -165,7 +176,6 @@ public class AuthServiceImpl implements AuthService {
 				: req.getRegistrationNumber();
 
 		DoctorProfile profile = doctorProfileDao.save(DoctorProfile.builder()
-				.uuid(UUID.randomUUID().toString())
 				.user(user)
 				.licenseNumber(license)
 				.registrationNumber(req.getRegistrationNumber())
@@ -293,6 +303,9 @@ public class AuthServiceImpl implements AuthService {
 		if (userDao.userPresentByEmail(signupClinicRequestDto.getEmail())) {
 			throw new ResourceAlreadyExistsException("User", "email", signupClinicRequestDto.getEmail());
 		}
+		if (signupClinicRequestDto.getClinicName() == null || signupClinicRequestDto.getClinicName().isBlank()) {
+			throw new CustomException("Clinic name is required", HttpStatus.BAD_REQUEST);
+		}
 		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
@@ -300,7 +313,6 @@ public class AuthServiceImpl implements AuthService {
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
 
 		clinicDao.saveClinic(Clinic.builder()
-				.uuid(UUID.randomUUID().toString())
 				.name(signupClinicRequestDto.getClinicName())
 				.licenseNumber(signupClinicRequestDto.getLicenseNumber())
 				.address(signupClinicRequestDto.getAddress())
@@ -318,7 +330,6 @@ public class AuthServiceImpl implements AuthService {
 
 	private User createUserWithRole(SignupRequestDto signupRequestDto, ERole roleName) {
 		User user = User.builder()
-				.uuid(UUID.randomUUID().toString())
 				.email(signupRequestDto.getEmail())
 				.password(encoder.encode(signupRequestDto.getPassword()))
 				.firstName(signupRequestDto.getFirstName())
@@ -379,7 +390,6 @@ public class AuthServiceImpl implements AuthService {
 			if (existingUser == null) {
 				// Create new user
 				existingUser = User.builder()
-						.uuid(UUID.randomUUID().toString())
 						.email(googleUserInfo.getEmail())
 						.firstName(googleUserInfo.getGivenName())
 						.lastName(googleUserInfo.getFamilyName())

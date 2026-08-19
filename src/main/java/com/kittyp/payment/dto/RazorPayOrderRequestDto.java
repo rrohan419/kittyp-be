@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.kittyp.order.entity.Taxes;
 import com.kittyp.payment.enums.CurrencySymbol;
+import com.kittyp.payment.enums.RazorpayOrderSource;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -28,6 +29,8 @@ public class RazorPayOrderRequestDto {
 	private List<String> notes;
 	
 	private Taxes taxes;
-	
-	
+
+	private String invoiceUuid;
+
+	private RazorpayOrderSource source;
 }

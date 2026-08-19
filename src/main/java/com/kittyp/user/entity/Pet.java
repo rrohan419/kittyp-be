@@ -9,11 +9,14 @@ import org.hibernate.annotations.DynamicUpdate;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.common.entity.HasPublicId;
+import com.kittyp.common.entity.PublicIdEntityListener;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -27,15 +30,16 @@ import lombok.ToString;
 
 @Entity
 @Table(name = "pets")
+@EntityListeners(PublicIdEntityListener.class)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true, exclude = { "clinic", "clinicOwner" })
-public class Pet extends BaseEntity {
+public class Pet extends BaseEntity implements HasPublicId {
 
-    @Column(name = "uuid", nullable = false, unique = true)
+    @Column(name = "uuid", nullable = false, unique = true, updatable = false)
     private String uuid;
 
     private String name;

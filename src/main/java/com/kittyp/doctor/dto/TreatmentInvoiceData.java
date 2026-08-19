@@ -23,8 +23,15 @@ public class TreatmentInvoiceData {
     private String invoiceNumber;
     private String invoiceDate;
     private String paymentStatus;
+    private String paymentStatusLabel;
+    private String paymentSummary;
     private String paymentMode;
+    private String paymentModeLabel;
     private String transactionId;
+    private String razorpayOrderId;
+    private String paidAt;
+    private boolean paid;
+    private boolean partial;
 
     private String clinicName;
     private String clinicAddress;

@@ -115,6 +115,7 @@ public class ParentBookingController {
                 booking.getClinic() == null ? null : booking.getClinic().getName(),
                 doctorName,
                 doctorSpecialization,
-                doctorPhotoUrl);
+                doctorPhotoUrl,
+                booking.getPet() == null ? null : booking.getPet().getType());
     }
 }

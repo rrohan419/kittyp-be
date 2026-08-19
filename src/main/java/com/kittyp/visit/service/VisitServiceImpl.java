@@ -1,6 +1,5 @@
 package com.kittyp.visit.service;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -177,6 +176,7 @@ public class VisitServiceImpl implements VisitService {
         // Always snap to half-hour grid; self-book may still stack in the same window.
         LocalDateTime slotStart = snapToHalfHour(request.slotStart());
         LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
+        requireWithinDoctorHours(doctor, slotStart);
 
         if (!selfBook) {
             List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
@@ -201,7 +201,6 @@ public class VisitServiceImpl implements VisitService {
         String notes = blankToNull(request.notes());
 
         Booking booking = Booking.builder()
-                .uuid(UUID.randomUUID().toString())
                 .pet(pet)
                 .owner(ownerUser)
                 .doctor(doctor)
@@ -242,6 +241,7 @@ public class VisitServiceImpl implements VisitService {
             throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
         }
         LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
+        requireWithinDoctorHours(doctor, slotStart);
 
         List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
                 doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
@@ -253,7 +253,6 @@ public class VisitServiceImpl implements VisitService {
 
         BookingMode mode = request.mode() == null ? BookingMode.IN_PERSON : request.mode();
         Booking booking = Booking.builder()
-                .uuid(UUID.randomUUID().toString())
                 .pet(pet)
                 .owner(owner)
                 .doctor(doctor)
@@ -296,10 +295,10 @@ public class VisitServiceImpl implements VisitService {
             duration = availability.getSlotDurationMinutes();
         }
 
-        List<LocalTime[]> windows = availabilityWindowsForDay(availability, day.getDayOfWeek());
+        List<LocalTime[]> windows = DoctorHours.windowsOrDefault(
+                availability == null ? null : availability.getWeeklyScheduleJson(), day.getDayOfWeek());
         if (windows.isEmpty()) {
-            windows = new ArrayList<>();
-            windows.add(new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(18, 0) });
+            return List.of();
         }
 
         LocalDateTime rangeFrom = day.atStartOfDay();
@@ -328,42 +327,14 @@ public class VisitServiceImpl implements VisitService {
         return free;
     }
 
-    private List<LocalTime[]> availabilityWindowsForDay(DoctorAvailability availability, DayOfWeek dayOfWeek) {
-        if (availability == null || availability.getWeeklyScheduleJson() == null
-                || availability.getWeeklyScheduleJson().isBlank()) {
-            return List.of();
-        }
-        try {
-            List<Map<String, Object>> schedule = objectMapper.readValue(
-                    availability.getWeeklyScheduleJson(), new TypeReference<List<Map<String, Object>>>() {
-                    });
-            int dow = dayOfWeek.getValue(); // Monday=1 … Sunday=7
-            List<LocalTime[]> windows = new ArrayList<>();
-            for (Map<String, Object> slot : schedule) {
-                Object active = slot.get("isActive");
-                if (active instanceof Boolean b && !b) {
-                    continue;
-                }
-                Object dayVal = slot.get("dayOfWeek");
-                if (dayVal == null) {
-                    continue;
-                }
-                int slotDay = dayVal instanceof Number n ? n.intValue() : Integer.parseInt(dayVal.toString());
-                if (slotDay != dow && !(slotDay == 0 && dow == 7)) {
-                    continue;
-                }
-                String start = Objects.toString(slot.get("startTime"), null);
-                String end = Objects.toString(slot.get("endTime"), null);
-                if (start == null || end == null) {
-                    continue;
-                }
-                windows.add(new LocalTime[] { LocalTime.parse(start), LocalTime.parse(end) });
-            }
-            windows.sort(Comparator.comparing(w -> w[0]));
-            return windows;
-        } catch (Exception e) {
-            log.warn("Failed to parse doctor availability schedule: {}", e.getMessage());
-            return List.of();
+    private void requireWithinDoctorHours(DoctorProfile doctor, LocalDateTime slotStart) {
+        DoctorAvailability availability = doctorAvailabilityRepository.findByDoctor_Id(doctor.getId()).orElse(null);
+        List<LocalTime[]> windows = DoctorHours.windowsOrDefault(
+                availability == null ? null : availability.getWeeklyScheduleJson(), slotStart.getDayOfWeek());
+        LocalTime start = slotStart.toLocalTime();
+        LocalTime end = slotStart.plusMinutes(APPOINTMENT_MINUTES).toLocalTime();
+        if (!DoctorHours.fitsWindow(windows, start, end)) {
+            throw new CustomException("Doctor is not available at this time", HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -671,9 +642,13 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     public VisitModel saveChart(String visitUuid, VisitChartRequest request, String email) {
         Visit visit = requireDoctorOwnedVisit(visitUuid, email);
-        if (visit.getStatus() == VisitStatus.COMPLETED || visit.getStatus() == VisitStatus.CANCELLED
-                || visit.getStatus() == VisitStatus.NO_SHOW) {
+        if (visit.getStatus() == VisitStatus.CANCELLED || visit.getStatus() == VisitStatus.NO_SHOW) {
             throw new CustomException("Cannot edit chart for a closed visit", HttpStatus.BAD_REQUEST);
+        }
+        if (chartLocked(visit)) {
+            throw new CustomException(
+                    "Prescription can no longer be edited. More than one hour has passed since the visit was finished.",
+                    HttpStatus.BAD_REQUEST);
         }
         if (STARTABLE.contains(visit.getStatus())) {
             applyStatusTransition(visit, VisitStatus.IN_PROGRESS);
@@ -697,6 +672,22 @@ public class VisitServiceImpl implements VisitService {
             visit.setVitalsJson(writeJson(request.vitals()));
         }
         return toModel(visitDao.save(visit), true);
+    }
+
+    /** CHECKING_OUT / COMPLETED: chart (prescription) stays editable for 1 hour after finish. */
+    private boolean chartLocked(Visit visit) {
+        VisitStatus status = visit.getStatus();
+        if (status == VisitStatus.WAITLIST || status == VisitStatus.CHECKED_IN || status == VisitStatus.IN_PROGRESS) {
+            return false;
+        }
+        if (status != VisitStatus.CHECKING_OUT && status != VisitStatus.COMPLETED) {
+            return true;
+        }
+        LocalDateTime doneAt = visit.getCheckingOutAt() != null ? visit.getCheckingOutAt() : visit.getCompletedAt();
+        if (doneAt == null) {
+            return true;
+        }
+        return doneAt.isBefore(LocalDateTime.now().minusHours(1));
     }
 
     @Override
@@ -899,7 +890,7 @@ public class VisitServiceImpl implements VisitService {
                             existing.clinicName(),
                             existing.visitCount() + 1,
                             laterVisit(existing.lastVisitAt(), added.lastVisitAt()),
-                            preferText(added.lastAssessment(), existing.lastAssessment())));
+                            laterAssessment(existing, added)));
         }
         mergeDoctorEnrollments(profile, clinicUuid, byPet);
         return byPet.values().stream()
@@ -964,6 +955,14 @@ public class VisitServiceImpl implements VisitService {
         return a.isAfter(b) ? a : b;
     }
 
+    private static String laterAssessment(AttendedPatientModel existing, AttendedPatientModel added) {
+        boolean addedIsLater = existing.lastVisitAt() == null
+                || (added.lastVisitAt() != null && !added.lastVisitAt().isBefore(existing.lastVisitAt()));
+        return addedIsLater
+                ? preferText(added.lastAssessment(), existing.lastAssessment())
+                : preferText(existing.lastAssessment(), added.lastAssessment());
+    }
+
     private static String preferText(String preferred, String fallback) {
         if (preferred != null && !preferred.isBlank()) {
             return preferred;
@@ -1007,7 +1006,6 @@ public class VisitServiceImpl implements VisitService {
                 .orElse(null);
         if (owner == null) {
             owner = ClinicPetOwner.builder()
-                    .uuid(UUID.randomUUID().toString())
                     .clinic(clinic)
                     .firstName(ownerReq.firstName().trim())
                     .lastName(ownerReq.lastName() == null ? "" : ownerReq.lastName().trim())
@@ -1030,7 +1028,6 @@ public class VisitServiceImpl implements VisitService {
         owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
 
         Pet pet = Pet.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(clinic)
                 .clinicOwner(owner)
                 .name(petReq.name().trim())
@@ -1239,7 +1236,8 @@ public class VisitServiceImpl implements VisitService {
                 booking.getClinic() == null ? null : booking.getClinic().getName(),
                 doctorName,
                 doctorSpecialization,
-                doctorPhotoUrl);
+                doctorPhotoUrl,
+                booking.getPet() == null ? null : booking.getPet().getType());
     }
 
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {
@@ -1399,6 +1397,7 @@ public class VisitServiceImpl implements VisitService {
                 visit.getClinic().getName(),
                 visit.getPet().getUuid(),
                 visit.getPet().getName(),
+                visit.getPet().getType(),
                 ownerName,
                 owner == null ? null : owner.getEmail(),
                 owner == null ? null : owner.getPhone(),

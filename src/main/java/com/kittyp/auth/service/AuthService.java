@@ -6,6 +6,7 @@ import com.kittyp.auth.dto.SignupOtpSendRequest;
 import com.kittyp.auth.dto.SignupOtpVerifyRequest;
 import com.kittyp.auth.dto.SocialSso;
 import com.kittyp.common.dto.LoginRequestDto;
+import com.kittyp.common.dto.PublicSignupRequestDto;
 import com.kittyp.common.dto.SignupClinicRequestDto;
 import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.dto.SignupRequestDto;
@@ -13,6 +14,8 @@ import com.kittyp.common.model.JwtResponseModel;
 import com.kittyp.common.model.MessageResponse;
 
 public interface AuthService {
+
+	MessageResponse register(PublicSignupRequestDto signupRequestDto);
 
 	MessageResponse registerUser(SignupRequestDto signupRequestDto);
 

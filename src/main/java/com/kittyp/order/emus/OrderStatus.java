@@ -35,7 +35,8 @@ public enum OrderStatus{
             case "PAYMENT_CANCELLED" -> PAYMENT_CANCELLED;
 
             case "PAYMENT.CAPTURED" -> SUCCESSFULL;
-            case "PAYMENT.AUTHORIZED" -> SUCCESSFULL;
+            case "PAYMENT.AUTHORIZED" -> PAYMENT_PENDING;
+            case "PAYMENT.FAILED" -> FAILED;
             case "ORDER.PAID" -> SUCCESSFULL;
             default -> UNKNOWN;
             // default -> throw new IllegalArgumentException("Unknown status: " + status);

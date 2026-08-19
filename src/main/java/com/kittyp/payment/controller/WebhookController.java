@@ -1,7 +1,6 @@
 package com.kittyp.payment.controller;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,7 +15,6 @@ import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.util.Mapper;
-import com.kittyp.payment.constants.RazorPayConstant;
 import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.service.WebhookService;
 import com.razorpay.Utils;
@@ -31,7 +29,6 @@ public class WebhookController {
 	private final ApiResponse<?> responseBuilder;
 	private final WebhookService webhookService;
 	private final Mapper mapper;
-	private final Environment env;
 
 	@Value("${razorpay.webhook.secret:}")
 	private String webhookSecret;
@@ -41,16 +38,17 @@ public class WebhookController {
 			@RequestHeader(value = "X-Razorpay-Signature", required = false) String signature,
 			@RequestBody String rawPayload) {
 
-		String secret = (webhookSecret != null && !webhookSecret.isBlank())
-				? webhookSecret
-				: env.getProperty(RazorPayConstant.KEY_SECRET);
-
-		if (signature == null || signature.isBlank() || secret == null || secret.isBlank()) {
+		if (signature == null || signature.isBlank() || webhookSecret == null || webhookSecret.isBlank()) {
 			throw new CustomException("Missing webhook signature", HttpStatus.UNAUTHORIZED);
 		}
 
 		try {
-			Utils.verifyWebhookSignature(rawPayload, signature, secret);
+			boolean valid = Utils.verifyWebhookSignature(rawPayload, signature, webhookSecret);
+			if (!valid) {
+				throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
+			}
+		} catch (CustomException e) {
+			throw e;
 		} catch (Exception e) {
 			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
 		}

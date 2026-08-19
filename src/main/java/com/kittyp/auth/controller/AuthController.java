@@ -22,9 +22,9 @@ import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.LoginRequestDto;
+import com.kittyp.common.dto.PublicSignupRequestDto;
 import com.kittyp.common.dto.SignupClinicRequestDto;
 import com.kittyp.common.dto.SignupDoctorRequestDto;
-import com.kittyp.common.dto.SignupRequestDto;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.JwtResponseModel;
 import com.kittyp.common.model.MessageResponse;
@@ -59,8 +59,8 @@ public class AuthController {
 
 	@PostMapping(ApiUrl.SIGNUP)
 	public ResponseEntity<SuccessResponse<MessageResponse>> registerUser(
-			@Valid @RequestBody SignupRequestDto signUpRequest) {
-		MessageResponse response = authService.registerUser(signUpRequest);
+			@Valid @RequestBody PublicSignupRequestDto signUpRequest) {
+		MessageResponse response = authService.register(signUpRequest);
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}

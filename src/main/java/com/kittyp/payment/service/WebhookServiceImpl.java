@@ -3,22 +3,19 @@
  */
 package com.kittyp.payment.service;
 
-import org.hibernate.Hibernate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.kittyp.common.util.Mapper;
-import com.kittyp.order.dao.OrderDao;
 import com.kittyp.order.emus.OrderStatus;
-import com.kittyp.order.entity.Order;
 import com.kittyp.payment.entity.WebhookEvent;
 import com.kittyp.payment.enums.WebhookSource;
 import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.model.RazorpayResponseModel.PaymentEntity;
 import com.kittyp.payment.repository.WebhookEventRepository;
-import com.kittyp.product.service.ProductService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -30,110 +27,64 @@ import lombok.RequiredArgsConstructor;
 public class WebhookServiceImpl implements WebhookService {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebhookServiceImpl.class);
+	static final String PROCESSED = "PROCESSED";
+	static final String RECEIVED = "RECEIVED";
+	static final String FAILED = "FAILED";
 
 	private final Mapper mapper;
 	private final WebhookEventRepository webhookEventRepository;
-	private final OrderDao orderDao;
-	private final ProductService productService;
+	private final PaymentCaptureService paymentCaptureService;
 
-	/**
-	 * @author rrohan419@gmail.com
-	 */
-	@Async
 	@Override
+	@Transactional
 	public void razorpayWebbhook(RazorpayResponseModel razorpayResponseModel) {
+		if (razorpayResponseModel == null || razorpayResponseModel.getPayload() == null
+				|| razorpayResponseModel.getPayload().getPayment() == null
+				|| razorpayResponseModel.getPayload().getPayment().getEntity() == null) {
+			logger.warn("Razorpay webhook missing payment entity");
+			return;
+		}
+
+		PaymentEntity paymentEntity = razorpayResponseModel.getPayload().getPayment().getEntity();
+		String eventType = razorpayResponseModel.getEvent();
+		String paymentId = paymentEntity.getId();
+		String orderId = paymentEntity.getOrder_id();
+
+		if (StringUtils.hasText(paymentId) && StringUtils.hasText(eventType)
+				&& webhookEventRepository.findByPaymentIdAndEventType(paymentId, eventType).isPresent()) {
+			logger.info("Skipping duplicate Razorpay webhook {} for payment {}", eventType, paymentId);
+			return;
+		}
+
+		WebhookEvent webhookEvent = new WebhookEvent();
+		webhookEvent.setSource(WebhookSource.RAZORPAY);
+		webhookEvent.setEventType(eventType);
+		webhookEvent.setPayload(mapper.convertObjectToJson(razorpayResponseModel));
+		webhookEvent.setPaymentId(paymentId);
+		webhookEvent.setStatus(RECEIVED);
+		webhookEvent.setErrorMessage(paymentEntity.getError_reason());
+		webhookEvent.setRetryCount(0);
+		webhookEvent.setOrderId(orderId);
+		webhookEventRepository.save(webhookEvent);
+
+		OrderStatus mapped = eventType != null ? OrderStatus.fromRazorpayStatus(eventType) : OrderStatus.UNKNOWN;
 		try {
-			PaymentEntity paymentEntity = razorpayResponseModel.getPayload().getPayment().getEntity();
-			logger.info("Razorpay response model: {}", razorpayResponseModel);
-			logger.info("Payment entity: {}", paymentEntity);
-			String orderId = paymentEntity.getOrder_id();
-
-			logger.info("Processing Razorpay webhook for order: {}", orderId);
-
-			// Save webhook event
-			WebhookEvent webhookEvent = new WebhookEvent();
-			webhookEvent.setSource(WebhookSource.RAZORPAY);
-			webhookEvent.setEventType(razorpayResponseModel.getEvent());
-			webhookEvent.setPayload(mapper.convertObjectToJson(razorpayResponseModel));
-			webhookEvent.setPaymentId(paymentEntity.getId());
-			webhookEvent.setStatus(paymentEntity.getStatus());
-			webhookEvent.setErrorMessage(paymentEntity.getError_reason());
-			webhookEvent.setRetryCount(0);
-			webhookEvent.setOrderId(orderId);
+			if (mapped == OrderStatus.SUCCESSFULL) {
+				paymentCaptureService.completeCaptured(orderId, paymentId);
+				webhookEvent.setStatus(PROCESSED);
+			} else if (mapped == OrderStatus.FAILED) {
+				paymentCaptureService.failStoreIfPending(orderId);
+				webhookEvent.setStatus(PROCESSED);
+			} else {
+				logger.info("Ignoring Razorpay event {} for order {}", eventType, orderId);
+			}
 			webhookEventRepository.save(webhookEvent);
-
-			// Update order status
-			Order order = orderDao.orderByAggregatorOrderNumber(orderId);
-
-			if (order == null) {
-				logger.error("Order not found for orderId: {}", orderId);
-				return;
-			}
-
-			handleOrderStatus(order, orderId, razorpayResponseModel);
-
 		} catch (Exception e) {
-			logger.error("Error processing Razorpay webhook: {}", e.getMessage(), e);
+			webhookEvent.setStatus(FAILED);
+			webhookEvent.setErrorMessage(e.getMessage());
+			webhookEventRepository.save(webhookEvent);
+			logger.error("Error processing Razorpay webhook for order {}: {}", orderId, e.getMessage(), e);
+			throw e;
 		}
-	}
-
-	private void confirmStockReservation(String orderNumber) {
-		try {
-			productService.confirmStockReservation(orderNumber);
-			logger.info("Successfully confirmed stock reservation for order: {}",
-					orderNumber);
-		} catch (Exception e) {
-			logger.error("Failed to confirm stock reservation for order: {}",
-					orderNumber, e);
-		}
-	}
-
-	private void handleOrderStatus(Order order, String orderId, RazorpayResponseModel razorpayResponseModel){
-		try {
-				Hibernate.initialize(order.getUser());
-				OrderStatus status = OrderStatus.fromRazorpayStatus(razorpayResponseModel.getEvent());
-				if (status == OrderStatus.UNKNOWN) {
-					logger.warn("Unknown status: {} for order: {}", razorpayResponseModel.getEvent(), orderId);
-					return;
-				}
-
-				// Handle specific payment statuses
-				switch (status) {
-					case PAYMENT_PENDING:
-						logger.info("Payment pending for order: {}", orderId);
-						break;
-					case PAYMENT_TIMEOUT:
-						logger.info("Payment timed out for order: {}", orderId);
-						productService.cancelStockReservation(order.getOrderNumber());
-						break;
-					case PAYMENT_CANCELLED:
-						logger.info("Payment cancelled for order: {}", orderId);
-						productService.cancelStockReservation(order.getOrderNumber());
-
-						break;
-					case SUCCESSFULL:
-						logger.info("Payment successful for order: {}", orderId);
-						if (order.getStatus() != OrderStatus.SUCCESSFULL) {
-							order.setStatus(OrderStatus.SUCCESSFULL);
-							orderDao.saveOrder(order);
-							confirmStockReservation(order.getOrderNumber());
-							logger.info("Successfully updated order status to {} for order: {}", status, orderId);
-
-						} else {
-							logger.info("Order already in successfull status for order: {}", orderId);
-						}
-
-						break;
-					default:
-						logger.warn("Payment status not handled for status: {} for order: {}", status, orderId);
-				}
-
-				order.setStatus(status);
-				orderDao.saveOrder(order);
-				logger.info("Successfully updated order status to {} for order: {}", status, orderId);
-
-			} catch (Exception e) {
-				logger.error("Failed to update order status for orderId: {}", orderId, e);
-			}
 	}
 }

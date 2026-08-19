@@ -9,12 +9,15 @@ import com.kittyp.booking.enums.BookingMode;
 import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.common.entity.HasPublicId;
+import com.kittyp.common.entity.PublicIdEntityListener;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -29,15 +32,16 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "bookings")
+@EntityListeners(PublicIdEntityListener.class)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true)
-public class Booking extends BaseEntity {
+public class Booking extends BaseEntity implements HasPublicId {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, updatable = false)
     private String uuid;
 
     @ManyToOne(fetch = FetchType.LAZY)

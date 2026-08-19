@@ -11,12 +11,18 @@ public interface ConsultationInvoiceRepository extends JpaRepository<Consultatio
 
     Optional<ConsultationInvoice> findByUuid(String uuid);
 
+    Optional<ConsultationInvoice> findByRazorpayOrderId(String razorpayOrderId);
+
+    boolean existsByUuid(String uuid);
+
     Optional<ConsultationInvoice> findByUuidAndDoctor_Id(String uuid, Long doctorId);
 
     List<ConsultationInvoice> findAllByDoctor_IdOrderByCreatedAtDesc(Long doctorId);
     List<ConsultationInvoice> findAllByOwner_IdOrderByCreatedAtDesc(Long ownerId);
 
     List<ConsultationInvoice> findAllByClinic_IdOrderByCreatedAtDesc(Long clinicId);
+
+    List<ConsultationInvoice> findAllByDoctor_IdAndClinic_IdOrderByCreatedAtDesc(Long doctorId, Long clinicId);
 
     Optional<ConsultationInvoice> findByUuidAndClinic_Id(String uuid, Long clinicId);
 

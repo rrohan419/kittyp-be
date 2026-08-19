@@ -17,6 +17,8 @@ public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, 
 
 	Optional<ClinicPetOwner> findByUuid(String uuid);
 
+	boolean existsByUuid(String uuid);
+
 	Optional<ClinicPetOwner> findByUuidAndClinic_IdAndIsActiveTrue(String uuid, Long clinicId);
 
 	long countByClinic_IdAndIsActiveTrue(Long clinicId);

@@ -10,7 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +29,7 @@ import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.service.S3StorageService;
+import com.kittyp.common.util.AlphanumericIdService;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
 import com.kittyp.doctor.dto.CreateInvoiceResultDto;
 import com.kittyp.doctor.dto.TreatmentInvoiceData;
@@ -41,6 +41,7 @@ import com.kittyp.doctor.enums.TreatmentInvoiceItemType;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorProfileRepository;
+import com.kittyp.payment.util.InvoicePdfFileNamer;
 import com.kittyp.payment.util.PdfGenerator;
 import com.kittyp.notification.service.OutboundMessageService;
 import com.kittyp.notification.service.WhatsAppPhones;
@@ -51,6 +52,7 @@ import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.entity.Visit;
+import com.kittyp.visit.enums.VisitStatus;
 
 import lombok.RequiredArgsConstructor;
 
@@ -75,6 +77,7 @@ public class TreatmentInvoiceService {
     private final PdfGenerator pdfGenerator;
     private final S3StorageService s3StorageService;
     private final OutboundMessageService outboundMessageService;
+    private final AlphanumericIdService alphanumericIdService;
 
     @Transactional
     public ConsultationInvoice create(User doctor, CreateConsultationInvoiceDto request) {
@@ -108,11 +111,6 @@ public class TreatmentInvoiceService {
         if (request.getClinicUuid() != null && !request.getClinicUuid().isBlank()) {
             clinic = requireClinic(request.getClinicUuid());
             requireDoctorAffiliated(clinic, doctor);
-            // Doctor portal may only bill personal (owned) practice — not affiliated clinics.
-            if (clinic.getOwner() == null || !clinic.getOwner().getId().equals(doctor.getId())) {
-                throw new AccessDeniedException(
-                        "Clinic-branch invoices must be created from the clinic portal.");
-            }
         }
 
         User owner = null;
@@ -141,7 +139,7 @@ public class TreatmentInvoiceService {
         String visitUuid = blankToNull(request.getVisitUuid());
 
         ConsultationInvoice invoice = ConsultationInvoice.builder()
-                .uuid(UUID.randomUUID().toString())
+                .uuid(alphanumericIdService.allocateUnique(ConsultationInvoice.class))
                 .invoiceNumber(invoiceNumber)
                 .doctor(doctor)
                 .clinic(clinic)
@@ -206,7 +204,7 @@ public class TreatmentInvoiceService {
             return CreateInvoiceResultDto.of(invoice);
         }
         try {
-            invoice = sendInvoiceWhatsApp(invoice, null, doctorSender(doctor));
+            invoice = sendInvoiceWhatsApp(invoice, null, senderFor(invoice, doctor));
             return CreateInvoiceResultDto.sent(invoice);
         } catch (Exception e) {
             String msg = e.getMessage() != null && !e.getMessage().isBlank()
@@ -225,10 +223,7 @@ public class TreatmentInvoiceService {
                     .findFirstByVisitUuidAndDoctor_IdAndIsActiveTrueOrderByCreatedAtDesc(visitUuid, doctor.getId());
             if (existing.isPresent()) {
                 ConsultationInvoice inv = existing.get();
-                // Only reuse personal-practice invoices (same rule as doctor portal).
-                if (inv.getClinic() == null
-                        || (inv.getClinic().getOwner() != null
-                                && inv.getClinic().getOwner().getId().equals(doctor.getId()))) {
+                if (sameBillingScope(inv, blankToNull(request.getClinicUuid()))) {
                     if (Boolean.TRUE.equals(request.getGeneratePdf())
                             && (inv.getPdfUrl() == null || inv.getPdfUrl().isBlank())) {
                         inv = generateAndAttachPdf(inv);
@@ -299,9 +294,9 @@ public class TreatmentInvoiceService {
             managed = generateAndAttachPdf(managed);
         }
         String phone = resolveOwnerPhone(managed, overridePhone);
-        byte[] pdf = s3StorageService.downloadTreatmentInvoice(managed.getUuid());
-        String filename = (managed.getInvoiceNumber() != null ? managed.getInvoiceNumber() : managed.getUuid())
-                + ".pdf";
+        String objectKey = InvoicePdfFileNamer.resolveObjectKey(managed.getPdfUrl(), managed.getUuid());
+        byte[] pdf = s3StorageService.downloadTreatmentInvoice(objectKey);
+        String filename = InvoicePdfFileNamer.baseName(objectKey);
         Map<String, Object> pet = readMap(managed.getPetSnapshot());
         Map<String, Object> ownerSnap = readMap(managed.getOwnerSnapshot());
         String ownerName = stringVal(ownerSnap.get("ownerName"), "Pet parent");
@@ -330,9 +325,35 @@ public class TreatmentInvoiceService {
         return managed;
     }
 
-    /** Doctor personal send — DoctorProfile credentials only. */
+    /** Doctor send: clinic WhatsApp for affiliated-clinic invoices, else doctor credentials. */
     public ConsultationInvoice sendInvoiceWhatsApp(ConsultationInvoice invoice, String overridePhone) {
-        return sendInvoiceWhatsApp(invoice, overridePhone, doctorSender(invoice.getDoctor()));
+        return sendInvoiceWhatsApp(invoice, overridePhone, senderFor(invoice, invoice.getDoctor()));
+    }
+
+    public List<ConsultationInvoice> listForDoctor(User doctor, String clinicUuid) {
+        if (clinicUuid == null || clinicUuid.isBlank()) {
+            return invoiceRepository.findAllByDoctor_IdOrderByCreatedAtDesc(doctor.getId()).stream()
+                    .filter(inv -> isPersonalScope(inv, doctor))
+                    .toList();
+        }
+        Clinic clinic = requireClinic(clinicUuid);
+        requireDoctorAffiliated(clinic, doctor);
+        List<ConsultationInvoice> atClinic = invoiceRepository
+                .findAllByDoctor_IdAndClinic_IdOrderByCreatedAtDesc(doctor.getId(), clinic.getId());
+        if (!isOwnedByDoctor(clinic, doctor)) {
+            return atClinic;
+        }
+        List<ConsultationInvoice> unscoped = invoiceRepository.findAllByDoctor_IdOrderByCreatedAtDesc(doctor.getId())
+                .stream()
+                .filter(inv -> inv.getClinic() == null)
+                .toList();
+        if (unscoped.isEmpty()) {
+            return atClinic;
+        }
+        java.util.LinkedHashMap<String, ConsultationInvoice> merged = new java.util.LinkedHashMap<>();
+        atClinic.forEach(inv -> merged.put(inv.getUuid(), inv));
+        unscoped.forEach(inv -> merged.putIfAbsent(inv.getUuid(), inv));
+        return List.copyOf(merged.values());
     }
 
     public List<ConsultationInvoice> listForClinic(Clinic clinic) {
@@ -342,6 +363,103 @@ public class TreatmentInvoiceService {
     public ConsultationInvoice requireClinicInvoice(Clinic clinic, String invoiceUuid) {
         return invoiceRepository.findByUuidAndClinic_Id(invoiceUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Consultation invoice", "uuid", invoiceUuid));
+    }
+
+    public BigDecimal remainingBalance(ConsultationInvoice invoice) {
+        if (invoice.getBalance() != null) {
+            return invoice.getBalance();
+        }
+        BigDecimal amount = invoice.getAmount() != null ? invoice.getAmount() : BigDecimal.ZERO;
+        BigDecimal paid = invoice.getPaidAmount() != null ? invoice.getPaidAmount() : BigDecimal.ZERO;
+        return amount.subtract(paid);
+    }
+
+    public boolean isRazorpayPaid(ConsultationInvoice invoice) {
+        if (invoice.getStatus() == ConsultationInvoiceStatus.PAID) {
+            return true;
+        }
+        if ("PAID".equalsIgnoreCase(invoice.getPaymentStatus())) {
+            return true;
+        }
+        return remainingBalance(invoice).compareTo(BigDecimal.ZERO) <= 0;
+    }
+
+    @Transactional
+    public ConsultationInvoice completeRazorpayCapture(String razorpayOrderId, String paymentId) {
+        ConsultationInvoice invoice = invoiceRepository.findByRazorpayOrderId(razorpayOrderId)
+                .orElseThrow(() -> new CustomException("Order not found", HttpStatus.NOT_FOUND));
+        if (isRazorpayPaid(invoice)) {
+            if (paymentId != null && (invoice.getTransactionId() == null || invoice.getTransactionId().isBlank())) {
+                invoice.setTransactionId(paymentId);
+                invoice = invoiceRepository.save(invoice);
+                completeLinkedVisitAfterPayment(invoice);
+                return refreshPdfQuietly(invoice);
+            }
+            completeLinkedVisitAfterPayment(invoice);
+            return invoice;
+        }
+        BigDecimal amount = invoice.getAmount() != null ? invoice.getAmount() : BigDecimal.ZERO;
+        invoice.setPaidAmount(amount);
+        invoice.setBalance(BigDecimal.ZERO);
+        invoice.setPaymentStatus("PAID");
+        invoice.setPaymentMode("RAZORPAY");
+        if (paymentId != null && !paymentId.isBlank()) {
+            invoice.setTransactionId(paymentId);
+        }
+        invoice.setStatus(ConsultationInvoiceStatus.PAID);
+        invoice = invoiceRepository.save(invoice);
+        completeLinkedVisitAfterPayment(invoice);
+        return refreshPdfQuietly(invoice);
+    }
+
+    @Transactional
+    public ConsultationInvoice markPaid(ConsultationInvoice invoice, String paymentMode, String transactionId) {
+        if (isRazorpayPaid(invoice)) {
+            throw new CustomException("Invoice is already paid", HttpStatus.CONFLICT);
+        }
+        BigDecimal amount = invoice.getAmount() != null ? invoice.getAmount() : BigDecimal.ZERO;
+        invoice.setPaidAmount(amount);
+        invoice.setBalance(BigDecimal.ZERO);
+        invoice.setPaymentStatus("PAID");
+        invoice.setPaymentMode(normalizeRecordedPaymentMode(paymentMode));
+        invoice.setTransactionId(blankToNull(transactionId));
+        invoice.setStatus(ConsultationInvoiceStatus.PAID);
+        invoice = invoiceRepository.save(invoice);
+        completeLinkedVisitAfterPayment(invoice);
+        return invoice;
+    }
+
+    /** Payment closes the clinical visit so it shows as checked out. */
+    private void completeLinkedVisitAfterPayment(ConsultationInvoice invoice) {
+        String visitUuid = blankToNull(invoice.getVisitUuid());
+        if (visitUuid == null) {
+            return;
+        }
+        visitDao.findByUuid(visitUuid).ifPresent(visit -> {
+            VisitStatus status = visit.getStatus();
+            if (status == VisitStatus.COMPLETED || status == VisitStatus.CANCELLED
+                    || status == VisitStatus.NO_SHOW) {
+                return;
+            }
+            LocalDateTime now = LocalDateTime.now();
+            if (visit.getCheckingOutAt() == null) {
+                visit.setCheckingOutAt(now);
+            }
+            visit.setStatus(VisitStatus.COMPLETED);
+            visit.setCompletedAt(now);
+            visitDao.save(visit);
+        });
+    }
+
+    static String normalizeRecordedPaymentMode(String paymentMode) {
+        if (paymentMode == null || paymentMode.isBlank()) {
+            throw new CustomException("Payment mode is required", HttpStatus.BAD_REQUEST);
+        }
+        String mode = paymentMode.trim().toUpperCase();
+        return switch (mode) {
+            case "UPI", "CASH", "CARD", "NEFT", "OTHER", "RAZORPAY" -> mode;
+            default -> throw new CustomException("Unsupported payment mode", HttpStatus.BAD_REQUEST);
+        };
     }
 
     public WhatsAppSenderCredentials doctorSender(User doctor) {
@@ -369,6 +487,30 @@ public class TreatmentInvoiceService {
             return "clinic";
         }
         return "doctor";
+    }
+
+    private WhatsAppSenderCredentials senderFor(ConsultationInvoice invoice, User doctor) {
+        if (invoice.getClinic() != null && !isOwnedByDoctor(invoice.getClinic(), doctor)) {
+            return clinicSender(invoice.getClinic());
+        }
+        return doctorSender(doctor);
+    }
+
+    private static boolean sameBillingScope(ConsultationInvoice invoice, String requestedClinicUuid) {
+        String invClinic = invoice.getClinic() != null ? invoice.getClinic().getUuid() : null;
+        if (requestedClinicUuid == null) {
+            return invClinic == null || isOwnedByDoctor(invoice.getClinic(), invoice.getDoctor());
+        }
+        return requestedClinicUuid.equals(invClinic);
+    }
+
+    private static boolean isPersonalScope(ConsultationInvoice invoice, User doctor) {
+        return invoice.getClinic() == null || isOwnedByDoctor(invoice.getClinic(), doctor);
+    }
+
+    private static boolean isOwnedByDoctor(Clinic clinic, User doctor) {
+        return clinic != null && doctor != null && clinic.getOwner() != null
+                && clinic.getOwner().getId().equals(doctor.getId());
     }
 
     private User resolveClinicBillingDoctor(Clinic clinic, CreateConsultationInvoiceDto request) {
@@ -442,7 +584,7 @@ public class TreatmentInvoiceService {
         String visitUuid = blankToNull(request.getVisitUuid());
 
         ConsultationInvoice invoice = ConsultationInvoice.builder()
-                .uuid(UUID.randomUUID().toString())
+                .uuid(alphanumericIdService.allocateUnique(ConsultationInvoice.class))
                 .invoiceNumber(invoiceNumber)
                 .doctor(doctor)
                 .clinic(clinic)
@@ -544,7 +686,13 @@ public class TreatmentInvoiceService {
     public ConsultationInvoice generateAndAttachPdf(ConsultationInvoice invoice) {
         TreatmentInvoiceData data = toPdfData(invoice);
         byte[] pdf = pdfGenerator.generateTreatmentInvoicePdf(data);
-        String key = s3StorageService.uploadTreatmentInvoice(invoice.getUuid(), pdf);
+        String key;
+        if (invoice.getPdfUrl() != null && !invoice.getPdfUrl().isBlank()) {
+            key = InvoicePdfFileNamer.resolveObjectKey(invoice.getPdfUrl(), invoice.getUuid());
+        } else {
+            key = InvoicePdfFileNamer.objectKey(invoice.getInvoiceNumber(), invoice.getUuid());
+        }
+        s3StorageService.uploadTreatmentInvoice(key, pdf);
         invoice.setPdfUrl(key);
         if (invoice.getStatus() == ConsultationInvoiceStatus.DRAFT) {
             invoice.setStatus(ConsultationInvoiceStatus.ISSUED);
@@ -553,11 +701,29 @@ public class TreatmentInvoiceService {
         return invoiceRepository.save(invoice);
     }
 
+    /**
+     * Rebuild S3 PDF after payment. Call through the Spring proxy after markPaid
+     * commits so a PDF/S3 failure cannot roll back paid status.
+     */
+    @Transactional
+    public ConsultationInvoice refreshPdfQuietly(ConsultationInvoice invoice) {
+        try {
+            ConsultationInvoice managed = invoice.getUuid() != null
+                    ? invoiceRepository.findByUuid(invoice.getUuid()).orElse(invoice)
+                    : invoice;
+            return generateAndAttachPdf(managed);
+        } catch (Exception e) {
+            log.warn("Invoice {} paid but PDF refresh failed: {}", invoice.getUuid(), e.getMessage());
+            return invoice;
+        }
+    }
+
     public String getPresignedPdfUrl(ConsultationInvoice invoice) {
         if (invoice.getPdfUrl() == null || invoice.getPdfUrl().isBlank()) {
             throw new CustomException("PDF not generated for this invoice yet", HttpStatus.NOT_FOUND);
         }
-        return s3StorageService.presignedTreatmentInvoiceUrl(invoice.getUuid(), java.time.Duration.ofMinutes(15))
+        String key = InvoicePdfFileNamer.resolveObjectKey(invoice.getPdfUrl(), invoice.getUuid());
+        return s3StorageService.presignedTreatmentInvoiceUrl(key, java.time.Duration.ofMinutes(15))
                 .toString();
     }
 
@@ -567,6 +733,13 @@ public class TreatmentInvoiceService {
         Map<String, Object> pet = readMap(invoice.getPetSnapshot());
         Map<String, Object> ownerSnap = readMap(invoice.getOwnerSnapshot());
         List<TreatmentLineItemDto> items = readItems(invoice.getLineItems());
+        String paymentStatus = derivedPaymentStatus(invoice);
+        boolean paid = "PAID".equals(paymentStatus);
+        boolean partial = "PARTIAL".equals(paymentStatus);
+        BigDecimal balanceDue = nz(invoice.getBalance());
+        String paidAt = paid && invoice.getUpdatedAt() != null
+                ? invoice.getUpdatedAt().format(DATE_FMT)
+                : null;
 
         TreatmentInvoiceData.TreatmentInvoiceDataBuilder builder = TreatmentInvoiceData.builder()
                 .title("TAX INVOICE / MEDICAL INVOICE")
@@ -576,9 +749,16 @@ public class TreatmentInvoiceService {
                         : invoice.getCreatedAt() != null
                                 ? invoice.getCreatedAt().toLocalDate().format(DATE_FMT)
                                 : LocalDate.now().format(DATE_FMT))
-                .paymentStatus(blankTo(invoice.getPaymentStatus(), invoice.getStatus().name()))
+                .paymentStatus(paymentStatus)
+                .paymentStatusLabel(paymentStatusLabel(paymentStatus))
+                .paymentSummary(paymentSummary(paymentStatus, balanceDue))
                 .paymentMode(invoice.getPaymentMode())
-                .transactionId(invoice.getTransactionId())
+                .paymentModeLabel(paymentModeLabel(invoice.getPaymentMode()))
+                .transactionId(blankToNull(invoice.getTransactionId()))
+                .razorpayOrderId(blankToNull(invoice.getRazorpayOrderId()))
+                .paidAt(paidAt)
+                .paid(paid)
+                .partial(partial)
                 .doctorName(fullName(doctor))
                 .consultationDate(invoice.getConsultationDate() != null
                         ? invoice.getConsultationDate().format(DATE_FMT)
@@ -605,7 +785,7 @@ public class TreatmentInvoiceService {
                 .petAge(str(pet, "petAge"))
                 .petWeight(str(pet, "petWeight"))
                 .petMicrochip(str(pet, "petMicrochip"))
-                .patientId(str(pet, "patientId", invoice.getPetUuid()))
+                .patientId(friendlyPatientId(str(pet, "patientId", invoice.getPetUuid())))
                 .ownerName(str(ownerSnap, "ownerName", invoice.getOwner() != null ? fullName(invoice.getOwner()) : null))
                 .ownerPhone(str(ownerSnap, "ownerPhone"))
                 .ownerEmail(str(ownerSnap, "ownerEmail", invoice.getOwner() != null ? invoice.getOwner().getEmail() : null))
@@ -644,6 +824,66 @@ public class TreatmentInvoiceService {
             }
         }
         return data;
+    }
+
+    String derivedPaymentStatus(ConsultationInvoice invoice) {
+        if (isRazorpayPaid(invoice)) {
+            return "PAID";
+        }
+        if (nz(invoice.getPaidAmount()).compareTo(BigDecimal.ZERO) > 0) {
+            return "PARTIAL";
+        }
+        return "UNPAID";
+    }
+
+    static String paymentStatusLabel(String status) {
+        if ("PAID".equalsIgnoreCase(status)) {
+            return "Paid";
+        }
+        if ("PARTIAL".equalsIgnoreCase(status)) {
+            return "Partially paid";
+        }
+        return "Unpaid";
+    }
+
+    static String paymentModeLabel(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return null;
+        }
+        return switch (mode.trim().toUpperCase()) {
+            case "RAZORPAY" -> "Online (Razorpay)";
+            case "UPI" -> "UPI";
+            case "CASH" -> "Cash";
+            case "CARD" -> "Card";
+            case "NEFT" -> "Bank transfer";
+            default -> mode.trim();
+        };
+    }
+
+    static String paymentSummary(String status, BigDecimal balance) {
+        if ("PAID".equalsIgnoreCase(status)) {
+            return "This invoice is paid in full. Thank you.";
+        }
+        String due = "₹" + nzStatic(balance).setScale(2, RoundingMode.HALF_UP).toPlainString();
+        if ("PARTIAL".equalsIgnoreCase(status)) {
+            return due + " is still due after a partial payment.";
+        }
+        return due + " is due. Pay at the clinic or collect online.";
+    }
+
+    static String friendlyPatientId(String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        String trimmed = id.trim();
+        if (trimmed.length() == 36 && trimmed.chars().filter(ch -> ch == '-').count() == 4) {
+            return null;
+        }
+        return trimmed;
+    }
+
+    private static BigDecimal nzStatic(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
     private List<TreatmentLineItemDto> normalizeItems(CreateConsultationInvoiceDto request) {

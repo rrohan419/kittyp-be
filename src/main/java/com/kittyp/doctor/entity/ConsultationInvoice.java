@@ -38,7 +38,7 @@ import lombok.NoArgsConstructor;
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ConsultationInvoice extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, updatable = false)
     private String uuid;
 
     @Column(name = "invoice_number", unique = true, length = 40)
@@ -118,6 +118,9 @@ public class ConsultationInvoice extends BaseEntity {
 
     @Column(name = "transaction_id", length = 120)
     private String transactionId;
+
+    @Column(name = "razorpay_order_id", length = 40)
+    private String razorpayOrderId;
 
     @Column(name = "visit_uuid", length = 64)
     private String visitUuid;

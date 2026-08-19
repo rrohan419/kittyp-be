@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KittyP system health</title>
+  <style>
+    :root { font-family: ui-sans-serif, system-ui, sans-serif; color: #0f172a; background: #f1f5f9; }
+    body { margin: 0; padding: 24px; max-width: 1200px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    h2 { font-size: 1rem; margin: 0 0 12px; }
+    .sub { color: #64748b; font-size: 0.875rem; margin: 0 0 20px; }
+    .charts { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); margin-bottom: 16px; }
+    .charts > * { min-width: 0; }
+    .wide { grid-column: 1 / -1; }
+    .card { background: #fff; border-radius: 14px; padding: 16px 18px; box-shadow: 0 1px 3px rgb(15 23 42 / 8%); overflow: hidden; }
+    .donut-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; min-width: 0; }
+    .legend { display: grid; gap: 6px; font-size: 0.8rem; min-width: 0; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; flex-shrink: 0; white-space: nowrap; }
+    .up { background: #d1fae5; color: #047857; }
+    .down { background: #fee2e2; color: #b91c1c; }
+    .unknown { background: #fef3c7; color: #b45309; }
+    .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; font-size: 0.8rem; margin: 10px 0 4px; }
+    .row strong { min-width: 0; overflow-wrap: anywhere; }
+    .track { height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; display: flex; }
+    .seg { height: 100%; }
+    .fill { height: 100%; background: #4f46e5; }
+    .fill.warn { background: #d97706; }
+    .fill.hot { background: #dc2626; }
+    .kv { display: flex; flex-direction: column; gap: 10px; font-size: 0.8rem; margin-top: 12px; min-width: 0; }
+    .kv-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .kv-row span { color: #64748b; font-size: 0.7rem; letter-spacing: 0.02em; }
+    .kv-row strong { font-variant-numeric: tabular-nums; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
+    .err { color: #b91c1c; }
+    svg { display: block; }
+    .axis { font-size: 10px; fill: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>System health</h1>
+  <p class="sub">All Actuator components · donuts, stacked bars, and 10-minute trend · refreshes every 10s</p>
+  <p id="error" class="err" hidden></p>
+  <div id="root"></div>
+  <script>
+    const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#64748b'];
+    const HISTORY_KEY = 'kittyp-health-history';
+    const HISTORY_MAX = 36;
+
+    function pct(used, max) {
+      if (!max) return 0;
+      return Math.min(100, Math.round((used / max) * 100));
+    }
+    function bytes(n) {
+      n = Number(n) || 0;
+      if (n < 1024) return Math.round(n) + ' B';
+      const units = ['KB', 'MB', 'GB', 'TB'];
+      let v = n / 1024, i = 0;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return v.toFixed(v >= 10 ? 0 : 1) + ' ' + units[i];
+    }
+    function badge(status) {
+      const cls = status === 'UP' ? 'up' : status === 'DOWN' ? 'down' : 'unknown';
+      return '<span class="badge ' + cls + '">' + (status || 'UNKNOWN') + '</span>';
+    }
+    function fillClass(p) {
+      if (p >= 90) return 'fill hot';
+      if (p >= 70) return 'fill warn';
+      return 'fill';
+    }
+    function gauge(label, display, p) {
+      return '<div class="row"><span>' + label + '</span><span>' + display + ' · ' + p + '%</span></div>'
+        + '<div class="track"><div class="' + fillClass(p) + '" style="width:' + p + '%"></div></div>';
+    }
+    function stacked(segments) {
+      const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+      return '<div class="track">' + segments.map(function (s, i) {
+        const w = (s.value / total) * 100;
+        return '<div class="seg" style="width:' + w + '%;background:' + (s.color || COLORS[i]) + '" title="' + s.label + '"></div>';
+      }).join('') + '</div>';
+    }
+    function donut(parts, center) {
+      const total = parts.reduce((s, p) => s + Math.max(0, p.value), 0) || 1;
+      const r = 42, c = 2 * Math.PI * r;
+      let acc = 0;
+      const rings = parts.map(function (p, i) {
+        const frac = Math.max(0, p.value) / total;
+        const dash = frac * c;
+        const rot = (acc / total) * 360 - 90;
+        acc += Math.max(0, p.value);
+        return '<circle cx="60" cy="60" r="' + r + '" fill="none" stroke="' + (p.color || COLORS[i]) +
+          '" stroke-width="16" stroke-dasharray="' + dash + ' ' + (c - dash) +
+          '" transform="rotate(' + rot + ' 60 60)"/>';
+      }).join('');
+      const legend = parts.map(function (p, i) {
+        return '<div><span class="swatch" style="background:' + (p.color || COLORS[i]) + '"></span>' +
+          p.label + ' · <strong>' + p.display + '</strong></div>';
+      }).join('');
+      return '<div class="donut-wrap"><svg width="120" height="120" viewBox="0 0 120 120">' + rings +
+        '<circle cx="60" cy="60" r="28" fill="#fff"/>' +
+        '<text x="60" y="64" text-anchor="middle" font-size="13" font-weight="700">' + center + '</text></svg>' +
+        '<div class="legend">' + legend + '</div></div>';
+    }
+    function lineChart(series) {
+      const w = 640, h = 160, pad = 28;
+      const n = Math.max.apply(null, series.map(function (s) { return s.points.length; })) || 1;
+      const max = Math.max(1, Math.max.apply(null, series.flatMap(function (s) { return s.points; })));
+      function x(i) { return pad + (i / Math.max(1, n - 1)) * (w - pad * 2); }
+      function y(v) { return h - pad - (v / max) * (h - pad * 2); }
+      const lines = series.map(function (s) {
+        if (!s.points.length) return '';
+        const d = s.points.map(function (v, i) { return (i ? 'L' : 'M') + x(i) + ' ' + y(v); }).join(' ');
+        return '<path d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="2.5"/>';
+      }).join('');
+      const legend = series.map(function (s) {
+        return '<span class="swatch" style="background:' + s.color + '"></span>' + s.label + '  ';
+      }).join('');
+      return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="160">' +
+        '<line x1="' + pad + '" y1="' + (h - pad) + '" x2="' + (w - pad) + '" y2="' + (h - pad) + '" stroke="#e2e8f0"/>' +
+        '<text class="axis" x="' + pad + '" y="14">% of max</text>' +
+        '<text class="axis" x="' + (w - pad) + '" y="' + (h - 8) + '" text-anchor="end">time</text>' +
+        lines + '</svg><div class="legend" style="margin-top:8px">' + legend + '</div>';
+    }
+    function formatValue(v) {
+      if (typeof v === 'number') return Number.isInteger(v) && Math.abs(v) >= 10000 ? bytes(v) : String(v);
+      if (Array.isArray(v)) return v.length ? JSON.stringify(v) : 'none';
+      if (v && typeof v === 'object') return JSON.stringify(v);
+      if (typeof v === 'boolean') return v ? 'yes' : 'no';
+      return v == null || v === '' ? '—' : String(v);
+    }
+    function detailGrid(details) {
+      const keys = Object.keys(details || {});
+      if (!keys.length) return '';
+      return '<div class="kv">' + keys.map(function (k) {
+        return '<div class="kv-row"><span>' + k + '</span><strong>' + formatValue(details[k]) + '</strong></div>';
+      }).join('') + '</div>';
+    }
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; }
+    }
+    function saveHistory(rows) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(rows.slice(-HISTORY_MAX)));
+    }
+
+    async function load() {
+      const root = document.getElementById('root');
+      const errorEl = document.getElementById('error');
+      try {
+        const res = await fetch('./health', { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const c = data.components || {};
+        const mem = (c.memory && c.memory.details) || {};
+        const pool = (c.hikariPool && c.hikariPool.details) || {};
+        const workers = (c.backgroundWorkers && c.backgroundWorkers.details) || {};
+        const disk = (c.diskSpace && c.diskSpace.details) || {};
+        const db = (c.db && c.db.details) || {};
+        const ssl = (c.ssl && c.ssl.details) || {};
+
+        const memFree = Math.max(0, (mem.max || 0) - (mem.used || 0));
+        const diskUsed = Math.max(0, (disk.total || 0) - (disk.free || 0));
+        const poolUnused = Math.max(0, (pool.max || 0) - (pool.total || 0));
+        const workerIdle = Math.max(0, (workers.maxPoolSize || 0) - (workers.active || 0));
+
+        const memPct = pct(mem.used, mem.max);
+        const diskPct = pct(diskUsed, disk.total);
+        const poolPct = pct(pool.active, pool.max);
+
+        const history = loadHistory();
+        history.push({ mem: memPct, disk: diskPct, pool: poolPct, t: Date.now() });
+        saveHistory(history);
+
+        errorEl.hidden = true;
+        const names = Object.keys(c);
+        root.innerHTML =
+          '<div class="charts">' +
+            '<section class="card"><h2>Memory</h2>' +
+              donut([
+                { label: 'Used', value: mem.used || 0, display: bytes(mem.used), color: '#4f46e5' },
+                { label: 'Free of max', value: memFree, display: bytes(memFree), color: '#cbd5e1' }
+              ], memPct + '%') +
+              gauge('Committed heap / max', bytes(mem.heap) + ' / ' + bytes(mem.max), pct(mem.heap, mem.max)) +
+            '</section>' +
+            '<section class="card"><h2>Disk</h2>' +
+              donut([
+                { label: 'Used', value: diskUsed, display: bytes(diskUsed), color: '#f59e0b' },
+                { label: 'Free', value: disk.free || 0, display: bytes(disk.free), color: '#10b981' }
+              ], diskPct + '%') +
+            '</section>' +
+            '<section class="card"><h2>DB pool</h2>' +
+              donut([
+                { label: 'Active', value: pool.active || 0, display: String(pool.active || 0), color: '#4f46e5' },
+                { label: 'Idle', value: pool.idle || 0, display: String(pool.idle || 0), color: '#10b981' },
+                { label: 'Unused slots', value: poolUnused, display: String(poolUnused), color: '#cbd5e1' }
+              ], (pool.active || 0) + '/' + (pool.max || 0)) +
+              stacked([
+                { label: 'active', value: pool.active || 0, color: '#4f46e5' },
+                { label: 'idle', value: pool.idle || 0, color: '#10b981' },
+                { label: 'unused', value: poolUnused, color: '#e2e8f0' }
+              ]) +
+            '</section>' +
+            '<section class="card"><h2>Workers</h2>' +
+              donut([
+                { label: 'Active threads', value: workers.active || 0, display: String(workers.active || 0), color: '#8b5cf6' },
+                { label: 'Idle pool', value: workerIdle, display: String(workerIdle), color: '#cbd5e1' }
+              ], (workers.active || 0) + '/' + (workers.maxPoolSize || 0)) +
+              gauge('Pool size / max', (workers.poolSize || 0) + ' / ' + (workers.maxPoolSize || 0), pct(workers.poolSize, workers.maxPoolSize)) +
+              gauge('Queue', (workers.queueSize || 0) + ' / ' + (workers.queueCapacity || 0), pct(workers.queueSize, workers.queueCapacity)) +
+            '</section>' +
+            '<section class="card wide"><h2>Trend (last ' + history.length + ' samples)</h2>' +
+              lineChart([
+                { label: 'Memory used %', color: '#4f46e5', points: history.map(function (h) { return h.mem; }) },
+                { label: 'Disk used %', color: '#f59e0b', points: history.map(function (h) { return h.disk; }) },
+                { label: 'Pool active %', color: '#10b981', points: history.map(function (h) { return h.pool; }) }
+              ]) +
+            '</section>' +
+          '</div>' +
+          '<h2 style="margin:8px 0 12px">All components (' + names.length + ')</h2>' +
+          '<div class="charts">' + names.map(function (name) {
+            const comp = c[name] || {};
+            const details = comp.details || {};
+            return '<section class="card"><div class="row" style="margin-top:0"><strong>' + name + '</strong>' +
+              badge(comp.status) + '</div>' + detailGrid(details) + '</section>';
+          }).join('') + '</div>' +
+          (data.groups && data.groups.length
+            ? '<p class="sub" style="margin-top:16px">Groups: ' + data.groups.join(', ') + ' · overall ' + data.status + '</p>'
+            : '');
+      } catch (err) {
+        errorEl.hidden = false;
+        errorEl.textContent = 'Could not load health: ' + err.message;
+      }
+    }
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>

@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.common.crypto.EncryptedStringConverter;
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.common.entity.HasPublicId;
+import com.kittyp.common.entity.PublicIdEntityListener;
 import com.kittyp.common.enums.DoctorSpecialization;
 import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.user.entity.User;
@@ -19,6 +21,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -33,15 +36,16 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "doctor_profiles")
+@EntityListeners(PublicIdEntityListener.class)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true)
-public class DoctorProfile extends BaseEntity {
+public class DoctorProfile extends BaseEntity implements HasPublicId {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, updatable = false)
     private String uuid;
 
     @ManyToOne(fetch = FetchType.LAZY)

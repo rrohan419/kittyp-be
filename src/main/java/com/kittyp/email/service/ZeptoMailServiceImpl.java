@@ -73,18 +73,24 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	@Override
 	public void sendPasswordResetCode(String email) {
 		User user = userDao.userByEmail(email);
+		String code = verificationCodeService.generateCode(user.getUuid());
+		System.out.println("code = " + code);
 
 		ZeptoMailDto mailDto = new ZeptoMailDto();
 		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName(), "RESET_CODE",
-				verificationCodeService.generateCode(user.getUuid()), "logo_url",
+				code, "logo_url",
 				AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
 		mailDto.setRecipientEmail(email);
 		mailDto.setRecipientName(user.getFirstName());
 		mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
 
-		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
-		log.info("password reset code sent for email : " + email);
-		addEmailAuditLog(responseModel, email);
+		try {
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			log.info("password reset code sent for email : " + email);
+			addEmailAuditLog(responseModel, email);
+		} catch (Exception e) {
+			log.warn("Failed to send password reset email to {}: {}", email, e.getMessage());
+		}
 
 	}
 

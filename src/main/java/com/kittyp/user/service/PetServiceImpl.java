@@ -3,7 +3,6 @@ package com.kittyp.user.service;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -12,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.service.S3StorageService;
 import com.kittyp.common.util.Mapper;
+import com.kittyp.common.util.SafePhotoUrl;
 import com.kittyp.user.dao.PetDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.dto.PetDetailDto;
@@ -42,7 +42,7 @@ public class PetServiceImpl implements PetService {
         log.info("Adding new pet for email={}", petOwner.getEmail());
 
         Pet newPet = mapper.convert(petDetailDto, Pet.class);
-        newPet.setUuid(UUID.randomUUID().toString());
+        newPet.setProfilePicture(SafePhotoUrl.requireHttps(newPet.getProfilePicture()));
         newPet = petDao.savePets(newPet);
 
         petOwner.addPet(newPet);
@@ -105,7 +105,7 @@ public class PetServiceImpl implements PetService {
 
         // Update pet details
         existingPet.setName(petDetailDto.getName());
-        existingPet.setProfilePicture(petDetailDto.getProfilePicture());
+        existingPet.setProfilePicture(SafePhotoUrl.requireHttps(petDetailDto.getProfilePicture()));
         existingPet.setBreed(petDetailDto.getBreed());
         existingPet.setType(petDetailDto.getType());
         existingPet.setDateOfBirth(petDetailDto.getDateOfBirth());
@@ -131,11 +131,17 @@ public class PetServiceImpl implements PetService {
             throw new CustomException("Pet not found by uuid: " + petUuid, HttpStatus.NOT_FOUND);
         }
 
+        if (petPhotosDto == null || petPhotosDto.getPhotos() == null || petPhotosDto.getPhotos().isEmpty()) {
+            throw new CustomException("At least one photo URL is required", HttpStatus.BAD_REQUEST);
+        }
         log.info("Updating profile picture for pet with uuid={}", petUuid);
-        pet.setProfilePicture(petPhotosDto.getPhotos().get(0));
+        String primary = SafePhotoUrl.requireHttps(petPhotosDto.getPhotos().get(0));
+        pet.setProfilePicture(primary);
 
         Set<String> mutablePhotos = (pet.getPhotos() != null) ? pet.getPhotos() : new HashSet<>();
-        mutablePhotos.add(petPhotosDto.getPhotos().get(0));
+        for (String photo : petPhotosDto.getPhotos()) {
+            mutablePhotos.add(SafePhotoUrl.requireHttps(photo));
+        }
         pet.setPhotos(mutablePhotos);
 
         Pet updatedPet = petDao.savePets(pet);

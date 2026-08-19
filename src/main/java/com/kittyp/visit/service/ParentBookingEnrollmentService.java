@@ -209,7 +209,6 @@ public class ParentBookingEnrollmentService {
 				email = "parent+" + platformUser.getUuid() + "@kittyp.local";
 			}
 			owner = ClinicPetOwner.builder()
-					.uuid(UUID.randomUUID().toString())
 					.clinic(clinic)
 					.firstName(platformUser.getFirstName() == null || platformUser.getFirstName().isBlank()
 							? "Client"

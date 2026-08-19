@@ -15,6 +15,8 @@ public interface PetsRepository extends JpaRepository<Pet, Long> {
 
 	Pet findByUuid(String uuid);
 
+	boolean existsByUuid(String uuid);
+
 	Optional<Pet> findOptionalByUuid(String uuid);
 
 	List<Pet> findByClinic_IdAndIsActiveTrue(Long clinicId);

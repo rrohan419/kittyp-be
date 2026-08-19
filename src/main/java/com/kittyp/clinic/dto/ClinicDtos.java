@@ -212,26 +212,26 @@ public final class ClinicDtos {
     public record BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
             LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
             String notes, String clinicUuid, String clinicName, String doctorName, String doctorSpecialization,
-            String doctorPhotoUrl) {
+            String doctorPhotoUrl, String species) {
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    null, null, null, null, null);
+                    null, null, null, null, null, null);
         }
 
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes, String clinicUuid) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    clinicUuid, null, null, null, null);
+                    clinicUuid, null, null, null, null, null);
         }
 
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes, String clinicUuid, String clinicName) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    clinicUuid, clinicName, null, null, null);
+                    clinicUuid, clinicName, null, null, null, null);
         }
     }
 

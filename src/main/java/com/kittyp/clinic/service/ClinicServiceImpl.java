@@ -158,7 +158,7 @@ public class ClinicServiceImpl implements ClinicService {
     @Transactional
     public ClinicModel create(ClinicRequest request, String email) {
         User owner = userDao.userByEmail(email);
-        Clinic clinic = Clinic.builder().uuid(UUID.randomUUID().toString()).name(request.name())
+        Clinic clinic = Clinic.builder().name(request.name())
                 .licenseNumber(request.licenseNumber()).address(request.address()).phone(request.phone()).email(request.email())
                 .timezone(request.timezone()).operatingHours(request.operatingHours()).owner(owner).status(ClinicStatus.PENDING)
                 .city(blankToNull(request.city())).latitude(request.latitude()).longitude(request.longitude())
@@ -273,12 +273,63 @@ public class ClinicServiceImpl implements ClinicService {
     @Transactional
     public ClinicDoctorDetailModel doctorDetail(String clinicUuid, String doctorUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
+        User viewer = userDao.userByEmail(email);
         ClinicDoctor affiliation = clinicDoctorRepository.findByClinic_IdAndDoctor_Uuid(clinic.getId(), doctorUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("doctor", "uuid", doctorUuid));
         DoctorProfile doctor = affiliation.getDoctor();
         User user = doctor.getUser();
+        // Full dossier (documents, KYC checks, patients) vs clinic directory card (name, specialty, contact).
+        boolean includeCredentials = canViewDoctorCertificates(clinic, viewer, doctor);
 
-        // Pets this doctor actually treated at this clinic (not waitlist / bookings-only).
+        List<ClinicDoctorPatientModel> patientList = includeCredentials
+                ? treatedPatientsForDoctor(clinic, doctor)
+                : List.of();
+
+        return new ClinicDoctorDetailModel(
+                doctor.getUuid(),
+                user.getUuid(),
+                fullName(user),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getEmail(),
+                doctor.getPhoneNumber() != null ? doctor.getPhoneNumber() : user.getPhoneNumber(),
+                doctor.getSpecialization() == null ? null : doctor.getSpecialization().name(),
+                doctor.getRegistrationNumber(),
+                includeCredentials ? doctor.getLicenseNumber() : null,
+                doctor.getBio(),
+                doctor.getPhotoUrl(),
+                doctor.getExperienceYears(),
+                affiliation.getRole(),
+                affiliation.getIsActive(),
+                affiliation.getJoinedAt() == null ? null : affiliation.getJoinedAt().toString(),
+                includeCredentials && doctor.getStatus() != null ? doctor.getStatus().name() : null,
+                includeCredentials ? doctor.getDegreeCertificateUrl() : null,
+                includeCredentials ? doctor.getRegistrationCertificateUrl() : null,
+                includeCredentials ? doctor.getGovernmentIdUrl() : null,
+                includeCredentials ? doctor.getLicenseDocumentUrl() : null,
+                includeCredentials ? doctor.getClinicPhotosUrls() : null,
+                includeCredentials && doctor.isEmailOtpVerified(),
+                includeCredentials && doctor.isPhoneOtpVerified(),
+                includeCredentials && doctor.isCheckMobileOtp(),
+                includeCredentials && doctor.isCheckEmailOtp(),
+                includeCredentials && doctor.isCheckGovernmentId(),
+                includeCredentials && doctor.isCheckDegree(),
+                includeCredentials && doctor.isCheckRegistrationCertificate(),
+                includeCredentials && doctor.isCheckClinicAddress(),
+                includeCredentials && doctor.isCheckRegistrationNumber(),
+                includeCredentials && doctor.isCheckGoogleMapsMatch(),
+                includeCredentials && doctor.isCheckClinicPhotos(),
+                includeCredentials && doctor.getSubmittedAt() != null ? doctor.getSubmittedAt().toString() : null,
+                includeCredentials && doctor.getReviewedAt() != null ? doctor.getReviewedAt().toString() : null,
+                includeCredentials ? doctor.getReviewNotes() : null,
+                doctor.getRating(),
+                doctor.getReviewsCount(),
+                ratingLabel(doctor.getRating()),
+                patientList);
+    }
+
+    /** Pets this doctor treated at this clinic (not waitlist / bookings-only). */
+    private List<ClinicDoctorPatientModel> treatedPatientsForDoctor(Clinic clinic, DoctorProfile doctor) {
         Map<String, ClinicDoctorPatientModel> patients = new HashMap<>();
         Set<VisitStatus> treated = EnumSet.of(
                 VisitStatus.IN_PROGRESS, VisitStatus.CHECKING_OUT, VisitStatus.COMPLETED);
@@ -300,54 +351,11 @@ public class ClinicServiceImpl implements ClinicService {
                             existing.appointmentCount() + 1,
                             laterOf(existing.lastAppointment(), added.lastAppointment())));
         }
-
-        List<ClinicDoctorPatientModel> patientList = patients.values().stream()
+        return patients.values().stream()
                 .sorted(Comparator
                         .comparing(ClinicDoctorPatientModel::lastAppointment, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(p -> p.pet().name(), Comparator.nullsLast(String::compareToIgnoreCase)))
                 .toList();
-
-        return new ClinicDoctorDetailModel(
-                doctor.getUuid(),
-                user.getUuid(),
-                fullName(user),
-                user.getFirstName(),
-                user.getLastName(),
-                user.getEmail(),
-                doctor.getPhoneNumber() != null ? doctor.getPhoneNumber() : user.getPhoneNumber(),
-                doctor.getSpecialization() == null ? null : doctor.getSpecialization().name(),
-                doctor.getRegistrationNumber(),
-                doctor.getLicenseNumber(),
-                doctor.getBio(),
-                doctor.getPhotoUrl(),
-                doctor.getExperienceYears(),
-                affiliation.getRole(),
-                affiliation.getIsActive(),
-                affiliation.getJoinedAt() == null ? null : affiliation.getJoinedAt().toString(),
-                doctor.getStatus() == null ? null : doctor.getStatus().name(),
-                doctor.getDegreeCertificateUrl(),
-                doctor.getRegistrationCertificateUrl(),
-                doctor.getGovernmentIdUrl(),
-                doctor.getLicenseDocumentUrl(),
-                doctor.getClinicPhotosUrls(),
-                doctor.isEmailOtpVerified(),
-                doctor.isPhoneOtpVerified(),
-                doctor.isCheckMobileOtp(),
-                doctor.isCheckEmailOtp(),
-                doctor.isCheckGovernmentId(),
-                doctor.isCheckDegree(),
-                doctor.isCheckRegistrationCertificate(),
-                doctor.isCheckClinicAddress(),
-                doctor.isCheckRegistrationNumber(),
-                doctor.isCheckGoogleMapsMatch(),
-                doctor.isCheckClinicPhotos(),
-                doctor.getSubmittedAt() == null ? null : doctor.getSubmittedAt().toString(),
-                doctor.getReviewedAt() == null ? null : doctor.getReviewedAt().toString(),
-                doctor.getReviewNotes(),
-                doctor.getRating(),
-                doctor.getReviewsCount(),
-                ratingLabel(doctor.getRating()),
-                patientList);
     }
 
     /**
@@ -375,7 +383,6 @@ public class ClinicServiceImpl implements ClinicService {
         }
         String tag = "Imported with doctor " + fullName(doctor.getUser()) + "\ndoctor:" + doctor.getUuid();
         return clinicPetOwnerRepository.save(ClinicPetOwner.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(target)
                 .firstName(source.getFirstName())
                 .lastName(source.getLastName())
@@ -408,7 +415,6 @@ public class ClinicServiceImpl implements ClinicService {
             phone = "0000000000";
         }
         return clinicPetOwnerRepository.save(ClinicPetOwner.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(target)
                 .firstName(doctorUser.getFirstName() == null ? "Doctor" : doctorUser.getFirstName())
                 .lastName(doctorUser.getLastName())
@@ -421,7 +427,6 @@ public class ClinicServiceImpl implements ClinicService {
 
     private Pet copyPetToClinic(Clinic target, ClinicPetOwner owner, Pet source, String importKey) {
         return Pet.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(target)
                 .clinicOwner(owner)
                 .name(source.getName())
@@ -445,9 +450,10 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     @Transactional
     public DoctorInviteModel inviteDoctor(String clinicUuid, DoctorInviteRequest request, String email) {
+        User inviter = userDao.userByEmail(email);
+        requireCanInviteDoctors(inviter);
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        User inviter = userDao.userByEmail(email);
         requireClinicManager(clinic, inviter);
 
         long invitesLastHour = clinicDoctorInviteRepository.countByClinic_IdAndCreatedAtAfter(
@@ -547,34 +553,8 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     public DoctorLookupModel lookupDoctor(String doctorUuid, String email) {
         User caller = userDao.userByEmail(email);
-        DoctorLookupModel lookup = resolveDoctorLookup(doctorUuid);
-        DoctorProfile profile = doctorProfileDao.findByUuid(doctorUuid.trim());
-        User doctorUser = profile.getUser();
-
-        boolean canInviteDoctors = caller.getUserRoles().stream().anyMatch(ur -> {
-            ERole role = ur.getRole().getName();
-            return ERole.ROLE_CLINIC_ADMIN.equals(role) || ERole.ROLE_CLINIC_STAFF.equals(role)
-                    || ERole.ROLE_ADMIN.equals(role);
-        }) || !clinicDao.findAllByOwnerUserId(caller.getId()).isEmpty();
-
-        if (canInviteDoctors) {
-            return lookup;
-        }
-
-        // Otherwise only reveal doctor email/name if they share at least one clinic with the caller.
-        Set<Long> callerClinicIds = new HashSet<>();
-        clinicDao.findAllByOwnerUserId(caller.getId()).forEach(c -> callerClinicIds.add(c.getId()));
-        clinicStaffDao.findActiveByUserId(caller.getId()).forEach(s -> callerClinicIds.add(s.getClinic().getId()));
-        clinicDoctorRepository.findByDoctor_User_IdAndIsActiveTrue(caller.getId())
-                .forEach(a -> callerClinicIds.add(a.getClinic().getId()));
-
-        boolean shared = clinicDoctorRepository.findByDoctor_User_IdAndIsActiveTrue(doctorUser.getId()).stream()
-                .anyMatch(a -> callerClinicIds.contains(a.getClinic().getId()));
-        if (!shared) {
-            // 404 avoids confirming whether a doctor UUID exists outside shared clinics.
-            throw new ResourceNotFoundException("Doctor", "uuid", doctorUuid);
-        }
-        return lookup;
+        requireCanInviteDoctors(caller);
+        return resolveDoctorLookup(doctorUuid);
     }
 
     private DoctorLookupModel resolveDoctorLookup(String doctorUuid) {
@@ -594,6 +574,7 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     @Transactional
     public List<DoctorInviteModel> listDoctorInvites(String clinicUuid, String email) {
+        requireCanInviteDoctors(userDao.userByEmail(email));
         Clinic clinic = access(clinicUuid, email);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime recentCutoff = now.minusDays(14);
@@ -645,8 +626,10 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     @Transactional
     public void revokeDoctorInvite(String clinicUuid, String inviteUuid, String email) {
+        User caller = userDao.userByEmail(email);
+        requireCanInviteDoctors(caller);
         Clinic clinic = access(clinicUuid, email);
-        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireClinicManager(clinic, caller);
         ClinicDoctorInvite invite = clinicDoctorInviteRepository.findByUuid(inviteUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("invite", "uuid", inviteUuid));
         if (!invite.getClinic().getId().equals(clinic.getId())) {
@@ -662,8 +645,10 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     @Transactional
     public DoctorInviteModel remindDoctorInvite(String clinicUuid, String inviteUuid, String email) {
+        User caller = userDao.userByEmail(email);
+        requireCanInviteDoctors(caller);
         Clinic clinic = access(clinicUuid, email);
-        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireClinicManager(clinic, caller);
         ClinicDoctorInvite invite = clinicDoctorInviteRepository.findByUuid(inviteUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("invite", "uuid", inviteUuid));
         if (!invite.getClinic().getId().equals(clinic.getId())) {
@@ -743,7 +728,6 @@ public class ClinicServiceImpl implements ClinicService {
         DoctorProfile profile = doctorProfileDao.findByUserId(user.getId());
         if (profile == null) {
             profile = doctorProfileDao.save(DoctorProfile.builder()
-                    .uuid(UUID.randomUUID().toString())
                     .user(user)
                     .phoneNumber(user.getPhoneNumber())
                     .status(DoctorStatus.REGISTERED)
@@ -979,7 +963,6 @@ public class ClinicServiceImpl implements ClinicService {
 
         if (owner == null) {
             owner = ClinicPetOwner.builder()
-                    .uuid(UUID.randomUUID().toString())
                     .clinic(clinic)
                     .firstName(request.ownerFirstName().trim())
                     .lastName(request.ownerLastName() == null ? "" : request.ownerLastName().trim())
@@ -1124,7 +1107,6 @@ public class ClinicServiceImpl implements ClinicService {
                         HttpStatus.BAD_REQUEST);
             }
             owner = ClinicPetOwner.builder()
-                    .uuid(UUID.randomUUID().toString())
                     .clinic(clinic)
                     .firstName(platformUser.getFirstName() == null || platformUser.getFirstName().isBlank()
                             ? "Client"
@@ -1163,7 +1145,6 @@ public class ClinicServiceImpl implements ClinicService {
         }
 
         ClinicPetOwner owner = ClinicPetOwner.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(clinic)
                 .firstName(request.firstName().trim())
                 .lastName(request.lastName() == null ? "" : request.lastName().trim())
@@ -1379,7 +1360,6 @@ public class ClinicServiceImpl implements ClinicService {
     private Pet saveClinicPet(Clinic clinic, ClinicPetOwner owner, String name, String species, String breed,
             String gender, LocalDate dob, String weight, String microchip, String photoUrl, String patientNumber) {
         Pet pet = Pet.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(clinic)
                 .clinicOwner(owner)
                 .name(name)
@@ -1655,7 +1635,6 @@ public class ClinicServiceImpl implements ClinicService {
         }
         String demoSuffix = clinic.getUuid().substring(0, Math.min(8, clinic.getUuid().length()));
         ClinicPetOwner demoOwner = clinicPetOwnerRepository.save(ClinicPetOwner.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(clinic)
                 .firstName("Priya")
                 .lastName("Sharma")
@@ -1676,7 +1655,6 @@ public class ClinicServiceImpl implements ClinicService {
         petsRepository.save(mochi);
 
         ClinicPetOwner demoOwner2 = clinicPetOwnerRepository.save(ClinicPetOwner.builder()
-                .uuid(UUID.randomUUID().toString())
                 .clinic(clinic)
                 .firstName("Amit")
                 .lastName("Patel")
@@ -1771,10 +1749,60 @@ public class ClinicServiceImpl implements ClinicService {
         return clinic;
     }
 
+    /**
+     * Document URLs are tenant-isolated: the doctor themselves, or a clinic admin of
+     * this clinic (owner or staff with ROLE_CLINIC_ADMIN). Staff-only and
+     * cross-tenant admins affiliated only as doctors do not receive URLs.
+     */
+    private boolean canViewDoctorCertificates(Clinic clinic, User viewer, DoctorProfile doctor) {
+        if (viewer == null || doctor == null) {
+            return false;
+        }
+        User doctorUser = doctor.getUser();
+        if (doctorUser != null && doctorUser.getId() != null && doctorUser.getId().equals(viewer.getId())) {
+            return true;
+        }
+        if (!hasClinicAdminRole(viewer)) {
+            return false;
+        }
+        if (clinic.getOwner() != null && clinic.getOwner().getId() != null
+                && clinic.getOwner().getId().equals(viewer.getId())) {
+            return true;
+        }
+        return clinicStaffDao.isActiveMember(clinic.getId(), viewer.getId());
+    }
+
+    private static boolean hasClinicAdminRole(User user) {
+        if (user.getUserRoles() == null || user.getUserRoles().isEmpty()) {
+            return false;
+        }
+        return user.getUserRoles().stream().anyMatch(userRole -> {
+            ERole role = userRole.getRole() == null ? null : userRole.getRole().getName();
+            return CLINIC_ADMIN_ROLE.equals(role);
+        });
+    }
+
     private void requireOperational(Clinic clinic) {
         if (clinic.getStatus() == ClinicStatus.SHUTDOWN) {
             throw new CustomException("This clinic is shut down and is read-only.", HttpStatus.BAD_REQUEST);
         }
+    }
+
+    private void requireCanInviteDoctors(User user) {
+        if (!hasClinicInviteRole(user)) {
+            throw new AccessDeniedException("Only clinic accounts can invite doctors");
+        }
+    }
+
+    private static boolean hasClinicInviteRole(User user) {
+        if (user.getUserRoles() == null || user.getUserRoles().isEmpty()) {
+            return false;
+        }
+        return user.getUserRoles().stream().anyMatch(userRole -> {
+            ERole role = userRole.getRole() == null ? null : userRole.getRole().getName();
+            return ERole.ROLE_CLINIC_ADMIN.equals(role) || ERole.ROLE_CLINIC_STAFF.equals(role)
+                    || ERole.ROLE_ADMIN.equals(role);
+        });
     }
 
     private void requireClinicManager(Clinic clinic, User user) {
@@ -1958,7 +1986,8 @@ public class ClinicServiceImpl implements ClinicService {
                 doctorDisplayName(booking.getDoctor()),
                 booking.getDoctor() == null || booking.getDoctor().getSpecialization() == null ? null
                         : booking.getDoctor().getSpecialization().name(),
-                booking.getDoctor() == null ? null : booking.getDoctor().getPhotoUrl());
+                booking.getDoctor() == null ? null : booking.getDoctor().getPhotoUrl(),
+                booking.getPet() == null ? null : booking.getPet().getType());
     }
 
     private static String doctorDisplayName(com.kittyp.doctor.entity.DoctorProfile doctor) {

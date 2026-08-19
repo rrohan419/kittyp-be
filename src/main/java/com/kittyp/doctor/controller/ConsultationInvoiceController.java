@@ -5,7 +5,6 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,9 +13,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -25,6 +24,7 @@ import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
 import com.kittyp.doctor.dto.CreateInvoiceResultDto;
+import com.kittyp.doctor.dto.MarkInvoicePaidDto;
 import com.kittyp.doctor.dto.UpdateConsultationInvoiceStatusDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
@@ -55,14 +55,11 @@ public class ConsultationInvoiceController {
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_MINE)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<List<ConsultationInvoice>>> myInvoices() {
-        User doctor = currentUser();
-        List<ConsultationInvoice> mine = consultationInvoiceRepository
-                .findAllByDoctor_IdOrderByCreatedAtDesc(doctor.getId())
-                .stream()
-                .filter(inv -> isDoctorPersonalInvoice(inv, doctor))
-                .toList();
-        return responseBuilder.buildSuccessResponse(mine, ResponseMessage.SUCCESS, HttpStatus.OK);
+    public ResponseEntity<SuccessResponse<List<ConsultationInvoice>>> myInvoices(
+            @RequestParam(required = false) String clinicUuid) {
+        return responseBuilder.buildSuccessResponse(
+                treatmentInvoiceService.listForDoctor(currentUser(), clinicUuid),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_BY_UUID)
@@ -80,6 +77,16 @@ public class ConsultationInvoiceController {
         invoice.setStatus(request.getStatus());
         return responseBuilder.buildSuccessResponse(consultationInvoiceRepository.save(invoice),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.CONSULTATION_INVOICE_MARK_PAID)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ConsultationInvoice>> markPaid(
+            @PathVariable String uuid, @Valid @RequestBody MarkInvoicePaidDto request) {
+        ConsultationInvoice invoice = treatmentInvoiceService.markPaid(
+                requireDoctorOperableInvoice(uuid), request.getPaymentMode(), request.getTransactionId());
+        invoice = treatmentInvoiceService.refreshPdfQuietly(invoice);
+        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @PostMapping(ApiUrl.CONSULTATION_INVOICE_GENERATE_PDF)
@@ -112,24 +119,12 @@ public class ConsultationInvoiceController {
     }
 
     /**
-     * Doctor may only read/mutate/send invoices for personal practice (no clinic, or clinic they own).
-     * Clinic-branch invoices must go through clinic APIs (prevents wrong WhatsApp sender + status IDOR).
+     * Doctor may operate invoices they issued: personal practice or their work at an affiliated clinic.
+     * Other doctors' clinic invoices stay on clinic-admin APIs.
      */
     private ConsultationInvoice requireDoctorOperableInvoice(String uuid) {
         User doctor = currentUser();
-        ConsultationInvoice invoice = consultationInvoiceRepository.findByUuidAndDoctor_Id(uuid, doctor.getId())
+        return consultationInvoiceRepository.findByUuidAndDoctor_Id(uuid, doctor.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Consultation invoice", "uuid", uuid));
-        if (!isDoctorPersonalInvoice(invoice, doctor)) {
-            throw new AccessDeniedException("Clinic invoices must be managed from the clinic portal.");
-        }
-        return invoice;
-    }
-
-    private static boolean isDoctorPersonalInvoice(ConsultationInvoice invoice, User doctor) {
-        Clinic clinic = invoice.getClinic();
-        if (clinic == null) {
-            return true;
-        }
-        return clinic.getOwner() != null && clinic.getOwner().getId().equals(doctor.getId());
     }
 }

@@ -29,6 +29,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByUuid(String uuid);
 
+    boolean existsByUuid(String uuid);
+
     @Query("""
             SELECT b FROM Booking b
             WHERE b.doctor.id = :doctorId

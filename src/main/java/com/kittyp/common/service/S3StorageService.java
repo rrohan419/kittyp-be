@@ -69,28 +69,26 @@ public class S3StorageService {
         return key;
     }
 
-    public String uploadTreatmentInvoice(String invoiceUuid, byte[] pdfBytes) {
-        String key = "treatment-invoices/" + invoiceUuid + ".pdf";
+    public String uploadTreatmentInvoice(String objectKey, byte[] pdfBytes) {
         try {
             PutObjectRequest put = PutObjectRequest.builder()
                     .bucket(invoiceBucket)
-                    .key(key)
+                    .key(objectKey)
                     .contentType("application/pdf")
                     .build();
             s3.putObject(put, RequestBody.fromBytes(pdfBytes));
         } catch (Exception e) {
-            log.error("Error uploading treatment invoice {}: {}", invoiceUuid, e.getMessage());
+            log.error("Error uploading treatment invoice {}: {}", objectKey, e.getMessage());
             throw new CustomException("Failed to upload treatment invoice PDF", HttpStatus.INTERNAL_SERVER_ERROR, e);
         }
-        return key;
+        return objectKey;
     }
 
-    public byte[] downloadTreatmentInvoice(String invoiceUuid) {
-        String key = "treatment-invoices/" + invoiceUuid + ".pdf";
+    public byte[] downloadTreatmentInvoice(String objectKey) {
         try {
             ResponseBytes<GetObjectResponse> bytes = s3.getObjectAsBytes(GetObjectRequest.builder()
                     .bucket(invoiceBucket)
-                    .key(key)
+                    .key(objectKey)
                     .build());
             return bytes.asByteArray();
         } catch (S3Exception e) {
@@ -101,12 +99,11 @@ public class S3StorageService {
         }
     }
 
-    public URL presignedTreatmentInvoiceUrl(String invoiceUuid, Duration ttl) {
-        String key = "treatment-invoices/" + invoiceUuid + ".pdf";
+    public URL presignedTreatmentInvoiceUrl(String objectKey, Duration ttl) {
         try {
             s3.headObject(HeadObjectRequest.builder()
                     .bucket(invoiceBucket)
-                    .key(key)
+                    .key(objectKey)
                     .build());
         } catch (S3Exception e) {
             if (e.statusCode() == 404) {
@@ -116,7 +113,7 @@ public class S3StorageService {
         }
         PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(builder -> builder
                 .signatureDuration(ttl)
-                .getObjectRequest(getReq -> getReq.bucket(invoiceBucket).key(key)));
+                .getObjectRequest(getReq -> getReq.bucket(invoiceBucket).key(objectKey)));
         return presignedRequest.url();
     }
 

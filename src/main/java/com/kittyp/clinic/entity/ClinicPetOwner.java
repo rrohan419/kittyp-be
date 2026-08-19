@@ -6,12 +6,15 @@ import java.util.List;
 import org.hibernate.annotations.DynamicUpdate;
 
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.common.entity.HasPublicId;
+import com.kittyp.common.entity.PublicIdEntityListener;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -30,15 +33,16 @@ import lombok.ToString;
  */
 @Entity
 @Table(name = "clinic_pet_owners")
+@EntityListeners(PublicIdEntityListener.class)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true, exclude = { "pets", "linkedUser" })
-public class ClinicPetOwner extends BaseEntity {
+public class ClinicPetOwner extends BaseEntity implements HasPublicId {
 
-	@Column(nullable = false, unique = true)
+	@Column(nullable = false, unique = true, updatable = false)
 	private String uuid;
 
 	@ManyToOne(fetch = FetchType.LAZY)

@@ -9,10 +9,13 @@ import java.util.Set;
 import org.hibernate.annotations.DynamicUpdate;
 
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.common.entity.HasPublicId;
+import com.kittyp.common.entity.PublicIdEntityListener;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
@@ -26,13 +29,14 @@ import lombok.ToString;
 
 @Entity
 @Table(name = "users")
+@EntityListeners(PublicIdEntityListener.class)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true, exclude = { "userRoles" })
-public class User extends BaseEntity {
+public class User extends BaseEntity implements HasPublicId {
 
     /**
      * @author rrohan419@gmail.com
@@ -45,7 +49,8 @@ public class User extends BaseEntity {
     @Column
     private String lastName;
 
-    @Column(nullable = false, unique = true)
+    /** Public id (JWT username). Unique; assigned at persist; never rewritten. */
+    @Column(nullable = false, unique = true, updatable = false)
     private String uuid;
 
     @Column(nullable = false, unique = true)

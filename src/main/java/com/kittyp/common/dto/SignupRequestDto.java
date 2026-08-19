@@ -2,6 +2,8 @@ package com.kittyp.common.dto;
 
 import java.util.Set;
 
+import com.kittyp.common.enums.SignupRole;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -25,7 +27,13 @@ public class SignupRequestDto {
 	@Email
 	private String email;
 
-	/** Ignored server-side. Kept for API compatibility. */
+	/**
+	 * Allowlisted public signup role. Defaults to USER when omitted.
+	 * Unknown values fail Jackson deserialization (400).
+	 */
+	private SignupRole role = SignupRole.USER;
+
+	/** Ignored server-side. Kept for API compatibility — never used for provisioning. */
 	private Set<String> roles;
 
 	@NotBlank

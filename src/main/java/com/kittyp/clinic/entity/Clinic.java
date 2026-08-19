@@ -3,6 +3,8 @@ package com.kittyp.clinic.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.kittyp.common.crypto.EncryptedStringConverter;
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.common.entity.HasPublicId;
+import com.kittyp.common.entity.PublicIdEntityListener;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.user.entity.User;
 
@@ -11,6 +13,7 @@ import org.hibernate.annotations.DynamicUpdate;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -25,15 +28,16 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "clinics")
+@EntityListeners(PublicIdEntityListener.class)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true)
-public class Clinic extends BaseEntity {
+public class Clinic extends BaseEntity implements HasPublicId {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, updatable = false)
     private String uuid;
 
     private String name;

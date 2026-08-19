@@ -100,6 +100,7 @@ public final class VisitDtos {
             String clinicName,
             String petUuid,
             String petName,
+            String species,
             String ownerName,
             String ownerEmail,
             String ownerPhone,
@@ -146,7 +147,7 @@ public final class VisitDtos {
                 VisitChartModel chart,
                 String invoiceUuid,
                 String healthEventUuid) {
-            this(uuid, clinicUuid, clinicName, petUuid, petName, ownerName, ownerEmail, ownerPhone, doctorUuid,
+            this(uuid, clinicUuid, clinicName, petUuid, petName, null, ownerName, ownerEmail, ownerPhone, doctorUuid,
                     doctorName, doctorSpecialization, doctorExperienceYears, source, channel, status, urgency,
                     reasonForVisit, checkedInAt, startedAt, completedAt, null, createdAt, chart, invoiceUuid,
                     healthEventUuid, null);
