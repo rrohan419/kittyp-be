@@ -68,6 +68,7 @@ import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
+import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartModel;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
@@ -218,6 +219,109 @@ public class VisitServiceImpl implements VisitService {
         parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         notifyDoctorOfBooking(booking);
         return toBookingModel(booking);
+    }
+
+    @Override
+    @Transactional
+    public BookingModel updateScheduledBooking(String clinicUuid, String bookingUuid,
+            ScheduleBookingPatchRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+
+        if (request == null) {
+            throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
+        }
+
+        Booking booking = bookingRepository.findByUuid(bookingUuid)
+                .filter(b -> Boolean.TRUE.equals(b.getIsActive()))
+                .orElseThrow(() -> new ResourceNotFoundException("booking", "uuid", bookingUuid));
+        if (booking.getClinic() == null || !booking.getClinic().getId().equals(clinic.getId())) {
+            throw new ResourceNotFoundException("booking", "uuid", bookingUuid);
+        }
+
+        BookingStatus current = booking.getStatus();
+        if (current != BookingStatus.PENDING && current != BookingStatus.CONFIRMED) {
+            throw new CustomException("This appointment can no longer be edited", HttpStatus.BAD_REQUEST);
+        }
+
+        boolean hasDoctor = request.doctorUuid() != null && !request.doctorUuid().isBlank();
+        boolean hasSlot = request.slotStart() != null;
+        boolean hasNotes = request.notes() != null;
+        boolean hasStatus = request.status() != null;
+        boolean hasMode = request.mode() != null;
+        if (!hasDoctor && !hasSlot && !hasNotes && !hasStatus && !hasMode) {
+            throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
+        }
+
+        User actor = userDao.userByEmail(email);
+        boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(actor.getId());
+        boolean staff = clinicStaffDao.isActiveMember(clinic.getId(), actor.getId());
+        DoctorProfile actorDoctor = null;
+        if (!owner && !staff) {
+            actorDoctor = doctorProfileDao.findByUserId(actor.getId());
+            if (actorDoctor == null || booking.getDoctor() == null
+                    || !actorDoctor.getId().equals(booking.getDoctor().getId())) {
+                throw new AccessDeniedException("You can only edit your own appointments");
+            }
+            if (hasDoctor && !actorDoctor.getUuid().equals(request.doctorUuid().trim())) {
+                throw new CustomException("You cannot reassign this appointment", HttpStatus.FORBIDDEN);
+            }
+        }
+
+        if (hasStatus) {
+            BookingStatus next = request.status();
+            if (next != BookingStatus.CANCELLED && next != BookingStatus.NO_SHOW) {
+                throw new CustomException("Clinic can only cancel or mark no-show from this screen",
+                        HttpStatus.BAD_REQUEST);
+            }
+            booking.setStatus(next);
+            return toBookingModel(bookingRepository.save(booking));
+        }
+
+        DoctorProfile doctor = booking.getDoctor();
+        if (hasDoctor) {
+            doctor = requireClinicDoctor(clinic, request.doctorUuid().trim());
+            booking.setDoctor(doctor);
+        }
+        if (doctor == null) {
+            throw new CustomException("Doctor is required to schedule an appointment", HttpStatus.BAD_REQUEST);
+        }
+
+        boolean slotOrDoctorChanged = hasSlot || hasDoctor;
+        if (hasSlot) {
+            LocalDateTime slotStart = snapToHalfHour(request.slotStart());
+            if (slotStart.isBefore(LocalDateTime.now().minusMinutes(5))) {
+                throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
+            }
+            booking.setSlotStart(slotStart);
+            booking.setSlotEnd(slotStart.plusMinutes(APPOINTMENT_MINUTES));
+        }
+
+        if (slotOrDoctorChanged) {
+            LocalDateTime slotStart = booking.getSlotStart();
+            if (slotStart == null) {
+                throw new CustomException("Appointment start time is required", HttpStatus.BAD_REQUEST);
+            }
+            LocalDateTime slotEnd = booking.getSlotEnd() != null
+                    ? booking.getSlotEnd()
+                    : slotStart.plusMinutes(APPOINTMENT_MINUTES);
+            requireWithinDoctorHours(doctor, slotStart);
+            List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
+                    doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
+            boolean clash = conflicts.stream().anyMatch(b -> !Objects.equals(b.getId(), booking.getId()));
+            if (clash) {
+                throw new CustomException("This time is already booked. Please try another slot.",
+                        HttpStatus.CONFLICT);
+            }
+        }
+
+        if (hasNotes) {
+            booking.setNotes(blankToNull(request.notes()));
+        }
+        if (hasMode) {
+            booking.setMode(request.mode());
+        }
+        return toBookingModel(bookingRepository.save(booking));
     }
 
     @Override

@@ -1,9 +1,7 @@
 package com.kittyp.clinic.controller;
 
-import java.time.LocalDate;
 import java.util.List;
 
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -49,10 +47,7 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
-import com.kittyp.visit.dto.VisitDtos.VisitModel;
-import com.kittyp.visit.dto.VisitDtos.VisitPatchRequest;
-import com.kittyp.visit.dto.VisitDtos.WalkInCreateRequest;
-import com.kittyp.visit.enums.VisitStatus;
+import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
 import com.kittyp.visit.service.VisitService;
 import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.model.PaginationModel;
@@ -295,36 +290,12 @@ public class ClinicController {
         return success(visitService.createScheduledBooking(uuid, request, email()));
     }
 
-    @GetMapping(ApiUrl.CLINIC_VISITS)
-    @PreAuthorize(CLINIC_ACCESS)
-    public ResponseEntity<SuccessResponse<List<VisitModel>>> visits(@PathVariable String uuid,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) VisitStatus status,
-            @RequestParam(required = false) String doctorUuid) {
-        return success(visitService.listClinicVisits(uuid, date, status, doctorUuid, email()));
-    }
-
-    @PostMapping(ApiUrl.CLINIC_VISITS_WALK_IN)
+    @PatchMapping(ApiUrl.CLINIC_BOOKING_BY_UUID)
     @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
             + KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<VisitModel>> createWalkIn(@PathVariable String uuid,
-            @RequestBody @Valid WalkInCreateRequest request) {
-        return success(visitService.createWalkIn(uuid, request, email()));
-    }
-
-    @PatchMapping(ApiUrl.CLINIC_VISIT_BY_UUID)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
-            + KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<VisitModel>> patchVisit(@PathVariable String uuid,
-            @PathVariable String visitUuid, @RequestBody VisitPatchRequest request) {
-        return success(visitService.patchVisit(uuid, visitUuid, request, email()));
-    }
-
-    @GetMapping(ApiUrl.CLINIC_PATIENT_VISITS)
-    @PreAuthorize(CLINIC_ACCESS)
-    public ResponseEntity<SuccessResponse<List<VisitModel>>> petVisits(@PathVariable String uuid,
-            @PathVariable String petUuid) {
-        return success(visitService.listPetVisitsForClinic(uuid, petUuid, email()));
+    public ResponseEntity<SuccessResponse<BookingModel>> updateBooking(@PathVariable String uuid,
+            @PathVariable String bookingUuid, @RequestBody ScheduleBookingPatchRequest request) {
+        return success(visitService.updateScheduledBooking(uuid, bookingUuid, request, email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_RETENTION_ALERTS)

@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import com.kittyp.booking.enums.BookingMode;
+import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.visit.enums.VisitSource;
 import com.kittyp.visit.enums.VisitStatus;
 import com.kittyp.visit.enums.VisitUrgency;
@@ -56,6 +57,15 @@ public final class VisitDtos {
             LocalDateTime slotEnd,
             Integer durationMinutes,
             String notes,
+            BookingMode mode) {
+    }
+
+    /** Clinic front-desk reschedule / cancel. Null fields stay unchanged. */
+    public record ScheduleBookingPatchRequest(
+            String doctorUuid,
+            LocalDateTime slotStart,
+            String notes,
+            BookingStatus status,
             BookingMode mode) {
     }
 

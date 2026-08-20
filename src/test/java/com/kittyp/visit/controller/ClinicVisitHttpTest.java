@@ -1,4 +1,4 @@
-package com.kittyp.clinic.controller;
+package com.kittyp.visit.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -24,7 +24,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
-import com.kittyp.clinic.service.ClinicService;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.exception.GlobalExceptionHandler;
 import com.kittyp.visit.service.VisitService;
@@ -37,9 +36,8 @@ class ClinicVisitHttpTest {
 	@BeforeEach
 	void setUp() {
 		visitService = Mockito.mock(VisitService.class);
-		ClinicService clinicService = Mockito.mock(ClinicService.class);
 		ApiResponse<?> responseBuilder = new ApiResponse<>();
-		ClinicController controller = new ClinicController(clinicService, visitService, responseBuilder);
+		ClinicVisitController controller = new ClinicVisitController(visitService, responseBuilder);
 		GlobalExceptionHandler advice = new GlobalExceptionHandler(responseBuilder);
 
 		LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
@@ -67,7 +65,7 @@ class ClinicVisitHttpTest {
 		mockMvc.perform(post("/api/v1/clinic/clinic-1/visits/walk-in")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"petUuid\":\"pet-1\"}"))
-				.andExpect(status().isOk());
+				.andExpect(status().isCreated());
 
 		verify(visitService).createWalkIn(eq("clinic-1"), any(), eq("clinic@test.com"));
 	}

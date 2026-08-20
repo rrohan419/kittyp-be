@@ -151,7 +151,7 @@ public class ClinicServiceImpl implements ClinicService {
         clinicStaffDao.findActiveByUserId(user.getId()).forEach(staff -> clinics.put(staff.getClinic().getId(), staff.getClinic()));
         clinicDoctorRepository.findByDoctor_User_IdAndIsActiveTrue(user.getId())
                 .forEach(affiliation -> clinics.put(affiliation.getClinic().getId(), affiliation.getClinic()));
-        return clinics.values().stream().map(c -> clinicModel(c, user.getId())).toList();
+        return clinics.values().stream().map(this::clinicModel).toList();
     }
 
     @Override
@@ -1919,12 +1919,7 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicModel clinicModel(Clinic clinic) {
-        return clinicModel(clinic, null);
-    }
-
-    private ClinicModel clinicModel(Clinic clinic, Long viewerUserId) {
-        boolean personal = viewerUserId != null && clinic.getOwner() != null
-                && clinic.getOwner().getId().equals(viewerUserId);
+        boolean personal = isOwnerAffiliatedDoctor(clinic);
         boolean waConfigured = WhatsAppSettingsSupport.isConfigured(
                 clinic.getWhatsappPhoneNumberId(),
                 clinic.getWhatsappBusinessAccountId(),
@@ -1933,6 +1928,16 @@ public class ClinicServiceImpl implements ClinicService {
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
                 clinic.getStatus().name(), personal, waConfigured,
                 clinic.getCity(), clinic.getLatitude(), clinic.getLongitude(), clinic.getProfileImageUrl());
+    }
+
+    /** Solo doctor practice: clinic owner is an active affiliated doctor. Not "viewer owns this clinic". */
+    private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
+        if (clinic == null || clinic.getId() == null || clinic.getOwner() == null
+                || clinic.getOwner().getId() == null) {
+            return false;
+        }
+        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
+                clinic.getId(), clinic.getOwner().getId());
     }
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {

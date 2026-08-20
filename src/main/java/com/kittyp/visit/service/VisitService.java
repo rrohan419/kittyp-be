@@ -8,6 +8,7 @@ import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
+import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
 import com.kittyp.visit.dto.VisitDtos.VisitPatchRequest;
@@ -22,6 +23,10 @@ public interface VisitService {
 
     /** Schedule a future appointment (Booking) for a clinic patient. */
     BookingModel createScheduledBooking(String clinicUuid, ScheduleBookingCreateRequest request, String email);
+
+    /** Clinic front-desk: reschedule, reassign, notes, or cancel a booking at this clinic. */
+    BookingModel updateScheduledBooking(String clinicUuid, String bookingUuid, ScheduleBookingPatchRequest request,
+            String email);
 
     /** Parent self-serve booking for an owned pet at a discoverable clinic. */
     BookingModel createParentBooking(ParentBookingCreateRequest request, String email);

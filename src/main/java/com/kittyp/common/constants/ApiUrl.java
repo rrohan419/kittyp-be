@@ -150,6 +150,7 @@ public class ApiUrl {
 	public static final String CLINIC_PET_DETAIL = CLINIC_PETS + "/{petUuid}";
 	public static final String CLINIC_PET_HIDE = CLINIC_PET_DETAIL + "/hide";
 	public static final String CLINIC_BOOKINGS = CLINIC_BY_UUID + "/bookings";
+	public static final String CLINIC_BOOKING_BY_UUID = CLINIC_BOOKINGS + "/{bookingUuid}";
 	public static final String CLINIC_VISITS = CLINIC_BY_UUID + "/visits";
 	public static final String CLINIC_VISITS_WALK_IN = CLINIC_VISITS + "/walk-in";
 	public static final String CLINIC_VISIT_BY_UUID = CLINIC_VISITS + "/{visitUuid}";
