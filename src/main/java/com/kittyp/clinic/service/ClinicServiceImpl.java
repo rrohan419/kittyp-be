@@ -158,7 +158,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public List<ClinicModel> listAllClinics() {
-        return clinicDao.findAll().stream()
+        return clinicDao.findAllFetchOwner().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
                 .map(this::clinicModel)
@@ -1997,21 +1997,38 @@ public class ClinicServiceImpl implements ClinicService {
         boolean waConfigured = WhatsAppSettingsSupport.isConfigured(
                 clinic.getWhatsappPhoneNumberId(),
                 clinic.getWhatsappBusinessAccountId(),
-                clinic.getWhatsappToken());
+                whatsappTokenOrNull(clinic));
+        String status = clinic.getStatus() == null ? ClinicStatus.PENDING.name() : clinic.getStatus().name();
         return new ClinicModel(clinic.getUuid(), clinic.getName(), clinic.getLicenseNumber(), clinic.getAddress(),
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
-                clinic.getStatus().name(), personal, waConfigured,
+                status, personal, waConfigured,
                 clinic.getCity(), clinic.getLatitude(), clinic.getLongitude(), clinic.getProfileImageUrl());
+    }
+
+    private static String whatsappTokenOrNull(Clinic clinic) {
+        try {
+            return clinic.getWhatsappToken();
+        } catch (RuntimeException ex) {
+            log.warn("Could not read WhatsApp token for clinic {}: {}", clinic.getUuid(), ex.getMessage());
+            return null;
+        }
     }
 
     /** Solo doctor practice: clinic owner is an active affiliated doctor. Not "viewer owns this clinic". */
     private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
-        if (clinic == null || clinic.getId() == null || clinic.getOwner() == null
-                || clinic.getOwner().getId() == null) {
+        if (clinic == null || clinic.getId() == null) {
             return false;
         }
-        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
-                clinic.getId(), clinic.getOwner().getId());
+        try {
+            if (clinic.getOwner() == null || clinic.getOwner().getId() == null) {
+                return false;
+            }
+            return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
+                    clinic.getId(), clinic.getOwner().getId());
+        } catch (RuntimeException ex) {
+            log.warn("Could not resolve owner affiliation for clinic {}: {}", clinic.getUuid(), ex.getMessage());
+            return false;
+        }
     }
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {

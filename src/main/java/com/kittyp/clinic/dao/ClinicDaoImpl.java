@@ -49,4 +49,9 @@ public class ClinicDaoImpl implements ClinicDao {
     public List<Clinic> findAll() {
         return clinicRepository.findAll();
     }
+
+    @Override
+    public List<Clinic> findAllFetchOwner() {
+        return clinicRepository.findAllFetchOwner();
+    }
 }

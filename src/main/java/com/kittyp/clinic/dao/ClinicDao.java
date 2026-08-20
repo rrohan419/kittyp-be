@@ -15,4 +15,6 @@ public interface ClinicDao {
     List<Clinic> findAllByOwnerUserId(Long ownerUserId);
 
     List<Clinic> findAll();
+
+    List<Clinic> findAllFetchOwner();
 }

@@ -662,16 +662,9 @@ public class VisitServiceImpl implements VisitService {
             visit.setReasonForVisit(blankToNull(request.reasonForVisit()));
         }
         if (request.status() != null) {
-            if (request.status() == VisitStatus.IN_PROGRESS && visit.getDoctor() == null) {
-                throw new CustomException("Assign a doctor before moving to With doctor",
-                        HttpStatus.BAD_REQUEST);
-            }
+            requireAssignedDoctor(visit, request.status());
             if (request.status() == VisitStatus.IN_PROGRESS && visit.getDoctor() != null) {
                 requirePracticeReady(visit.getDoctor());
-            }
-            if (request.status() == VisitStatus.COMPLETED && visit.getDoctor() == null) {
-                throw new CustomException("Assign a doctor before completing the visit",
-                        HttpStatus.BAD_REQUEST);
             }
             applyStatusTransition(visit, request.status());
             if (visit.getStatus() == VisitStatus.COMPLETED) {
@@ -1190,6 +1183,22 @@ public class VisitServiceImpl implements VisitService {
             visit.setCheckingOutAt(null);
             // Doctor finish already wrote a health event; undo if pulled back into active flow.
             clearHealthEventForReopen(visit);
+        }
+    }
+
+    /** Waitlist / checked-in visits cannot enter With doctor, Checkout, or Completed without a doctor. */
+    static void requireAssignedDoctor(Visit visit, VisitStatus target) {
+        if (visit.getDoctor() != null) {
+            return;
+        }
+        if (target == VisitStatus.IN_PROGRESS) {
+            throw new CustomException("Assign a doctor before moving to With doctor", HttpStatus.BAD_REQUEST);
+        }
+        if (target == VisitStatus.CHECKING_OUT) {
+            throw new CustomException("Assign a doctor before moving to Checkout", HttpStatus.BAD_REQUEST);
+        }
+        if (target == VisitStatus.COMPLETED) {
+            throw new CustomException("Assign a doctor before completing the visit", HttpStatus.BAD_REQUEST);
         }
     }
 

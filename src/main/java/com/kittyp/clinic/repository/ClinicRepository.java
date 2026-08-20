@@ -18,6 +18,9 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
     @Query("SELECT c FROM Clinic c LEFT JOIN FETCH c.owner WHERE c.uuid = :uuid")
     Clinic findByUuidFetchOwner(@Param("uuid") String uuid);
 
+    @Query("SELECT c FROM Clinic c LEFT JOIN FETCH c.owner")
+    List<Clinic> findAllFetchOwner();
+
     Clinic findByOwner_Id(Long ownerUserId);
 
     List<Clinic> findAllByOwner_Id(Long ownerUserId);
