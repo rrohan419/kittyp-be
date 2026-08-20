@@ -18,6 +18,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -77,7 +78,8 @@ public class ArticleServiceImpl implements ArticleService {
 
 		Article article = articleDao.findArticleBySlug(slug);
 
-		if (article == null) {
+		if (article == null || (!ArticleVisibility.isPubliclyReadable(article.getStatus())
+				&& !canReadUnpublished(article))) {
 			throw new CustomException("article not found", HttpStatus.NOT_FOUND);
 		}
 
@@ -94,6 +96,8 @@ public class ArticleServiceImpl implements ArticleService {
 	public PaginationModel<ArticleListModel> allArticlesByFilter(ArticleFilterDto articleFilterModel,
 			Integer pageNumber,
 			Integer pageSize) {
+
+		constrainPublicListFilter(articleFilterModel);
 
 		Sort sort = Sort.by(Direction.DESC, KeyConstant.CREATED_AT);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
@@ -402,6 +406,51 @@ public class ArticleServiceImpl implements ArticleService {
 				|| article.getStatus() == ArticleStatus.ARCHIVED) {
 			article.setScheduledPublishAt(null);
 		}
+	}
+
+	private void constrainPublicListFilter(ArticleFilterDto filter) {
+		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+		boolean publisher = isArticlePublisher(auth);
+		boolean admin = hasRole(auth, com.kittyp.user.enums.ERole.ROLE_ADMIN);
+		Long ownAuthorId = null;
+		if (publisher && !admin && auth != null) {
+			User user = userDao.userByEmail(auth.getName());
+			Author author = authorDao.findByUserUuid(user.getUuid());
+			if (author != null) {
+				ownAuthorId = author.getId();
+			}
+		}
+		ArticleVisibility.constrainListFilter(filter, publisher, admin, ownAuthorId);
+	}
+
+	private boolean canReadUnpublished(Article article) {
+		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+		if (!isArticlePublisher(auth)) {
+			return false;
+		}
+		if (hasRole(auth, com.kittyp.user.enums.ERole.ROLE_ADMIN)) {
+			return true;
+		}
+		User user = userDao.userByEmail(auth.getName());
+		Author author = article.getAuthor();
+		return user != null && author != null && author.getUserUuid() != null
+				&& author.getUserUuid().equals(user.getUuid());
+	}
+
+	private static boolean isArticlePublisher(Authentication auth) {
+		return hasRole(auth, com.kittyp.user.enums.ERole.ROLE_ADMIN)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_MODERATOR)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_DOCTOR)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_CLINIC_STAFF);
+	}
+
+	private static boolean hasRole(Authentication auth, com.kittyp.user.enums.ERole role) {
+		if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+			return false;
+		}
+		String expected = role.name();
+		return auth.getAuthorities().stream().anyMatch(granted -> expected.equals(granted.getAuthority()));
 	}
 
 	private void requireArticleOwnerOrAdmin(Article article) {

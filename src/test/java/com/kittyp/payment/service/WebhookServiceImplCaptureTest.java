@@ -40,7 +40,7 @@ class WebhookServiceImplCaptureTest {
 		when(webhookEventRepository.save(org.mockito.ArgumentMatchers.any(WebhookEvent.class)))
 				.thenAnswer(inv -> inv.getArgument(0));
 
-		service.razorpayWebbhook(capturedEvent("payment.captured"));
+		service.razorpayWebhook(capturedEvent("payment.captured"));
 
 		assertEquals("order_1", captureProbe.orderId);
 		assertEquals("pay_1", captureProbe.paymentId);
@@ -51,7 +51,7 @@ class WebhookServiceImplCaptureTest {
 		when(webhookEventRepository.findByPaymentIdAndEventType("pay_1", "payment.captured"))
 				.thenReturn(java.util.Optional.of(new WebhookEvent()));
 
-		service.razorpayWebbhook(capturedEvent("payment.captured"));
+		service.razorpayWebhook(capturedEvent("payment.captured"));
 
 		assertNull(captureProbe.orderId);
 	}
@@ -63,7 +63,7 @@ class WebhookServiceImplCaptureTest {
 		when(webhookEventRepository.save(org.mockito.ArgumentMatchers.any(WebhookEvent.class)))
 				.thenAnswer(inv -> inv.getArgument(0));
 
-		service.razorpayWebbhook(capturedEvent("payment.authorized"));
+		service.razorpayWebhook(capturedEvent("payment.authorized"));
 
 		assertNull(captureProbe.orderId);
 	}

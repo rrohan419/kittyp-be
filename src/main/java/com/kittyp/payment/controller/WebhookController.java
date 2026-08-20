@@ -53,7 +53,7 @@ public class WebhookController {
 			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
 		}
 
-		webhookService.razorpayWebbhook(mapper.readValueFromString(rawPayload, RazorpayResponseModel.class));
+		webhookService.razorpayWebhook(mapper.readValueFromString(rawPayload, RazorpayResponseModel.class));
 		return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 }

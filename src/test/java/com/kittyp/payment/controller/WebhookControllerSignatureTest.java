@@ -64,7 +64,7 @@ class WebhookControllerSignatureTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(PAYLOAD))
 				.andExpect(status().isUnauthorized());
-		verify(webhookService, never()).razorpayWebbhook(any());
+		verify(webhookService, never()).razorpayWebhook(any());
 	}
 
 	@Test
@@ -74,7 +74,7 @@ class WebhookControllerSignatureTest {
 				.header("X-Razorpay-Signature", "deadbeef")
 				.content(PAYLOAD))
 				.andExpect(status().isUnauthorized());
-		verify(webhookService, never()).razorpayWebbhook(any());
+		verify(webhookService, never()).razorpayWebhook(any());
 	}
 
 	@Test
@@ -85,7 +85,7 @@ class WebhookControllerSignatureTest {
 				.content(PAYLOAD))
 				.andExpect(status().isOk());
 
-		verify(webhookService).razorpayWebbhook(any());
+		verify(webhookService).razorpayWebhook(any());
 	}
 
 	private static String hmac(String payload, String secret) throws NoSuchAlgorithmException, InvalidKeyException {

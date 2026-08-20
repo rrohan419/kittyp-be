@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.ai.dto.NutritionPlanFilter;
 import com.kittyp.ai.dto.SaveNutritionPlanDto;
-import com.kittyp.ai.entity.NutritionPlan;
 import com.kittyp.ai.model.NutritionPlanModel;
 import com.kittyp.ai.service.NutritionPlanService;
 import com.kittyp.common.constants.ApiUrl;
@@ -27,7 +26,6 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
-import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.user.entity.User;
@@ -124,7 +122,7 @@ public class NutritionPlanController {
 
     @PostMapping(ApiUrl.NUTRITION_PLAN_APPROVE)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<NutritionPlan>> approvePlan(@PathVariable String uuid) {
+    public ResponseEntity<SuccessResponse<NutritionPlanModel>> approvePlan(@PathVariable String uuid) {
         return responseBuilder.buildSuccessResponse(
                 nutritionPlanService.approvePlan(uuid, currentUser().getUuid()),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -132,7 +130,7 @@ public class NutritionPlanController {
 
     @PostMapping(ApiUrl.NUTRITION_PLAN_SEND)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<NutritionPlan>> sendPlan(@PathVariable String uuid) {
+    public ResponseEntity<SuccessResponse<NutritionPlanModel>> sendPlan(@PathVariable String uuid) {
         return responseBuilder.buildSuccessResponse(
                 nutritionPlanService.sendPlan(uuid, currentUser().getUuid()),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -140,7 +138,7 @@ public class NutritionPlanController {
 
     @PatchMapping(ApiUrl.NUTRITION_PLAN_UPDATE)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<NutritionPlan>> updatePlan(
+    public ResponseEntity<SuccessResponse<NutritionPlanModel>> updatePlan(
             @PathVariable String uuid,
             @RequestBody SaveNutritionPlanDto saveNutritionPlanDto) {
         return responseBuilder.buildSuccessResponse(
@@ -152,10 +150,10 @@ public class NutritionPlanController {
 
     @GetMapping(ApiUrl.NUTRITION_PLAN_ACTIVE)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<NutritionPlan>> activePlan(@RequestParam String petUuid) {
+    public ResponseEntity<SuccessResponse<NutritionPlanModel>> activePlan(@RequestParam String petUuid) {
         User caller = currentUser();
         petAccessGuard.requirePetAccess(caller, petUuid);
-        NutritionPlan plan = petAccessGuard.isOwner(caller, petUuid)
+        NutritionPlanModel plan = petAccessGuard.isOwner(caller, petUuid)
                 ? nutritionPlanService.getActivePlanForParent(petUuid, caller.getUuid())
                 : nutritionPlanService.getActiveSentPlanForPet(petUuid);
         return responseBuilder.buildSuccessResponse(plan, ResponseMessage.SUCCESS, HttpStatus.OK);

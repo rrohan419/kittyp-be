@@ -144,11 +144,9 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
      */
     private PaginationModel<NutritionPlanModel> mapToPaginationModel(Page<NutritionPlan> nutritionPlanPage) {
 
-        List<NutritionPlanModel> nutritionPlanModels = nutritionPlanPage.getContent().stream().map(nutritionPlan -> {
-            NutritionPlanModel nutritionPlanModel = mapper.convert(nutritionPlan, NutritionPlanModel.class);
-            nutritionPlanModel.setNutritionRecommendationResponse(mapData(nutritionPlan));
-            return nutritionPlanModel;
-        }).toList();
+        List<NutritionPlanModel> nutritionPlanModels = nutritionPlanPage.getContent().stream()
+                .map(this::toModel)
+                .toList();
 
         return PaginationModel.<NutritionPlanModel>builder()
                 .models(nutritionPlanModels)
@@ -175,10 +173,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
             NutritionPlan plan = planToActivate.get();
             plan.setIsActivePlan(true);
             plan = nutritionPlanRepository.save(plan);
-            NutritionPlanModel nutritionPlanModel = mapper.convert(plan, NutritionPlanModel.class);
-
-            nutritionPlanModel.setNutritionRecommendationResponse(mapData(plan));
-            return nutritionPlanModel;
+            return toModel(plan);
         } else {
             throw new CustomException("Nutrition plan not found with UUID: " + planUuid);
         }
@@ -280,7 +275,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
 
     @Transactional
     @Override
-    public NutritionPlan updatePlanContent(String planUuid, String doctorUserUuid,
+    public NutritionPlanModel updatePlanContent(String planUuid, String doctorUserUuid,
             NutritionRecommendationResponse nutritionResponse, EnvironmentDataDto environmentData) {
         NutritionPlan plan = getPlan(planUuid);
         if (plan.getStatus() == NutritionPlanStatus.SENT) {
@@ -313,23 +308,23 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
             plan.setEnvironment(mapper.convertObjectToJson(nutritionResponse.getEnvironment()));
         }
         plan.setDoctorUserUuid(doctorUserUuid);
-        return nutritionPlanRepository.save(plan);
+        return toModel(nutritionPlanRepository.save(plan));
     }
 
     @Transactional
     @Override
-    public NutritionPlan approvePlan(String planUuid, String doctorUserUuid) {
+    public NutritionPlanModel approvePlan(String planUuid, String doctorUserUuid) {
         NutritionPlan plan = getPlan(planUuid);
         assertDoctorClinicalAccess(doctorUserUuid, plan.getPetUuid());
         plan.setDoctorUserUuid(doctorUserUuid);
         plan.setStatus(NutritionPlanStatus.APPROVED);
         plan.setApprovedAt(LocalDateTime.now());
-        return nutritionPlanRepository.save(plan);
+        return toModel(nutritionPlanRepository.save(plan));
     }
 
     @Transactional
     @Override
-    public NutritionPlan sendPlan(String planUuid, String doctorUserUuid) {
+    public NutritionPlanModel sendPlan(String planUuid, String doctorUserUuid) {
         NutritionPlan plan = getPlan(planUuid);
         assertDoctorClinicalAccess(doctorUserUuid, plan.getPetUuid());
         plan.setDoctorUserUuid(doctorUserUuid);
@@ -367,24 +362,30 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
             log.error("Failed to materialize 30-day daily plans for nutrition plan {}", planUuid, e);
         }
 
-        return saved;
+        return toModel(saved);
     }
 
     @Override
-    public NutritionPlan getActivePlanForParent(String petUuid, String parentUserUuid) {
-        return nutritionPlanRepository
+    public NutritionPlanModel getActivePlanForParent(String petUuid, String parentUserUuid) {
+        return toModel(nutritionPlanRepository
                 .findFirstByPetUuidAndParentUserUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
                         petUuid, parentUserUuid, NutritionPlanStatus.SENT)
                 .or(() -> nutritionPlanRepository.findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
                         petUuid, NutritionPlanStatus.SENT))
-                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet"));
+                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet")));
     }
 
     @Override
-    public NutritionPlan getActiveSentPlanForPet(String petUuid) {
-        return nutritionPlanRepository
+    public NutritionPlanModel getActiveSentPlanForPet(String petUuid) {
+        return toModel(nutritionPlanRepository
                 .findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(petUuid, NutritionPlanStatus.SENT)
-                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet"));
+                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet")));
+    }
+
+    NutritionPlanModel toModel(NutritionPlan plan) {
+        NutritionPlanModel nutritionPlanModel = mapper.convert(plan, NutritionPlanModel.class);
+        nutritionPlanModel.setNutritionRecommendationResponse(mapData(plan));
+        return nutritionPlanModel;
     }
 
     private NutritionPlan getPlan(String planUuid) {

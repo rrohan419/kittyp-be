@@ -35,9 +35,9 @@ public class WebhookServiceImpl implements WebhookService {
 	private final WebhookEventRepository webhookEventRepository;
 	private final PaymentCaptureService paymentCaptureService;
 
-	@Override
-	@Transactional
-	public void razorpayWebbhook(RazorpayResponseModel razorpayResponseModel) {
+@Override
+    @Transactional
+    public void razorpayWebhook(RazorpayResponseModel razorpayResponseModel) {
 		if (razorpayResponseModel == null || razorpayResponseModel.getPayload() == null
 				|| razorpayResponseModel.getPayload().getPayment() == null
 				|| razorpayResponseModel.getPayload().getPayment().getEntity() == null) {

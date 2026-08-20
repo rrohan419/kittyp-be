@@ -10,5 +10,5 @@ import com.kittyp.payment.model.RazorpayResponseModel;
  */
 public interface WebhookService {
 
-	void razorpayWebbhook(RazorpayResponseModel razorpayResponseModel);
+	void razorpayWebhook(RazorpayResponseModel razorpayResponseModel);
 }
