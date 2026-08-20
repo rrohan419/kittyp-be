@@ -149,7 +149,7 @@ public class ArticleServiceImpl implements ArticleService {
 			String displayName = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
 					+ (user.getLastName() != null ? user.getLastName() : "")).trim();
 			AuthorModel authorModel = authorService.getOrCreateForUser(user.getUuid(), displayName,
-					user.getProfilePictureUrl());
+					user.getProfilePictureUrl(), authorRoleLabel(user));
 			author = authorDao.authorById(authorModel.getId());
 		}
 
@@ -417,6 +417,26 @@ public class ArticleServiceImpl implements ArticleService {
 		if (author == null || author.getUserUuid() == null || !author.getUserUuid().equals(user.getUuid())) {
 			throw new CustomException("You are not authorized to edit this article", HttpStatus.FORBIDDEN);
 		}
+	}
+
+	private static String authorRoleLabel(User user) {
+		if (user.getUserRoles() == null) {
+			return "AUTHOR";
+		}
+		boolean doctor = user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_DOCTOR);
+		if (doctor) {
+			return "DOCTOR";
+		}
+		boolean clinic = user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& (ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN
+								|| ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_CLINIC_STAFF));
+		if (clinic) {
+			return "CLINIC";
+		}
+		return "AUTHOR";
 	}
 
 }

@@ -54,7 +54,7 @@ public class BlogController {
 	}
 
 	@PostMapping(ApiUrl.BLOGS_BASE_URL)
-	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN + " or " + KeyConstant.IS_ROLE_DOCTOR)
+	@PreAuthorize(KeyConstant.IS_ROLE_ARTICLE_PUBLISHER)
 	public ResponseEntity<SuccessResponse<ArticleModel>> publishBlog(@RequestBody ArticleDto articleDto) {
 		return responseBuilder.buildSuccessResponse(
 				articleService.saveArticle(articleDto),
