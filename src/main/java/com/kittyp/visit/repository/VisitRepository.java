@@ -125,6 +125,9 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
     List<Visit> findByDoctor_IdOrderByCreatedAtDesc(Long doctorId);
 
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
+    List<Visit> findByClinic_IdAndIsActiveTrueAndStatusIn(Long clinicId, Collection<VisitStatus> statuses);
+
     boolean existsByDoctor_IdAndPet_UuidAndIsActiveTrueAndStatusIn(
             Long doctorId, String petUuid, Collection<VisitStatus> statuses);
 }

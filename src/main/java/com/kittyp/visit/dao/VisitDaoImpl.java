@@ -1,6 +1,7 @@
 package com.kittyp.visit.dao;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -88,5 +89,13 @@ public class VisitDaoImpl implements VisitDao {
     @Override
     public List<Visit> findByDoctor(Long doctorId) {
         return visitRepository.findByDoctor_IdOrderByCreatedAtDesc(doctorId);
+    }
+
+    @Override
+    public List<Visit> findByClinicAndStatuses(Long clinicId, Collection<VisitStatus> statuses) {
+        if (clinicId == null || statuses == null || statuses.isEmpty()) {
+            return List.of();
+        }
+        return visitRepository.findByClinic_IdAndIsActiveTrueAndStatusIn(clinicId, statuses);
     }
 }

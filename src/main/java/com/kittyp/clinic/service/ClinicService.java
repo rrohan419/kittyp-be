@@ -26,15 +26,25 @@ import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
+import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.common.model.PaginationModel;
 
 public interface ClinicService {
 
     List<ClinicModel> mine(String email);
 
+    /** Platform admin/moderator: every clinic, no membership filter. */
+    List<ClinicModel> listAllClinics();
+
     ClinicModel create(ClinicRequest request, String email);
 
     ClinicModel get(String clinicUuid, String email);
+
+    /** Platform admin/moderator: clinic by uuid without owner/staff/doctor membership. */
+    ClinicModel getByUuidForAdmin(String clinicUuid);
+
+    /** Platform admin/moderator: VERIFIED or REJECTED only. */
+    ClinicModel updateStatusForAdmin(String clinicUuid, ClinicStatus status);
 
     ClinicModel update(String clinicUuid, ClinicRequest request, String email);
 
@@ -87,6 +97,8 @@ public interface ClinicService {
     List<ClinicPetListModel> listPets(String clinicUuid, String q, String email);
 
     ClinicPetMedicalProfileModel petMedicalProfile(String clinicUuid, String petUuid, String email);
+
+    ClinicPetListModel updatePet(String clinicUuid, String petUuid, AddOwnerPetRequest request, String email);
 
     /** Soft-hide pet from clinic lists; row and visits remain. */
     void hidePet(String clinicUuid, String petUuid, String email);

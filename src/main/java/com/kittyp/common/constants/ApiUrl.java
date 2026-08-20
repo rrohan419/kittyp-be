@@ -33,6 +33,9 @@ public class ApiUrl {
 	public static final String ADMIN_DOCTOR_BY_UUID = ADMIN_DOCTORS + PATH_VARIABLE_UUID;
 	public static final String ADMIN_DOCTOR_STATUS = ADMIN_DOCTOR_BY_UUID + "/status";
 	public static final String ADMIN_DOCTOR_CHECKLIST = ADMIN_DOCTOR_BY_UUID + "/checklist";
+	public static final String ADMIN_CLINICS = ADMIN + "/clinics";
+	public static final String ADMIN_CLINIC_BY_UUID = ADMIN_CLINICS + PATH_VARIABLE_UUID;
+	public static final String ADMIN_CLINIC_STATUS = ADMIN_CLINIC_BY_UUID + "/status";
 
 	public static final String DOCTOR_BASE_URL = "/doctor";
 	public static final String DOCTOR_ME = DOCTOR_BASE_URL + "/me";

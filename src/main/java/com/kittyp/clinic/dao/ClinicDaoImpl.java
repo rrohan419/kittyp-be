@@ -44,4 +44,9 @@ public class ClinicDaoImpl implements ClinicDao {
     public List<Clinic> findAllByOwnerUserId(Long ownerUserId) {
         return clinicRepository.findAllByOwner_Id(ownerUserId);
     }
+
+    @Override
+    public List<Clinic> findAll() {
+        return clinicRepository.findAll();
+    }
 }

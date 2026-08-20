@@ -13,6 +13,7 @@ import com.kittyp.clinic.dto.DiscoverDtos.DiscoverClinicCard;
 import com.kittyp.clinic.dto.DiscoverDtos.DiscoverDoctorCard;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicDoctor;
+import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.common.exception.CustomException;
@@ -44,6 +45,10 @@ public class DiscoverServiceImpl implements DiscoverService {
             List<ClinicDoctor> affiliations = clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
             Double distance = distanceKm(clinic, lat, lng, hasGps);
             List<DiscoverDoctorCard> doctorCards = affiliations.stream()
+                    .filter(aff -> {
+                        DoctorProfile doctor = aff.getDoctor();
+                        return doctor != null && doctor.getStatus() != null && doctor.getStatus().isPracticeReady();
+                    })
                     .map(aff -> toDoctorCard(aff, clinic, distance))
                     .sorted(Comparator
                             .comparing(DiscoverDoctorCard::rating, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -92,6 +97,11 @@ public class DiscoverServiceImpl implements DiscoverService {
             if (personalAff == null) {
                 continue;
             }
+            DoctorProfile personalDoctor = personalAff.getDoctor();
+            if (personalDoctor == null || personalDoctor.getStatus() == null
+                    || !personalDoctor.getStatus().isPracticeReady()) {
+                continue;
+            }
             DiscoverDoctorCard card = toDoctorCard(personalAff, clinic, distanceKm(clinic, lat, lng, hasGps));
             if (!matchesPersonalDoctorFilters(clinic, card, cityFilter, query)) {
                 continue;
@@ -118,10 +128,14 @@ public class DiscoverServiceImpl implements DiscoverService {
         if (clinic == null || Boolean.FALSE.equals(clinic.getIsActive())) {
             throw new ResourceNotFoundException("clinic", "uuid", clinicUuid);
         }
-        if (clinic.getStatus() != null && "SHUTDOWN".equals(clinic.getStatus().name())) {
-            throw new CustomException("This clinic is shut down", HttpStatus.BAD_REQUEST);
+        if (clinic.getStatus() == null || !clinic.getStatus().isActivated()) {
+            throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
         }
         return clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
+                .filter(aff -> {
+                    DoctorProfile doctor = aff.getDoctor();
+                    return doctor != null && doctor.getStatus() != null && doctor.getStatus().isPracticeReady();
+                })
                 .map(aff -> toDoctorCard(aff, clinic, null))
                 .sorted(Comparator
                         .comparing(DiscoverDoctorCard::rating, Comparator.nullsLast(Comparator.reverseOrder()))

@@ -26,4 +26,5 @@ public class PetModel {
     private String currentFoodBrand;
     private String healthConditions;
     private String allergies;
+    private String microchipNumber;
 }

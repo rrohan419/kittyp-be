@@ -256,6 +256,14 @@ public class ClinicController {
         return success(clinicService.petMedicalProfile(uuid, petUuid, email()));
     }
 
+    @PatchMapping(ApiUrl.CLINIC_PET_DETAIL)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ClinicPetListModel>> updatePet(@PathVariable String uuid,
+            @PathVariable String petUuid, @RequestBody @Valid AddOwnerPetRequest request) {
+        return success(clinicService.updatePet(uuid, petUuid, request, email()));
+    }
+
     @PostMapping(ApiUrl.CLINIC_PET_HIDE)
     @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
             + KeyConstant.IS_ROLE_DOCTOR)

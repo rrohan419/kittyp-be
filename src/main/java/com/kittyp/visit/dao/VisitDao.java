@@ -1,6 +1,7 @@
 package com.kittyp.visit.dao;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,4 +33,6 @@ public interface VisitDao {
     List<Visit> findByClinicAndDoctor(Long clinicId, Long doctorId);
 
     List<Visit> findByDoctor(Long doctorId);
+
+    List<Visit> findByClinicAndStatuses(Long clinicId, Collection<VisitStatus> statuses);
 }

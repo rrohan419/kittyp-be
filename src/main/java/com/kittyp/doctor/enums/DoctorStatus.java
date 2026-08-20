@@ -10,5 +10,12 @@ public enum DoctorStatus {
     UNDER_REVIEW,
     VERIFIED,
     PUBLISHED,
-    REJECTED
+    REJECTED;
+
+    public static final String PRACTICE_NOT_READY_MESSAGE =
+            "Certificates must be verified by admin before this doctor can take appointments.";
+
+    public boolean isPracticeReady() {
+        return this == VERIFIED || this == PUBLISHED;
+    }
 }

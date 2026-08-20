@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.kittyp.booking.enums.BookingStatus;
+import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.health.enums.HealthEventStatus;
 import com.kittyp.health.enums.HealthEventType;
 
@@ -47,6 +48,9 @@ public final class ClinicDtos {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal,
                     whatsappConfigured, null, null, null, null);
         }
+    }
+
+    public record ClinicStatusUpdateRequest(@NotNull ClinicStatus status) {
     }
 
     public record DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,

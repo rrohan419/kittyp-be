@@ -153,6 +153,6 @@ public class PetDashboardController {
     private PetModel toPetModel(Pet pet) {
         return new PetModel(pet.getUuid(), pet.getName(), pet.getProfilePicture(), pet.getType(), pet.getBreed(),
                 pet.getDateOfBirth(), pet.getWeight(), pet.getActivityLevel(), pet.getGender(), pet.isNeutered(),
-                pet.getCurrentFoodBrand(), pet.getHealthConditions(), pet.getAllergies());
+                pet.getCurrentFoodBrand(), pet.getHealthConditions(), pet.getAllergies(), pet.getMicrochipNumber());
     }
 }

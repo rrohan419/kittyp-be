@@ -44,11 +44,10 @@ import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
-import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.entity.DoctorReview;
-import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorReviewRepository;
+import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.health.dao.HealthEventDao;
 import com.kittyp.health.entity.HealthEvent;
 import com.kittyp.health.enums.HealthEventStatus;
@@ -121,7 +120,6 @@ public class VisitServiceImpl implements VisitService {
     private final ObjectMapper objectMapper;
     private final ParentBookingEnrollmentService parentBookingEnrollmentService;
     private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
-    private final DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
 
     @Override
     @Transactional
@@ -135,6 +133,7 @@ public class VisitServiceImpl implements VisitService {
         DoctorProfile doctor = null;
         if (request.doctorUuid() != null && !request.doctorUuid().isBlank()) {
             doctor = requireClinicDoctor(clinic, request.doctorUuid());
+            requirePracticeReady(doctor);
         }
 
         Visit visit = Visit.builder()
@@ -172,6 +171,7 @@ public class VisitServiceImpl implements VisitService {
         }
 
         DoctorProfile doctor = requireClinicDoctor(clinic, request.doctorUuid());
+        requirePracticeReady(doctor);
         boolean selfBook = isSelfBooking(email, doctor);
 
         // Always snap to half-hour grid; self-book may still stack in the same window.
@@ -281,6 +281,7 @@ public class VisitServiceImpl implements VisitService {
         DoctorProfile doctor = booking.getDoctor();
         if (hasDoctor) {
             doctor = requireClinicDoctor(clinic, request.doctorUuid().trim());
+            requirePracticeReady(doctor);
             booking.setDoctor(doctor);
         }
         if (doctor == null) {
@@ -337,6 +338,7 @@ public class VisitServiceImpl implements VisitService {
         requireOperational(clinic);
 
         DoctorProfile doctor = requireClinicDoctor(clinic, request.doctorUuid());
+        requirePracticeReady(doctor);
         Pet pet = petsRepository.findOptionalByUuid(request.petUuid())
                 .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", request.petUuid()));
 
@@ -537,6 +539,7 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     public VisitModel startTreatmentFromBooking(String bookingUuid, String email) {
         DoctorProfile profile = requireDoctorProfile(email);
+        requirePracticeReady(profile);
         Booking booking = bookingRepository.findByUuid(bookingUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("booking", "uuid", bookingUuid));
         if (booking.getDoctor() == null || !booking.getDoctor().getId().equals(profile.getId())) {
@@ -646,6 +649,7 @@ public class VisitServiceImpl implements VisitService {
                 doctorChanged = previousDoctor != null;
             } else {
                 DoctorProfile next = requireClinicDoctor(clinic, request.doctorUuid());
+                requirePracticeReady(next);
                 visit.setDoctor(next);
                 doctorChanged = previousDoctor == null || !previousDoctor.getId().equals(next.getId());
             }
@@ -661,6 +665,9 @@ public class VisitServiceImpl implements VisitService {
             if (request.status() == VisitStatus.IN_PROGRESS && visit.getDoctor() == null) {
                 throw new CustomException("Assign a doctor before moving to With doctor",
                         HttpStatus.BAD_REQUEST);
+            }
+            if (request.status() == VisitStatus.IN_PROGRESS && visit.getDoctor() != null) {
+                requirePracticeReady(visit.getDoctor());
             }
             if (request.status() == VisitStatus.COMPLETED && visit.getDoctor() == null) {
                 throw new CustomException("Assign a doctor before completing the visit",
@@ -730,6 +737,7 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     public VisitModel startVisit(String visitUuid, String email) {
         Visit visit = requireDoctorOwnedVisit(visitUuid, email);
+        requirePracticeReady(requireDoctorProfile(email));
         if (!STARTABLE.contains(visit.getStatus()) && visit.getStatus() != VisitStatus.IN_PROGRESS) {
             throw new CustomException("Cannot start visit from status " + visit.getStatus(), HttpStatus.BAD_REQUEST);
         }
@@ -957,96 +965,64 @@ public class VisitServiceImpl implements VisitService {
                     && (visit.getClinic() == null || !clinicUuid.equals(visit.getClinic().getUuid()))) {
                 continue;
             }
-            Pet pet = visit.getPet();
-            ClinicPetOwner owner = visit.getClinicOwner();
-            if (pet == null || owner == null) {
-                continue;
-            }
-            LocalDateTime when = visit.getCompletedAt() != null ? visit.getCompletedAt()
-                    : visit.getStartedAt() != null ? visit.getStartedAt()
-                            : visit.getCheckedInAt() != null ? visit.getCheckedInAt() : visit.getCreatedAt();
-            String assessment = visit.getAssessment();
-            byPet.merge(pet.getUuid(),
-                    new AttendedPatientModel(
-                            pet.getUuid(),
-                            pet.getName(),
-                            pet.getType(),
-                            pet.getBreed(),
-                            owner.getUuid(),
-                            clinicOwnerDisplayName(owner),
-                            owner.getEmail(),
-                            owner.getPhone(),
-                            visit.getClinic() != null ? visit.getClinic().getUuid() : null,
-                            visit.getClinic() != null ? visit.getClinic().getName() : null,
-                            1,
-                            when,
-                            assessment),
-                    (existing, added) -> new AttendedPatientModel(
-                            existing.petUuid(),
-                            existing.petName(),
-                            existing.species(),
-                            existing.breed(),
-                            existing.ownerUuid(),
-                            existing.ownerName(),
-                            existing.ownerEmail(),
-                            existing.ownerPhone(),
-                            existing.clinicUuid(),
-                            existing.clinicName(),
-                            existing.visitCount() + 1,
-                            laterVisit(existing.lastVisitAt(), added.lastVisitAt()),
-                            laterAssessment(existing, added)));
+            absorbAttendedVisit(visit, byPet);
         }
-        mergeDoctorEnrollments(profile, clinicUuid, byPet);
+        if (clinicUuid != null && !clinicUuid.isBlank()) {
+            Clinic scoped = clinicDao.findByUuid(clinicUuid);
+            if (scoped != null && !ParentBookingEnrollmentService.isPersonalPractice(scoped, profile)) {
+                for (Visit visit : visitDao.findByClinicAndStatuses(scoped.getId(), seenStatuses)) {
+                    if (visit.getDoctor() != null && visit.getDoctor().getId().equals(profile.getId())) {
+                        continue;
+                    }
+                    absorbAttendedVisit(visit, byPet);
+                }
+            }
+        }
         return byPet.values().stream()
                 .sorted(Comparator.comparing(AttendedPatientModel::lastVisitAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
-    private void mergeDoctorEnrollments(DoctorProfile profile, String clinicUuid,
-            Map<String, AttendedPatientModel> byPet) {
-        boolean includeEnrollments;
-        if (clinicUuid == null || clinicUuid.isBlank()) {
-            includeEnrollments = true;
-        } else {
-            Clinic scoped = clinicDao.findByUuid(clinicUuid);
-            includeEnrollments = ParentBookingEnrollmentService.isPersonalPractice(scoped, profile);
-        }
-        if (!includeEnrollments) {
+    private void absorbAttendedVisit(Visit visit, Map<String, AttendedPatientModel> byPet) {
+        Pet pet = visit.getPet();
+        ClinicPetOwner owner = visit.getClinicOwner();
+        if (pet == null || owner == null) {
             return;
         }
-        for (DoctorPatientEnrollment enrollment : doctorPatientEnrollmentRepository
-                .findByDoctor_IdAndIsActiveTrue(profile.getId())) {
-            Pet pet = enrollment.getPet();
-            User owner = enrollment.getOwnerUser();
-            if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || owner == null) {
-                continue;
-            }
-            byPet.putIfAbsent(pet.getUuid(), new AttendedPatientModel(
-                    pet.getUuid(),
-                    pet.getName(),
-                    pet.getType(),
-                    pet.getBreed(),
-                    owner.getUuid(),
-                    doctorEnrollmentOwnerName(owner),
-                    owner.getEmail(),
-                    owner.getPhoneNumber(),
-                    null,
-                    null,
-                    0,
-                    enrollment.getCreatedAt(),
-                    null));
-        }
-    }
-
-    private static String doctorEnrollmentOwnerName(User user) {
-        if (user == null) {
-            return null;
-        }
-        String last = user.getLastName() == null ? "" : user.getLastName().trim();
-        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
-        String name = (first + (last.isEmpty() ? "" : " " + last)).trim();
-        return name.isEmpty() ? user.getEmail() : name;
+        LocalDateTime when = visit.getCompletedAt() != null ? visit.getCompletedAt()
+                : visit.getStartedAt() != null ? visit.getStartedAt()
+                        : visit.getCheckedInAt() != null ? visit.getCheckedInAt() : visit.getCreatedAt();
+        String assessment = visit.getAssessment();
+        byPet.merge(pet.getUuid(),
+                new AttendedPatientModel(
+                        pet.getUuid(),
+                        pet.getName(),
+                        pet.getType(),
+                        pet.getBreed(),
+                        owner.getUuid(),
+                        clinicOwnerDisplayName(owner),
+                        owner.getEmail(),
+                        owner.getPhone(),
+                        visit.getClinic() != null ? visit.getClinic().getUuid() : null,
+                        visit.getClinic() != null ? visit.getClinic().getName() : null,
+                        1,
+                        when,
+                        assessment),
+                (existing, added) -> new AttendedPatientModel(
+                        existing.petUuid(),
+                        existing.petName(),
+                        existing.species(),
+                        existing.breed(),
+                        existing.ownerUuid(),
+                        existing.ownerName(),
+                        existing.ownerEmail(),
+                        existing.ownerPhone(),
+                        existing.clinicUuid(),
+                        existing.clinicName(),
+                        existing.visitCount() + 1,
+                        laterVisit(existing.lastVisitAt(), added.lastVisitAt()),
+                        laterAssessment(existing, added)));
     }
 
     private static LocalDateTime laterVisit(LocalDateTime a, LocalDateTime b) {
@@ -1423,6 +1399,19 @@ public class VisitServiceImpl implements VisitService {
     private void requireOperational(Clinic clinic) {
         if (clinic.getStatus() == ClinicStatus.SHUTDOWN) {
             throw new CustomException("This clinic is shut down and is read-only.", HttpStatus.BAD_REQUEST);
+        }
+        if (clinic.getStatus() == null || !clinic.getStatus().isActivated()) {
+            throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private void requirePracticeReady(DoctorProfile doctor) {
+        if (doctor == null) {
+            return;
+        }
+        DoctorStatus status = doctor.getStatus();
+        if (status == null || !status.isPracticeReady()) {
+            throw new CustomException(DoctorStatus.PRACTICE_NOT_READY_MESSAGE, HttpStatus.BAD_REQUEST);
         }
     }
 

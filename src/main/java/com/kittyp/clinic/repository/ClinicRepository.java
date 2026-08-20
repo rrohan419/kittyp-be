@@ -24,12 +24,11 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
 
     List<Clinic> findByStatusAndIsActiveTrue(ClinicStatus status);
 
-    /** Active, bookable clinics for parent discovery (city/q filtered in service). */
+    /** Active, admin-verified clinics for parent discovery (city/q filtered in service). */
     @Query("""
             SELECT c FROM Clinic c
             WHERE c.isActive = true
-              AND c.status <> com.kittyp.clinic.enums.ClinicStatus.SHUTDOWN
-              AND c.status <> com.kittyp.clinic.enums.ClinicStatus.REJECTED
+              AND c.status = com.kittyp.clinic.enums.ClinicStatus.VERIFIED
             """)
     List<Clinic> findDiscoverable();
 }

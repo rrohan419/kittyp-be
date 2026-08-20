@@ -13,4 +13,6 @@ public interface ClinicDao {
     Clinic findByOwnerUserId(Long ownerUserId);
 
     List<Clinic> findAllByOwnerUserId(Long ownerUserId);
+
+    List<Clinic> findAll();
 }
