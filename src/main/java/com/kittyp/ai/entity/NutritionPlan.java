@@ -43,7 +43,7 @@ public class NutritionPlan extends BaseEntity {
     private String doctorUserUuid;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 20, columnDefinition = "varchar(20) not null default 'DRAFT'")
     @Builder.Default
     private NutritionPlanStatus status = NutritionPlanStatus.DRAFT;
 

@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -45,17 +46,17 @@ public class NutritionPlanController {
     private final UserRepository userRepository;
     private final PetAccessGuard petAccessGuard;
 
-    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     @PostMapping("/ai/nutrition/plan/save")
     public ResponseEntity<SuccessResponse<String>> saveNutritionPlanAsync(
             @RequestBody SaveNutritionPlanDto saveNutritionPlanDto) {
         User caller = currentUser();
-        petAccessGuard.requirePetAccess(caller, saveNutritionPlanDto.getPetUuid());
-        // Always bind ownership to the authenticated caller — ignore client userUuid.
+        petAccessGuard.requireClinicalAccess(caller, saveNutritionPlanDto.getPetUuid());
         nutritionPlanService.saveNutritionPlanAsync(saveNutritionPlanDto.getPetUuid(),
                 caller.getUuid(), saveNutritionPlanDto.getRecommendationResponse(),
                 saveNutritionPlanDto.getEnvironmentDataDto(),
-                saveNutritionPlanDto.getPetName() + "'s Nutrition Plan" + "-" + LocalDate.now());
+                saveNutritionPlanDto.getPetName() + "'s Nutrition Plan" + "-" + LocalDate.now())
+                .join();
 
         return responseBuilder.buildSuccessResponse(ResponseMessage.PET_PLAN_SAVED_SUCCESSFULLY,
                 ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -80,6 +81,7 @@ public class NutritionPlanController {
         User caller = currentUser();
         String scopedUserUuid = userUuid;
         String scopedDoctorUuid = doctorUserUuid;
+        String doctorScopeUuid = null;
 
         if (!petAccessGuard.isAdmin(caller)) {
             if (petUuid != null && !petUuid.isBlank()) {
@@ -87,19 +89,11 @@ public class NutritionPlanController {
             }
 
             if (petAccessGuard.isDoctorLike(caller)) {
-                // Doctors may only query their own doctor scope or a pet they can access.
-                if (scopedDoctorUuid != null && !scopedDoctorUuid.equals(caller.getUuid())) {
-                    scopedDoctorUuid = caller.getUuid();
-                }
-                if (scopedUserUuid != null && !scopedUserUuid.equals(caller.getUuid())
-                        && (petUuid == null || petUuid.isBlank())) {
-                    throw new CustomException("You are not authorized to list plans for that user",
-                            HttpStatus.FORBIDDEN);
-                }
-                if ((petUuid == null || petUuid.isBlank())
-                        && (scopedUserUuid == null || scopedUserUuid.isBlank())
-                        && (scopedDoctorUuid == null || scopedDoctorUuid.isBlank())) {
-                    scopedDoctorUuid = caller.getUuid();
+                if (petUuid == null || petUuid.isBlank()) {
+                    // Inbox: plans this doctor created (userUuid) or is assigned to (doctorUserUuid).
+                    doctorScopeUuid = caller.getUuid();
+                    scopedDoctorUuid = null;
+                    scopedUserUuid = null;
                 }
             } else {
                 // Pet parents: always scoped to self; never honor foreign userUuid.
@@ -113,6 +107,7 @@ public class NutritionPlanController {
                 .uuid(uuid)
                 .userUuid(scopedUserUuid)
                 .doctorUserUuid(scopedDoctorUuid)
+                .doctorScopeUuid(doctorScopeUuid)
                 .isActive(isActive)
                 .status(status)
                 .searchText(searchText)
@@ -143,14 +138,27 @@ public class NutritionPlanController {
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
+    @PatchMapping(ApiUrl.NUTRITION_PLAN_UPDATE)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<NutritionPlan>> updatePlan(
+            @PathVariable String uuid,
+            @RequestBody SaveNutritionPlanDto saveNutritionPlanDto) {
+        return responseBuilder.buildSuccessResponse(
+                nutritionPlanService.updatePlanContent(uuid, currentUser().getUuid(),
+                        saveNutritionPlanDto.getRecommendationResponse(),
+                        saveNutritionPlanDto.getEnvironmentDataDto()),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
     @GetMapping(ApiUrl.NUTRITION_PLAN_ACTIVE)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<NutritionPlan>> activePlan(@RequestParam String petUuid) {
         User caller = currentUser();
         petAccessGuard.requirePetAccess(caller, petUuid);
-        return responseBuilder.buildSuccessResponse(
-                nutritionPlanService.getActivePlanForParent(petUuid, caller.getUuid()),
-                ResponseMessage.SUCCESS, HttpStatus.OK);
+        NutritionPlan plan = petAccessGuard.isOwner(caller, petUuid)
+                ? nutritionPlanService.getActivePlanForParent(petUuid, caller.getUuid())
+                : nutritionPlanService.getActiveSentPlanForPet(petUuid);
+        return responseBuilder.buildSuccessResponse(plan, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     private User currentUser() {

@@ -24,6 +24,7 @@ import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.enums.ERole;
 import com.kittyp.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -46,13 +47,14 @@ public class AuthorController {
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
-	@PreAuthorize(KeyConstant.IS_ROLE_DOCTOR + " or " + KeyConstant.IS_ROLE_ADMIN)
+	@PreAuthorize(KeyConstant.IS_ROLE_ARTICLE_PUBLISHER)
 	@GetMapping(ApiUrl.AUTHOR_ME)
 	public ResponseEntity<SuccessResponse<AuthorModel>> myAuthorProfile() {
 		User user = currentUser();
 		String displayName = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
 				+ (user.getLastName() != null ? user.getLastName() : "")).trim();
-		AuthorModel author = authorService.getOrCreateForUser(user.getUuid(), displayName, user.getProfilePictureUrl());
+		AuthorModel author = authorService.getOrCreateForUser(user.getUuid(), displayName, user.getProfilePictureUrl(),
+				authorRoleLabel(user));
 		return responseBuilder.buildSuccessResponse(author, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
@@ -75,5 +77,25 @@ public class AuthorController {
 		String email = SecurityContextHolder.getContext().getAuthentication().getName();
 		return userRepository.findByEmail(email)
 				.orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
+	}
+
+	private static String authorRoleLabel(User user) {
+		if (user.getUserRoles() == null) {
+			return "AUTHOR";
+		}
+		boolean doctor = user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null && ur.getRole().getName() == ERole.ROLE_DOCTOR);
+		if (doctor) {
+			return "DOCTOR";
+		}
+		boolean clinic = user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null && (ur.getRole().getName() == ERole.ROLE_CLINIC_ADMIN
+						|| ur.getRole().getName() == ERole.ROLE_CLINIC_STAFF));
+		if (clinic) {
+			return "CLINIC";
+		}
+		boolean admin = user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null && ur.getRole().getName() == ERole.ROLE_ADMIN);
+		return admin ? "ADMIN" : "AUTHOR";
 	}
 }

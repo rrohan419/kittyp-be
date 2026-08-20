@@ -19,7 +19,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +36,7 @@ import com.kittyp.ai.model.NutritionRecommendationResponse.PetProfileSummary;
 import com.kittyp.ai.model.NutritionRecommendationResponse.RecommendedProduct;
 import com.kittyp.ai.model.NutritionRecommendationResponse.SpecialConsideration;
 import com.kittyp.ai.repository.NutritionPlanRepository;
+import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
@@ -44,7 +44,9 @@ import com.kittyp.common.util.Mapper;
 import com.kittyp.nutrition.entity.PetDailyPlan;
 import com.kittyp.nutrition.enums.ItemType;
 import com.kittyp.nutrition.service.PetDailyPlanService;
+import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 import com.kittyp.user.service.PetAccessGuard;
 
@@ -62,9 +64,10 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     private final PetDailyPlanService petDailyPlanService;
     private final PetAccessGuard petAccessGuard;
     private final UserRepository userRepository;
+    private final PetsRepository petsRepository;
 
-    @Async("taskExecutor")
     @Override
+    @Transactional
     public CompletableFuture<NutritionPlan> saveNutritionPlanAsync(
             String petUuid,
             String userUuid,
@@ -72,7 +75,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
             EnvironmentDataDto environmentData,
             String planName) {
 
-        log.info("Saving nutrition plan asynchronously for pet: {} and user: {}", petUuid, userUuid);
+        log.info("Saving nutrition plan for pet: {} and user: {}", petUuid, userUuid);
 
         try {
             LocalDate today = LocalDate.now();
@@ -80,13 +83,17 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
             int year = today.getYear();
 
             nutritionPlanDao.deactivatePlansForMonth(petUuid, month, year);
-            
-            // Create nutrition plan entity
+
+            String parentUuid = resolveParentUserUuid(petUuid);
+            boolean doctorCaller = isDoctorCaller(userUuid);
+
             NutritionPlan nutritionPlan = NutritionPlan.builder()
                     .uuid(nutritionResponse.getUuid())
                     .petUuid(petUuid)
-                    .userUuid(userUuid)
-                    .parentUserUuid(userUuid)
+                    .userUuid(doctorCaller && parentUuid != null ? parentUuid : userUuid)
+                    .parentUserUuid(parentUuid)
+                    .doctorUserUuid(doctorCaller ? userUuid : null)
+                    .status(NutritionPlanStatus.DRAFT)
                     .planName(planName != null ? planName : generateDefaultPlanName())
                     .petProfileSummary(mapper.convertObjectToJson(nutritionResponse.getPetProfileSummary()))
                     .environmentalImpact(mapper.convertObjectToJson(nutritionResponse.getEnvironmentalImpact()))
@@ -101,47 +108,18 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
                     .planYear(year)
                     .build();
 
-            // Save to database
             NutritionPlan savedPlan = nutritionPlanDao.saveNutritionPlan(nutritionPlan);
 
             log.info("Successfully saved nutrition plan with UUID: {} for pet: {}",
                     savedPlan.getUuid(), petUuid);
 
-            // TODO: Add subscription check here before creating daily plans
-            // Create or replace current month daily plans for this pet
-
-            
-            // try {
-            //     if (nutritionResponse.getDailyFeedingPlan() != null) {
-            //         List<PetDailyPlan> dailyTemplates = convertToDailyPlanTemplates(
-            //                 nutritionResponse.getDailyFeedingPlan());
-            //         if (!dailyTemplates.isEmpty()) {
-            //             petDailyPlanService.createOrReplaceCurrentMonthPlan(
-            //                     userUuid,
-            //                     petUuid,
-            //                     savedPlan.getUuid(),
-            //                     dailyTemplates);
-            //             log.info("Successfully created daily plans for pet: {} with nutrition plan: {}",
-            //                     petUuid, savedPlan.getUuid());
-            //         } else {
-            //             log.warn("No daily feeding plan templates found for pet: {}", petUuid);
-            //         }
-            //     } else {
-            //         log.warn("Daily feeding plan is null for pet: {}", petUuid);
-            //     }
-            // } catch (Exception e) {
-            //     log.error("Error creating daily plans for pet: {} with nutrition plan: {}",
-            //             petUuid, savedPlan.getUuid(), e);
-                
-            // }
-
             return CompletableFuture.completedFuture(savedPlan);
 
+        } catch (CustomException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error saving nutrition plan for pet: {} and user: {}", petUuid, userUuid, e);
-            CompletableFuture<NutritionPlan> failedFuture = new CompletableFuture<>();
-            failedFuture.completeExceptionally(e);
-            return failedFuture;
+            throw new CustomException("Error saving nutrition plan");
         }
     }
 
@@ -302,6 +280,44 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
 
     @Transactional
     @Override
+    public NutritionPlan updatePlanContent(String planUuid, String doctorUserUuid,
+            NutritionRecommendationResponse nutritionResponse, EnvironmentDataDto environmentData) {
+        NutritionPlan plan = getPlan(planUuid);
+        if (plan.getStatus() == NutritionPlanStatus.SENT) {
+            throw new CustomException("Sent nutrition plans cannot be edited");
+        }
+        assertDoctorClinicalAccess(doctorUserUuid, plan.getPetUuid());
+        if (nutritionResponse != null) {
+            if (nutritionResponse.getPetProfileSummary() != null) {
+                plan.setPetProfileSummary(mapper.convertObjectToJson(nutritionResponse.getPetProfileSummary()));
+            }
+            if (nutritionResponse.getEnvironmentalImpact() != null) {
+                plan.setEnvironmentalImpact(mapper.convertObjectToJson(nutritionResponse.getEnvironmentalImpact()));
+            }
+            if (nutritionResponse.getDailyFeedingPlan() != null) {
+                plan.setDailyFeedingPlan(mapper.convertObjectToJson(nutritionResponse.getDailyFeedingPlan()));
+            }
+            if (nutritionResponse.getSpecialConsiderations() != null) {
+                plan.setSpecialConsiderations(mapper.convertObjectToJson(nutritionResponse.getSpecialConsiderations()));
+            }
+            if (nutritionResponse.getRecommendedProducts() != null) {
+                plan.setRecommendedProducts(mapper.convertObjectToJson(nutritionResponse.getRecommendedProducts()));
+            }
+            if (nutritionResponse.getLongTermWellnessTips() != null) {
+                plan.setLongTermWellnessTips(mapper.convertObjectToJson(nutritionResponse.getLongTermWellnessTips()));
+            }
+        }
+        if (environmentData != null) {
+            plan.setEnvironment(mapper.convertObjectToJson(environmentData));
+        } else if (nutritionResponse != null && nutritionResponse.getEnvironment() != null) {
+            plan.setEnvironment(mapper.convertObjectToJson(nutritionResponse.getEnvironment()));
+        }
+        plan.setDoctorUserUuid(doctorUserUuid);
+        return nutritionPlanRepository.save(plan);
+    }
+
+    @Transactional
+    @Override
     public NutritionPlan approvePlan(String planUuid, String doctorUserUuid) {
         NutritionPlan plan = getPlan(planUuid);
         assertDoctorClinicalAccess(doctorUserUuid, plan.getPetUuid());
@@ -320,9 +336,14 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         if (plan.getApprovedAt() == null) {
             plan.setApprovedAt(LocalDateTime.now());
         }
-        if (plan.getParentUserUuid() == null) {
-            plan.setParentUserUuid(plan.getUserUuid());
+        String parentUuid = plan.getParentUserUuid();
+        if (parentUuid == null || parentUuid.isBlank()) {
+            parentUuid = resolveParentUserUuid(plan.getPetUuid());
         }
+        if (parentUuid == null || parentUuid.isBlank()) {
+            parentUuid = plan.getUserUuid();
+        }
+        plan.setParentUserUuid(parentUuid);
         plan.setStatus(NutritionPlanStatus.SENT);
         plan.setSentAt(LocalDateTime.now());
         plan.setIsActivePlan(true);
@@ -335,7 +356,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
                 List<PetDailyPlan> templates = convertToDailyPlanTemplates(recommendation.getDailyFeedingPlan());
                 if (!templates.isEmpty()) {
                     petDailyPlanService.createOrReplaceNextDaysPlan(
-                            saved.getUserUuid(),
+                            parentUuid,
                             saved.getPetUuid(),
                             saved.getUuid(),
                             templates,
@@ -354,6 +375,15 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         return nutritionPlanRepository
                 .findFirstByPetUuidAndParentUserUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
                         petUuid, parentUserUuid, NutritionPlanStatus.SENT)
+                .or(() -> nutritionPlanRepository.findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
+                        petUuid, NutritionPlanStatus.SENT))
+                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet"));
+    }
+
+    @Override
+    public NutritionPlan getActiveSentPlanForPet(String petUuid) {
+        return nutritionPlanRepository
+                .findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(petUuid, NutritionPlanStatus.SENT)
                 .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet"));
     }
 
@@ -366,6 +396,28 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         User doctor = userRepository.findByUuid(doctorUserUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "uuid", doctorUserUuid));
         petAccessGuard.requireClinicalAccess(doctor, petUuid);
+    }
+
+    private boolean isDoctorCaller(String userUuid) {
+        return userRepository.findByUuid(userUuid)
+                .map(petAccessGuard::isDoctorLike)
+                .orElse(false);
+    }
+
+    private String resolveParentUserUuid(String petUuid) {
+        Pet pet = petsRepository.findOptionalByUuid(petUuid).orElse(null);
+        if (pet != null) {
+            if (pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
+                return pet.getParentUserUuid();
+            }
+            ClinicPetOwner clinicOwner = pet.getClinicOwner();
+            if (clinicOwner != null && clinicOwner.getLinkedUser() != null) {
+                return clinicOwner.getLinkedUser().getUuid();
+            }
+        }
+        return userRepository.findByPets_Uuid(petUuid)
+                .map(User::getUuid)
+                .orElse(null);
     }
 
     private String generateDefaultPlanName() {

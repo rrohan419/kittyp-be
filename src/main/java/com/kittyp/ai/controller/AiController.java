@@ -26,6 +26,7 @@ import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.service.PetAccessGuard;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -39,12 +40,22 @@ public class AiController {
     private final ApiResponse<?> responseBuilder;
     private final AiNutritionRecommendationService aiNutritionRecommendationService;
     private final UserDao userDao;
+    private final PetAccessGuard petAccessGuard;
 
     @PostMapping("/ai/nutrition/generate")
-    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<NutritionRecommendationResponse>> generateNutritionAIData(
             @RequestBody @Valid NutritionistRecommendationRequest nutritionistRecommendationRequest,
             HttpServletRequest httpServletRequest) {
+        String petUuid = nutritionistRecommendationRequest.getPetProfile() != null
+                ? nutritionistRecommendationRequest.getPetProfile().getUuid()
+                : null;
+        if (petUuid == null || petUuid.isBlank() || "manual-entry".equals(petUuid)) {
+            throw new CustomException("Select a patient to generate a nutrition plan", HttpStatus.BAD_REQUEST);
+        }
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User caller = userDao.userByEmail(email);
+        petAccessGuard.requireClinicalAccess(caller, petUuid);
         NutritionRecommendationResponse response = aiNutritionRecommendationService
                 .getNutritionRecommendationRequest(nutritionistRecommendationRequest, httpServletRequest);
 
@@ -53,7 +64,7 @@ public class AiController {
 
     /** Loop 2 alias: POST /api/v1/ai/nutrition-plan */
     @PostMapping("/ai/nutrition-plan")
-    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<NutritionRecommendationResponse>> generateNutritionPlan(
             @RequestBody @Valid NutritionistRecommendationRequest nutritionistRecommendationRequest,
             HttpServletRequest httpServletRequest) {
