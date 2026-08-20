@@ -42,9 +42,14 @@ public interface NutritionPlanService {
      */
     NutritionPlan updatePlanNotes(String planUuid, String notes);
 
+    NutritionPlan updatePlanContent(String planUuid, String doctorUserUuid,
+            NutritionRecommendationResponse nutritionResponse, EnvironmentDataDto environmentData);
+
     NutritionPlan approvePlan(String planUuid, String doctorUserUuid);
 
     NutritionPlan sendPlan(String planUuid, String doctorUserUuid);
 
     NutritionPlan getActivePlanForParent(String petUuid, String parentUserUuid);
+
+    NutritionPlan getActiveSentPlanForPet(String petUuid);
 }

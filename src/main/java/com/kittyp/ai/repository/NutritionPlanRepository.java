@@ -42,6 +42,9 @@ public interface NutritionPlanRepository
     Optional<NutritionPlan> findFirstByPetUuidAndParentUserUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
             String petUuid, String parentUserUuid, NutritionPlanStatus status);
 
+    Optional<NutritionPlan> findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
+            String petUuid, NutritionPlanStatus status);
+
     @Query("SELECT np FROM NutritionPlan np WHERE np.userUuid = :userUuid AND np.generationTimestamp >= :startDate ORDER BY np.generationTimestamp DESC")
     List<NutritionPlan> findRecentPlansByUserUuid(@Param("userUuid") String userUuid,
             @Param("startDate") LocalDateTime startDate);

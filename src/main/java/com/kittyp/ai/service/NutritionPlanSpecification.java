@@ -19,6 +19,8 @@ public class NutritionPlanSpecification {
         ).and(
                 filter.getDoctorUserUuid() != null ? hasDoctorUserUuid(filter.getDoctorUserUuid()) : null
         ).and(
+                filter.getDoctorScopeUuid() != null ? doctorScope(filter.getDoctorScopeUuid()) : null
+        ).and(
                 filter.getIsActive() != null ? isActive(filter.getIsActive()) : null
         ).and(
                 filter.getPetUuid() != null ? hasPetUuid(filter.getPetUuid()) : null
@@ -34,6 +36,14 @@ public class NutritionPlanSpecification {
     public static Specification<NutritionPlan> hasDoctorUserUuid(String doctorUserUuid) {
         return (root, query, criteriaBuilder) ->
                 criteriaBuilder.equal(root.get("doctorUserUuid"), doctorUserUuid);
+    }
+
+    public static Specification<NutritionPlan> doctorScope(String doctorUuid) {
+        return (root, query, criteriaBuilder) ->
+                criteriaBuilder.or(
+                        criteriaBuilder.equal(root.get("doctorUserUuid"), doctorUuid),
+                        criteriaBuilder.equal(root.get("userUuid"), doctorUuid)
+                );
     }
 
     public static Specification<NutritionPlan> hasStatus(String status) {

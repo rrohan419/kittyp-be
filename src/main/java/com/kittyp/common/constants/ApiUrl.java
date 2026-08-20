@@ -119,8 +119,9 @@ public class ApiUrl {
 	// AI controller
 	public static final String AI_TIP_OF_THE_DAY = "/ai/tip-of-the-day";
 	public static final String NUTRITION_PLAN_BASE_URL = "/ai/nutrition/plans";
-	public static final String NUTRITION_PLAN_APPROVE = NUTRITION_PLAN_BASE_URL + "/{uuid}/approve";
+    public static final String NUTRITION_PLAN_APPROVE = NUTRITION_PLAN_BASE_URL + "/{uuid}/approve";
 	public static final String NUTRITION_PLAN_SEND = NUTRITION_PLAN_BASE_URL + "/{uuid}/send";
+	public static final String NUTRITION_PLAN_UPDATE = NUTRITION_PLAN_BASE_URL + "/{uuid}";
 	public static final String NUTRITION_PLAN_ACTIVE = NUTRITION_PLAN_BASE_URL + "/active";
 
 	public static final String CLINIC_BASE_URL = "/clinic";

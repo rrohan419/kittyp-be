@@ -15,6 +15,8 @@ public class NutritionPlanFilter {
     private String uuid;
     private String userUuid;
     private String doctorUserUuid;
+    /** Matches doctorUserUuid OR userUuid — used for the doctor inbox. */
+    private String doctorScopeUuid;
     private Boolean isActive;
     private String searchText;
     private List<String> tags;
