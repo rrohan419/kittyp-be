@@ -36,6 +36,35 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 	Page<User> findAll(Pageable pageable);
 
+	/**
+	 * Pet-owner accounts only: has ROLE_USER and no doctor/clinic/admin/moderator role.
+	 */
+	@Query("""
+			SELECT u FROM User u
+			WHERE EXISTS (
+				SELECT 1 FROM UserRole ur
+				JOIN ur.role r
+				WHERE ur.user = u
+				AND r.name = com.kittyp.user.enums.ERole.ROLE_USER
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM UserRole other
+				JOIN other.role otherRole
+				WHERE other.user = u
+				AND otherRole.name <> com.kittyp.user.enums.ERole.ROLE_USER
+			)
+			AND (
+				:q = ''
+				OR LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(u.firstName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(u.lastName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(CONCAT(COALESCE(u.firstName, ''), ' ', COALESCE(u.lastName, ''))) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR COALESCE(u.phoneNumber, '') LIKE CONCAT('%', :q, '%')
+				OR LOWER(COALESCE(u.uuid, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+			)
+			""")
+	Page<User> findPetOwnerUsers(@Param("q") String q, Pageable pageable);
+
 	Integer countByIsActiveTrue();
 
 	/**

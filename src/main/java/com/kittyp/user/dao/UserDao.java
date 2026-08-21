@@ -19,5 +19,7 @@ public interface UserDao {
 	
 	Page<User> findAllUsers(Pageable pageable);
 
+	Page<User> findPetOwnerUsers(String q, Pageable pageable);
+
 	Integer countActiveUsers();
 }

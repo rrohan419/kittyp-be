@@ -37,7 +37,7 @@ public interface UserService {
 
 	boolean updatePassword(UpdatePasswordDto updatePasswordDto);
 
-	PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize);
+	PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize, String q);
 
 	UserDetailsModel updateUserStatus(String userUuid, boolean enabled);
 

@@ -45,6 +45,31 @@ class ClinicServiceImplListAllTest {
 	}
 
 	@Test
+	void listAllClinics_verifiedStatus_isVerified() {
+		Clinic clinic = Clinic.builder().uuid("c3").name("Gamma").status(ClinicStatus.VERIFIED).owner(null).build();
+		clinic.setId(3L);
+		when(clinicDao.findAllFetchOwner()).thenReturn(List.of(clinic));
+
+		List<ClinicModel> list = clinicService.listAllClinics();
+
+		assertEquals(1, list.size());
+		assertEquals("VERIFIED", list.get(0).status());
+	}
+
+	@Test
+	void updateStatusForAdmin_verified_returnsVerified() {
+		Clinic clinic = Clinic.builder().uuid("c1").name("Alpha").status(ClinicStatus.PENDING).owner(null).build();
+		clinic.setId(1L);
+		when(clinicDao.findByUuid("c1")).thenReturn(clinic);
+		when(clinicDao.saveClinic(clinic)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		ClinicModel model = clinicService.updateStatusForAdmin("c1", ClinicStatus.VERIFIED);
+
+		assertEquals("VERIFIED", model.status());
+		assertEquals(ClinicStatus.VERIFIED, clinic.getStatus());
+	}
+
+	@Test
 	void listAllClinics_ownerLookupFailure_stillReturnsClinic() {
 		User owner = User.builder().email("owner@example.com").password("x").uuid("u1").build();
 		owner.setId(9L);

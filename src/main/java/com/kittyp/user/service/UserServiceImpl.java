@@ -378,10 +378,11 @@ public class UserServiceImpl implements UserService {
 	}
 
 	@Override
-	public PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize) {
+	public PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize, String q) {
 		logger.info("Fetching users with pagination: page {}, size {}", pageNumber, pageSize);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
-		Page<User> userPage = userDao.findAllUsers(pageable);
+		String query = q == null ? "" : q.trim();
+		Page<User> userPage = userDao.findPetOwnerUsers(query, pageable);
 
 		List<UserDetailsModel> userModels = userPage.getContent().stream()
 				.map(user -> {

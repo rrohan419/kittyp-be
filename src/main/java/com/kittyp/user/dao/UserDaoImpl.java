@@ -86,6 +86,16 @@ public class UserDaoImpl implements UserDao {
 	}
 
 	@Override
+	public Page<User> findPetOwnerUsers(String q, Pageable pageable) {
+		try {
+			return userRepository.findPetOwnerUsers(q == null ? "" : q, pageable);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
 	public Integer countActiveUsers() {
 		try {
 			return userRepository.countByIsActiveTrue();
