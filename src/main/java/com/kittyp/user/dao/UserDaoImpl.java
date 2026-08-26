@@ -3,6 +3,8 @@
  */
 package com.kittyp.user.dao;
 
+import java.util.Optional;
+
 import org.springframework.core.env.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -73,6 +75,11 @@ public class UserDaoImpl implements UserDao {
 	public User userByPetUuid(String petUuid) {
 		return userRepository.findByPets_Uuid(petUuid)
 				.orElseThrow(() -> new ResourceNotFoundException("user", "petUuid", petUuid));
+	}
+
+	@Override
+	public Optional<User> findOptionalByPetUuid(String petUuid) {
+		return userRepository.findByPets_Uuid(petUuid);
 	}
 
 	@Override

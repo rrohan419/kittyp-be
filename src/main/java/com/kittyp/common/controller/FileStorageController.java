@@ -36,9 +36,10 @@ public class FileStorageController {
 	private static final long MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 	private static final long MAX_PDF_BYTES = 10 * 1024 * 1024;
 	private static final Set<String> ALLOWED_TYPES = Set.of(
-			"image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf");
+			"image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/x-png", "image/webp", "image/gif",
+			"application/pdf", "application/x-pdf", "application/octet-stream", "binary/octet-stream");
 	private static final Set<String> IMAGE_TYPES = Set.of(
-			"image/jpeg", "image/png", "image/webp", "image/gif");
+			"image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/x-png", "image/webp", "image/gif");
 
 	private final ApiResponse<?> responseBuilder;
 	private final S3StorageService s3StorageService;
@@ -111,13 +112,17 @@ public class FileStorageController {
 				throw new CustomException("Empty files are not allowed", HttpStatus.BAD_REQUEST);
 			}
 			String type = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
+			int semi = type.indexOf(';');
+			if (semi >= 0) {
+				type = type.substring(0, semi).trim();
+			}
 			long limit = IMAGE_TYPES.contains(type) ? MAX_IMAGE_BYTES : MAX_PDF_BYTES;
 			if (file.getSize() > limit) {
 				throw new CustomException(
 						IMAGE_TYPES.contains(type) ? "Image exceeds 5MB limit" : "File exceeds 10MB limit",
 						HttpStatus.BAD_REQUEST);
 			}
-			if (!ALLOWED_TYPES.contains(type)) {
+			if (!type.isBlank() && !ALLOWED_TYPES.contains(type)) {
 				throw new CustomException("Unsupported file type", HttpStatus.BAD_REQUEST);
 			}
 			String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();

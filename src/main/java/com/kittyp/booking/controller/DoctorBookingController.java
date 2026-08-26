@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.booking.dto.VideoJoinModel;
 import com.kittyp.booking.entity.Booking;
 import com.kittyp.booking.repository.BookingRepository;
+import com.kittyp.booking.service.BookingVideoService;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
@@ -43,6 +45,7 @@ public class DoctorBookingController {
     private final DoctorProfileDao doctorProfileDao;
     private final UserDao userDao;
     private final VisitService visitService;
+    private final BookingVideoService bookingVideoService;
     private final ApiResponse<?> responseBuilder;
 
     @GetMapping(ApiUrl.DOCTOR_BOOKINGS_MINE)
@@ -86,6 +89,13 @@ public class DoctorBookingController {
                 visitService.startTreatmentFromBooking(bookingUuid, email()),
                 ResponseMessage.SUCCESS,
                 HttpStatus.OK);
+    }
+
+    @GetMapping(ApiUrl.DOCTOR_BOOKING_VIDEO)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<VideoJoinModel>> video(@PathVariable String bookingUuid) {
+        return responseBuilder.buildSuccessResponse(bookingVideoService.join(email(), bookingUuid),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     private BookingModel toModel(Booking booking) {
@@ -144,7 +154,8 @@ public class DoctorBookingController {
                 doctorName,
                 doctorSpecialization,
                 doctorPhotoUrl,
-                booking.getPet() == null ? null : booking.getPet().getType());
+                booking.getPet() == null ? null : booking.getPet().getType(),
+                booking.getVideoJoinUrl());
     }
 
     private DoctorProfile currentDoctor() {

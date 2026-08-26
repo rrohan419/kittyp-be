@@ -21,6 +21,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 	Optional<User> findByUuid(String uuid);
 
+	Optional<User> findByUuidIgnoreCase(String uuid);
+
 	Optional<User> findByPets_Uuid(String petUuid);
 
 	/** Match local 10-digit phone stored in phone_number (with or without extra digits). */
@@ -89,5 +91,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
 			ORDER BY u.createdAt DESC
 			""")
 	List<User> searchActiveUsers(@Param("q") String q, Pageable pageable);
+
+	/** Appointment picker: email or account UUID only. */
+	@Query("""
+			SELECT DISTINCT u FROM User u
+			JOIN u.userRoles ur
+			JOIN ur.role r
+			WHERE (u.isActive IS NULL OR u.isActive = true)
+			AND u.enabled = true
+			AND r.name = com.kittyp.user.enums.ERole.ROLE_USER
+			AND (
+				LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(u.uuid) LIKE LOWER(CONCAT('%', :q, '%'))
+			)
+			ORDER BY u.createdAt DESC
+			""")
+	List<User> searchActiveUsersByEmailOrUuid(@Param("q") String q, Pageable pageable);
 
 }

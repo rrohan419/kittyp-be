@@ -70,15 +70,14 @@ public class VisitDaoImpl implements VisitDao {
     }
 
     @Override
-    public List<Visit> findForParentUser(Long userId, String userEmail, List<String> petUuids) {
+    public List<Visit> findForParentUser(Long userId, String userUuid, String userEmail, List<String> petUuids) {
         if (userId == null) {
             return List.of();
         }
         String email = userEmail == null || userEmail.isBlank() ? "__none__" : userEmail.trim();
-        if (petUuids == null || petUuids.isEmpty()) {
-            return visitRepository.findForParentByLinkedUserOrEmail(userId, email);
-        }
-        return visitRepository.findForParentUser(userId, email, petUuids);
+        String uuid = userUuid == null || userUuid.isBlank() ? "__none__" : userUuid.trim();
+        List<String> pets = (petUuids == null || petUuids.isEmpty()) ? List.of("__none__") : petUuids;
+        return visitRepository.findForParentUser(userId, uuid, email, pets);
     }
 
     @Override

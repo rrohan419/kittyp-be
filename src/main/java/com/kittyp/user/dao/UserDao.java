@@ -1,5 +1,7 @@
 package com.kittyp.user.dao;
 
+import java.util.Optional;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -16,6 +18,8 @@ public interface UserDao {
 	User userByUuid(String uuid);
 
 	User userByPetUuid(String petUuid);
+
+	Optional<User> findOptionalByPetUuid(String petUuid);
 	
 	Page<User> findAllUsers(Pageable pageable);
 

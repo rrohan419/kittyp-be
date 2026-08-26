@@ -127,8 +127,8 @@ public class AdminDoctorController {
     }
 
     /**
-     * Core checks always required. Clinic / gov-id / photos only when the doctor provided that data
-     * or is associated with a clinic.
+     * Doctor verification is credentials-only (OTP + documents). Clinic address, maps,
+     * and photos are verified on the clinic account, not the doctor.
      */
     private boolean allApplicableChecksPassed(DoctorProfile p) {
         if (!p.isCheckMobileOtp() || !p.isCheckEmailOtp()) {
@@ -140,28 +140,11 @@ public class AdminDoctorController {
         if (requiresGovernmentIdCheck(p) && !p.isCheckGovernmentId()) {
             return false;
         }
-        if (requiresClinicChecks(p)) {
-            if (!p.isCheckClinicAddress() || !p.isCheckGoogleMapsMatch()) {
-                return false;
-            }
-            if (requiresClinicPhotosCheck(p) && !p.isCheckClinicPhotos()) {
-                return false;
-            }
-        }
         return true;
-    }
-
-    private boolean requiresClinicChecks(DoctorProfile p) {
-        return p.getClinic() != null
-                || clinicDoctorRepository.existsByDoctor_IdAndIsActiveTrue(p.getId());
     }
 
     private boolean requiresGovernmentIdCheck(DoctorProfile p) {
         return hasText(p.getGovernmentIdUrl());
-    }
-
-    private boolean requiresClinicPhotosCheck(DoctorProfile p) {
-        return requiresClinicChecks(p) && hasText(p.getClinicPhotosUrls());
     }
 
     private boolean hasText(String value) {
@@ -192,8 +175,8 @@ public class AdminDoctorController {
                 hasClinic || clinicPriority,
                 clinicPriority,
                 requiresGovernmentIdCheck(p),
-                requiresClinicChecks(p),
-                requiresClinicPhotosCheck(p),
+                false,
+                false,
                 p.isEmailOtpVerified(),
                 p.isPhoneOtpVerified(),
                 p.isCheckMobileOtp(),

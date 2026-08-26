@@ -19,6 +19,7 @@ import com.kittyp.booking.repository.BookingRepository;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
+import com.kittyp.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,6 +37,7 @@ public class ParentBookingEnrollmentService {
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 	private final PetsRepository petsRepository;
 	private final BookingRepository bookingRepository;
+	private final UserRepository userRepository;
 
 	/** Personal practice when the booked clinic is owned by the booked doctor. */
 	public static boolean isPersonalPractice(Clinic clinic, DoctorProfile doctor) {
@@ -65,6 +67,12 @@ public class ParentBookingEnrollmentService {
 		User owner = null;
 		if (pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null) {
 			owner = pet.getClinicOwner().getLinkedUser();
+		}
+		if (owner == null) {
+			owner = userRepository.findByPets_Uuid(pet.getUuid()).orElse(null);
+		}
+		if (owner == null && pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
+			owner = userRepository.findByUuidIgnoreCase(pet.getParentUserUuid()).orElse(null);
 		}
 		if (doctorOrNull != null && isPersonalPractice(clinic, doctorOrNull)) {
 			if (owner != null) {

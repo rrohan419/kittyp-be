@@ -19,7 +19,9 @@ public class SignupDoctorRequestDto extends SignupRequestDto {
 
     private DoctorSpecialization specialization;
     private Double experience;
+    /** Ignored on doctor signup — clinics register separately. Kept for backward-compatible payloads. */
     private String clinicName;
+    /** Ignored on doctor signup — clinics register separately. */
     private String clinicAddress;
     private String professionalSummary;
 
@@ -30,6 +32,7 @@ public class SignupDoctorRequestDto extends SignupRequestDto {
     private String registrationCertificateUrl;
 
     private String governmentIdUrl;
+    /** Ignored on doctor signup — clinic photos belong to clinic verification. */
     private String clinicPhotosUrls;
     private String photoUrl;
 

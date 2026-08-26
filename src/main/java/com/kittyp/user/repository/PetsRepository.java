@@ -44,4 +44,23 @@ public interface PetsRepository extends JpaRepository<Pet, Long> {
 			)
 			""")
 	List<Pet> searchByClinic(@Param("clinicId") Long clinicId, @Param("q") String q);
+
+	/** Appointment picker: pet UUID, patient number, owner email, owner/user UUID — not name or phone. */
+	@Query("""
+			SELECT p FROM Pet p
+			LEFT JOIN p.clinicOwner o
+			WHERE p.clinic.id = :clinicId AND p.isActive = true
+			AND (
+				LOWER(p.uuid) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(p.patientNumber, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(p.parentUserUuid, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(o.uuid, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(o.email, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+			)
+			""")
+	List<Pet> searchByClinicEmailOrId(@Param("clinicId") Long clinicId, @Param("q") String q);
+
+	Optional<Pet> findByUuidIgnoreCase(String uuid);
+
+	List<Pet> findByParentUserUuid(String parentUserUuid);
 }

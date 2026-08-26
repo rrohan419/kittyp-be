@@ -21,6 +21,7 @@ import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Role;
 import com.kittyp.user.entity.User;
@@ -40,6 +41,9 @@ class ClinicServiceImplPersonalFlagTest {
 
 	@Mock
 	private ClinicDoctorRepository clinicDoctorRepository;
+
+	@Mock
+	private DoctorProfileDao doctorProfileDao;
 
 	@Mock
 	private UserDao userDao;

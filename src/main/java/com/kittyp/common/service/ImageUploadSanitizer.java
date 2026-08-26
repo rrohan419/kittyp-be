@@ -46,20 +46,17 @@ public class ImageUploadSanitizer {
 		if (data == null || data.length == 0) {
 			throw new CustomException(UNSAFE_FILE, HttpStatus.BAD_REQUEST);
 		}
-		String type = normalizeType(contentType);
 		String safeName = fileName == null || fileName.isBlank() ? "upload.bin" : fileName;
+		String type = detectType(data, contentType, safeName);
 
 		if ("application/pdf".equals(type)) {
-			if (!startsWith(data, PDF_MAGIC)) {
-				throw new CustomException(UNSAFE_FILE, HttpStatus.BAD_REQUEST);
+			if (!isPdf(data)) {
+				throw new CustomException("This is not a valid PDF", HttpStatus.BAD_REQUEST);
 			}
 			return new FileUploadRequest(withExtension(safeName, ".pdf"), data, "application/pdf");
 		}
 
 		if (!isAllowedImageType(type)) {
-			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST);
-		}
-		if (!magicMatches(data, type)) {
 			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST);
 		}
 		if (!hasValidImageMagic(data) && looksLikeMarkupOrScript(data)) {
@@ -91,28 +88,82 @@ public class ImageUploadSanitizer {
 		}
 	}
 
-	private static String normalizeType(String contentType) {
-		if (contentType == null) {
-			return "";
+	/**
+	 * Trust file bytes over the browser Content-Type. A JPEG named .png or a PDF sent as
+	 * octet-stream is common on Windows and must not be rejected as an "unsafe image".
+	 */
+	private static String detectType(byte[] data, String contentType, String fileName) {
+		if (isPdf(data)) {
+			return "application/pdf";
 		}
-		String type = contentType.toLowerCase(Locale.ROOT).trim();
+		if (startsWith(data, JPEG_MAGIC)) {
+			return "image/jpeg";
+		}
+		if (startsWith(data, PNG_MAGIC)) {
+			return "image/png";
+		}
+		if (startsWith(data, GIF87) || startsWith(data, GIF89)) {
+			return "image/gif";
+		}
+		if (startsWith(data, RIFF) && data.length >= 12 && regionEquals(data, 8, WEBP)) {
+			return "image/webp";
+		}
+		return normalizeType(contentType, fileName);
+	}
+
+	private static String normalizeType(String contentType, String fileName) {
+		String type = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT).trim();
 		int semi = type.indexOf(';');
-		return semi >= 0 ? type.substring(0, semi).trim() : type;
+		if (semi >= 0) {
+			type = type.substring(0, semi).trim();
+		}
+		return switch (type) {
+		case "image/jpg", "image/pjpeg" -> "image/jpeg";
+		case "image/x-png" -> "image/png";
+		case "application/x-pdf", "application/acrobat" -> "application/pdf";
+		case "", "application/octet-stream", "binary/octet-stream" -> typeFromFileName(fileName);
+		default -> type;
+		};
+	}
+
+	private static String typeFromFileName(String fileName) {
+		String lower = fileName.toLowerCase(Locale.ROOT);
+		if (lower.endsWith(".pdf")) {
+			return "application/pdf";
+		}
+		if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+			return "image/jpeg";
+		}
+		if (lower.endsWith(".png")) {
+			return "image/png";
+		}
+		if (lower.endsWith(".gif")) {
+			return "image/gif";
+		}
+		if (lower.endsWith(".webp")) {
+			return "image/webp";
+		}
+		return "";
+	}
+
+	private static boolean isPdf(byte[] data) {
+		int i = 0;
+		if (data.length >= 3 && (data[0] & 0xFF) == 0xEF && (data[1] & 0xFF) == 0xBB && (data[2] & 0xFF) == 0xBF) {
+			i = 3;
+		}
+		while (i < data.length && i < 1024) {
+			byte b = data[i];
+			if (b != ' ' && b != '\n' && b != '\r' && b != '\t') {
+				break;
+			}
+			i++;
+		}
+		return regionEquals(data, i, PDF_MAGIC);
 	}
 
 	private static boolean isAllowedImageType(String type) {
 		return "image/jpeg".equals(type) || "image/png".equals(type) || "image/webp".equals(type)
 				|| "image/gif".equals(type);
-	}
-
-	private static boolean magicMatches(byte[] data, String type) {
-		return switch (type) {
-		case "image/jpeg" -> startsWith(data, JPEG_MAGIC);
-		case "image/png" -> startsWith(data, PNG_MAGIC);
-		case "image/gif" -> startsWith(data, GIF87) || startsWith(data, GIF89);
-		case "image/webp" -> startsWith(data, RIFF) && data.length >= 12 && regionEquals(data, 8, WEBP);
-		default -> false;
-		};
 	}
 
 	private static boolean hasValidImageMagic(byte[] data) {

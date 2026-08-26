@@ -16,16 +16,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.kittyp.booking.entity.Booking;
-import com.kittyp.booking.repository.BookingRepository;
+import com.kittyp.booking.dto.VideoJoinModel;
+import com.kittyp.booking.service.BookingVideoService;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
-import com.kittyp.user.dao.UserDao;
-import com.kittyp.user.entity.User;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.service.VisitService;
 
@@ -37,20 +35,16 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ParentBookingController {
 
-    private final BookingRepository bookingRepository;
     private final VisitService visitService;
-    private final UserDao userDao;
+    private final BookingVideoService bookingVideoService;
     private final ApiResponse<?> responseBuilder;
 
     @GetMapping(ApiUrl.USER_BOOKINGS_MINE)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<List<BookingModel>>> mine() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userDao.userByEmail(email);
-        List<BookingModel> models = bookingRepository.findByOwner_IdOrderBySlotStartDesc(user.getId()).stream()
-                .map(this::toModel)
-                .toList();
-        return responseBuilder.buildSuccessResponse(models, ResponseMessage.SUCCESS, HttpStatus.OK);
+        return responseBuilder.buildSuccessResponse(visitService.listMyParentBookings(email), ResponseMessage.SUCCESS,
+                HttpStatus.OK);
     }
 
     @PostMapping(ApiUrl.USER_BOOKINGS)
@@ -59,6 +53,14 @@ public class ParentBookingController {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         BookingModel model = visitService.createParentBooking(request, email);
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.CREATED);
+    }
+
+    @GetMapping(ApiUrl.USER_BOOKING_VIDEO)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<VideoJoinModel>> video(@PathVariable String bookingUuid) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(bookingVideoService.join(email, bookingUuid),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.USER_DOCTOR_SLOTS)
@@ -72,50 +74,5 @@ public class ParentBookingController {
                 .map(Object::toString)
                 .toList();
         return responseBuilder.buildSuccessResponse(slots, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
-
-    private BookingModel toModel(Booking booking) {
-        String ownerName = booking.getOwner() == null ? null
-                : ((booking.getOwner().getFirstName() == null ? "" : booking.getOwner().getFirstName()) + " "
-                        + (booking.getOwner().getLastName() == null ? "" : booking.getOwner().getLastName())).trim();
-        String petName = booking.getPet() == null ? "Pet" : booking.getPet().getName();
-        String petUuid = booking.getPet() == null ? null : booking.getPet().getUuid();
-        String doctorName = null;
-        String doctorSpecialization = null;
-        String doctorPhotoUrl = null;
-        if (booking.getDoctor() != null) {
-            doctorPhotoUrl = booking.getDoctor().getPhotoUrl();
-            if (booking.getDoctor().getSpecialization() != null) {
-                doctorSpecialization = booking.getDoctor().getSpecialization().name();
-            }
-            if (booking.getDoctor().getUser() != null) {
-                doctorName = ((booking.getDoctor().getUser().getFirstName() == null ? ""
-                        : booking.getDoctor().getUser().getFirstName())
-                        + " "
-                        + (booking.getDoctor().getUser().getLastName() == null ? ""
-                                : booking.getDoctor().getUser().getLastName())).trim();
-                if (doctorName.isBlank()) {
-                    doctorName = null;
-                }
-            }
-        }
-        return new BookingModel(
-                booking.getUuid(),
-                petUuid,
-                petName,
-                ownerName,
-                booking.getDoctor() == null ? null : booking.getDoctor().getUuid(),
-                booking.getSlotStart(),
-                booking.getSlotEnd(),
-                booking.getTimezone(),
-                booking.getStatus(),
-                booking.getMode() == null ? null : booking.getMode().name(),
-                booking.getNotes(),
-                booking.getClinic() == null ? null : booking.getClinic().getUuid(),
-                booking.getClinic() == null ? null : booking.getClinic().getName(),
-                doctorName,
-                doctorSpecialization,
-                doctorPhotoUrl,
-                booking.getPet() == null ? null : booking.getPet().getType());
     }
 }

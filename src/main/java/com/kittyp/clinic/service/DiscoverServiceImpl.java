@@ -43,6 +43,9 @@ public class DiscoverServiceImpl implements DiscoverService {
         List<DiscoverClinicCard> cards = new ArrayList<>();
         for (Clinic clinic : clinicRepository.findDiscoverable()) {
             List<ClinicDoctor> affiliations = clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
+            if (findPersonalAffiliation(clinic, affiliations) != null) {
+                continue;
+            }
             Double distance = distanceKm(clinic, lat, lng, hasGps);
             List<DiscoverDoctorCard> doctorCards = affiliations.stream()
                     .filter(aff -> {

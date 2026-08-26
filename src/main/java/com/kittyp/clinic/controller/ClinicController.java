@@ -74,7 +74,7 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_BASE_URL)
-    @PreAuthorize(CLINIC_ACCESS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN_OR_STAFF)
     public ResponseEntity<SuccessResponse<ClinicModel>> create(@RequestBody @Valid ClinicRequest request) {
         return success(clinicService.create(request, email()));
     }
@@ -200,15 +200,15 @@ public class ClinicController {
     @GetMapping(ApiUrl.CLINIC_OWNERS)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<List<ClinicOwnerModel>>> owners(@PathVariable String uuid,
-            @RequestParam(required = false) String q) {
-        return success(clinicService.listOwners(uuid, q, email()));
+            @RequestParam(required = false) String q, @RequestParam(required = false) String by) {
+        return success(clinicService.listOwners(uuid, q, email(), emailOrIdOnly(by)));
     }
 
     @GetMapping(ApiUrl.CLINIC_USERS_SEARCH)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<List<PlatformUserSearchModel>>> searchUsers(@PathVariable String uuid,
-            @RequestParam(required = false) String q) {
-        return success(clinicService.searchPlatformUsers(uuid, q, email()));
+            @RequestParam(required = false) String q, @RequestParam(required = false) String by) {
+        return success(clinicService.searchPlatformUsers(uuid, q, email(), emailOrIdOnly(by)));
     }
 
     @PostMapping(ApiUrl.CLINIC_OWNER_FROM_USER)
@@ -245,8 +245,8 @@ public class ClinicController {
     @GetMapping(ApiUrl.CLINIC_PETS)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<List<ClinicPetListModel>>> pets(@PathVariable String uuid,
-            @RequestParam(required = false) String q) {
-        return success(clinicService.listPets(uuid, q, email()));
+            @RequestParam(required = false) String q, @RequestParam(required = false) String by) {
+        return success(clinicService.listPets(uuid, q, email(), emailOrIdOnly(by)));
     }
 
     @GetMapping(ApiUrl.CLINIC_PET_DETAIL)
@@ -353,6 +353,10 @@ public class ClinicController {
 
     private String email() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
+    }
+
+    private static boolean emailOrIdOnly(String by) {
+        return "emailOrId".equalsIgnoreCase(by);
     }
 
     private <T> ResponseEntity<SuccessResponse<T>> success(T data) {

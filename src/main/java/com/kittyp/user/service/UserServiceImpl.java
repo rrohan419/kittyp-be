@@ -24,7 +24,6 @@ import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.model.PaginationModel;
-import com.kittyp.common.util.Mapper;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.notification.FcmPushNotificationService;
@@ -39,6 +38,7 @@ import com.kittyp.user.dto.UserDetailDto;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserFcmToken;
 import com.kittyp.user.entity.UserRole;
+import com.kittyp.user.entity.Pet;
 import com.kittyp.user.enums.ERole;
 import com.kittyp.user.models.FcmTokenModel;
 import com.kittyp.user.models.PetModel;
@@ -59,7 +59,6 @@ public class UserServiceImpl implements UserService {
 	private static final Logger logger = LoggerFactory.getLogger(UserServiceImpl.class);
 
 	private final UserDao userDao;
-	private final Mapper mapper;
 	private final RoleDao roleDao;
 	private final VerificationCodeService verificationCodeService;
 	private final PasswordEncoder encoder;
@@ -192,28 +191,43 @@ public class UserServiceImpl implements UserService {
 	}
 
 	private UserDetailsModel toUserDetailsModel(User user) {
-		UserDetailsModel userDetailsModel = mapper.convert(user, UserDetailsModel.class);
-		userDetailsModel.setRoles(user.getUserRoles().stream()
-				.map(UserRole::getRole)
-				.map(role -> role.getName().name())
-				.collect(Collectors.toSet()));
-
+		String phoneCountryCode = user.getPhoneCountryCode();
 		if (user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank()
-				&& (userDetailsModel.getPhoneCountryCode() == null || userDetailsModel.getPhoneCountryCode().isBlank())) {
-			userDetailsModel.setPhoneCountryCode("+91");
+				&& (phoneCountryCode == null || phoneCountryCode.isBlank())) {
+			phoneCountryCode = "+91";
 		}
 
-		// Parent visibility is membership via user_uuid only. Clinic soft-hide uses pet.isActive
-		// and must not remove linked pets from the parent's My Pets view.
-		if (user.getPets() != null && !user.getPets().isEmpty()) {
-			Set<PetModel> petModels = user.getPets().stream()
-					.map(pet -> mapper.convert(pet, PetModel.class))
-					.collect(Collectors.toSet());
-			userDetailsModel.setOwnerPets(petModels);
-		} else {
-			userDetailsModel.setOwnerPets(new HashSet<>());
+		Set<String> roles = user.getUserRoles() == null ? new HashSet<>()
+				: user.getUserRoles().stream()
+						.map(UserRole::getRole)
+						.filter(role -> role != null && role.getName() != null)
+						.map(role -> role.getName().name())
+						.collect(Collectors.toSet());
+
+		Set<PetModel> petModels = new HashSet<>();
+		if (user.getPets() != null) {
+			for (var pet : user.getPets()) {
+				if (pet == null) {
+					continue;
+				}
+				petModels.add(toPetModel(pet));
+			}
 		}
-		return userDetailsModel;
+
+		return UserDetailsModel.builder()
+				.firstName(user.getFirstName())
+				.lastName(user.getLastName())
+				.email(user.getEmail())
+				.roles(roles)
+				.uuid(user.getUuid())
+				.createdAt(user.getCreatedAt())
+				.phoneNumber(user.getPhoneNumber())
+				.phoneCountryCode(phoneCountryCode)
+				.age(user.getAge())
+				.enabled(user.isEnabled())
+				.profilePictureUrl(user.getProfilePictureUrl())
+				.ownerPets(petModels)
+				.build();
 	}
 
 	@Override
@@ -385,18 +399,30 @@ public class UserServiceImpl implements UserService {
 		Page<User> userPage = userDao.findPetOwnerUsers(query, pageable);
 
 		List<UserDetailsModel> userModels = userPage.getContent().stream()
-				.map(user -> {
-					UserDetailsModel model = mapper.convert(user, UserDetailsModel.class);
-					model.setRoles(user.getUserRoles().stream()
-							.map(UserRole::getRole)
-							.map(role -> role.getName().name())
-							.collect(Collectors.toSet()));
-					return model;
-				})
+				.map(this::toUserDetailsModel)
 				.collect(Collectors.toList());
 
 		logger.info("Total users fetched: {}", userModels.size());
 		return userPageToModel(new PageImpl<>(userModels, pageable, userPage.getTotalElements()));
+	}
+
+	private static PetModel toPetModel(Pet pet) {
+		PetModel model = new PetModel();
+		model.setUuid(pet.getUuid());
+		model.setName(pet.getName());
+		model.setProfilePicture(pet.getProfilePicture());
+		model.setType(pet.getType());
+		model.setBreed(pet.getBreed());
+		model.setDateOfBirth(pet.getDateOfBirth());
+		model.setWeight(pet.getWeight());
+		model.setActivityLevel(pet.getActivityLevel());
+		model.setGender(pet.getGender());
+		model.setNeutered(pet.isNeutered());
+		model.setCurrentFoodBrand(pet.getCurrentFoodBrand());
+		model.setHealthConditions(pet.getHealthConditions());
+		model.setAllergies(pet.getAllergies());
+		model.setMicrochipNumber(pet.getMicrochipNumber());
+		return model;
 	}
 
 	private PaginationModel<UserDetailsModel> userPageToModel(Page<UserDetailsModel> userPage) {
@@ -424,14 +450,8 @@ public class UserServiceImpl implements UserService {
 		user.setIsActive(enabled);
 		user = userDao.saveUser(user);
 
-		UserDetailsModel userDetailsModel = mapper.convert(user, UserDetailsModel.class);
-		userDetailsModel.setRoles(user.getUserRoles().stream()
-				.map(UserRole::getRole)
-				.map(role -> role.getName().name())
-				.collect(Collectors.toSet()));
-
 		logger.info("User status updated for UUID: {} to enabled: {}", userUuid, enabled);
-		return userDetailsModel;
+		return toUserDetailsModel(user);
 	}
 
 	@Override
@@ -445,14 +465,8 @@ public class UserServiceImpl implements UserService {
 		user.setProfilePictureUrl(profilePictureUrl);
 		user = userDao.saveUser(user);
 
-		UserDetailsModel userDetailsModel = mapper.convert(user, UserDetailsModel.class);
-		userDetailsModel.setRoles(user.getUserRoles().stream()
-				.map(UserRole::getRole)
-				.map(role -> role.getName().name())
-				.collect(Collectors.toSet()));
-
 		logger.info("User profile updated for UUID: {}", userUuid);
-		return userDetailsModel;
+		return toUserDetailsModel(user);
 	}
 
 	@Override

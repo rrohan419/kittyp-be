@@ -7,6 +7,7 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,6 +27,48 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             LocalDateTime to);
 
     List<Booking> findByOwner_IdOrderBySlotStartDesc(Long ownerId);
+
+    @EntityGraph(attributePaths = { "pet", "pet.clinicOwner", "pet.clinicOwner.linkedUser", "doctor", "doctor.user",
+            "clinic", "owner" })
+    @Query("""
+            SELECT DISTINCT b FROM Booking b
+            LEFT JOIN b.pet p
+            LEFT JOIN p.clinicOwner co
+            WHERE b.isActive = true
+              AND (
+                  (b.owner IS NOT NULL AND b.owner.id = :userId)
+                  OR (p IS NOT NULL AND p.uuid IN :petUuids)
+                  OR (p.parentUserUuid IS NOT NULL AND LOWER(p.parentUserUuid) = LOWER(:userUuid))
+                  OR (co.linkedUser IS NOT NULL AND co.linkedUser.id = :userId)
+                  OR (co.email IS NOT NULL AND LOWER(co.email) = LOWER(:userEmail))
+              )
+            ORDER BY b.slotStart DESC
+            """)
+    List<Booking> findForParentUser(
+            @Param("userId") Long userId,
+            @Param("userUuid") String userUuid,
+            @Param("userEmail") String userEmail,
+            @Param("petUuids") List<String> petUuids);
+
+    @EntityGraph(attributePaths = { "pet", "pet.clinicOwner", "pet.clinicOwner.linkedUser", "doctor", "doctor.user",
+            "clinic", "owner" })
+    @Query("""
+            SELECT DISTINCT b FROM Booking b
+            LEFT JOIN b.pet p
+            LEFT JOIN p.clinicOwner co
+            WHERE b.isActive = true
+              AND (
+                  (b.owner IS NOT NULL AND b.owner.id = :userId)
+                  OR (p.parentUserUuid IS NOT NULL AND LOWER(p.parentUserUuid) = LOWER(:userUuid))
+                  OR (co.linkedUser IS NOT NULL AND co.linkedUser.id = :userId)
+                  OR (co.email IS NOT NULL AND LOWER(co.email) = LOWER(:userEmail))
+              )
+            ORDER BY b.slotStart DESC
+            """)
+    List<Booking> findForParentUserWithoutPets(
+            @Param("userId") Long userId,
+            @Param("userUuid") String userUuid,
+            @Param("userEmail") String userEmail);
 
     Optional<Booking> findByUuid(String uuid);
 

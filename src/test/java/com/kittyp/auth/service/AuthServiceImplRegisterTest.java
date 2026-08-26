@@ -4,12 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -71,6 +74,8 @@ class AuthServiceImplRegisterTest {
 
 		when(encoder.encode(any())).thenReturn("encoded");
 		when(userDao.saveUser(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(clinicDao.saveClinic(any(Clinic.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(clinicDao.findAllByOwnerUserId(any())).thenReturn(List.of());
 
 		authService = new AuthServiceImpl(
 				userDao,
@@ -227,7 +232,8 @@ class AuthServiceImplRegisterTest {
 		authService.register(req);
 
 		verify(roleDao).roleByName(ERole.ROLE_DOCTOR);
-		verify(doctorProfileDao).save(any());
+		verify(doctorProfileDao, atLeastOnce()).save(any());
+		verify(clinicDao).saveClinic(argThat(clinic -> clinic.getStatus() == ClinicStatus.VERIFIED));
 	}
 
 	@Test
@@ -240,23 +246,24 @@ class AuthServiceImplRegisterTest {
 		verify(roleDao).roleByName(ERole.ROLE_DOCTOR);
 		verify(roleDao, never()).roleByName(ERole.ROLE_USER);
 		verify(roleDao, never()).roleByName(ERole.ROLE_ADMIN);
-		verify(doctorProfileDao).save(any());
-		verify(clinicDao, never()).saveClinic(any());
+		verify(doctorProfileDao, atLeastOnce()).save(any());
+		verify(clinicDao).saveClinic(argThat(clinic -> clinic.getStatus() == ClinicStatus.VERIFIED
+				&& clinic.getName() != null && clinic.getName().startsWith("Dr. ")));
+		verify(clinicDoctorRepository).save(any());
 		assertEquals(0, clinicOwnerUserLinkService.calls);
 	}
 
 	@Test
-	void register_doctor_withClinicName_createsPendingClinic() {
+	void register_doctor_withClinicName_doesNotCreateClinic() {
 		PublicSignupRequestDto req = doctorRequest();
 		req.setClinicName("Happy Paws");
 		req.setClinicAddress("1 Main St");
 		stubDoctorReady(req);
-		when(clinicDao.saveClinic(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
 		authService.register(req);
 
-		verify(clinicDao).saveClinic(argThat(clinic -> clinic.getStatus() == ClinicStatus.PENDING
-				&& "Happy Paws".equals(clinic.getName())));
+		verify(clinicDao).saveClinic(argThat(clinic -> !"Happy Paws".equals(clinic.getName())
+				&& clinic.getStatus() == ClinicStatus.VERIFIED));
 		verify(clinicDoctorRepository).save(any());
 	}
 
@@ -297,7 +304,7 @@ class AuthServiceImplRegisterTest {
 	}
 
 	@Test
-	void register_doctor_validInvite_joinsClinicWithoutCreatingOne() {
+	void register_doctor_validInvite_joinsClinicAndCreatesPersonalPractice() {
 		PublicSignupRequestDto req = doctorRequest();
 		req.setInviteToken("tok");
 		req.setClinicName("ShouldNotCreate");
@@ -309,8 +316,8 @@ class AuthServiceImplRegisterTest {
 
 		authService.register(req);
 
-		verify(clinicDao, never()).saveClinic(any());
-		verify(clinicDoctorRepository).save(any());
+		verify(clinicDao).saveClinic(argThat(clinic -> clinic.getStatus() == ClinicStatus.VERIFIED));
+		verify(clinicDoctorRepository, atLeast(2)).save(any());
 		assertEquals(ClinicDoctorInviteStatus.ACCEPTED, invite.getStatus());
 		verify(clinicDoctorInviteRepository).save(invite);
 	}

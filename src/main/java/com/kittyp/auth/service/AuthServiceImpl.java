@@ -145,6 +145,8 @@ public class AuthServiceImpl implements AuthService {
 		user.setPhoneCountryCode("+91");
 		user = userDao.saveUser(user);
 
+		// Doctor signup is a personal account for online consultation. Clinic name/address/photos
+		// on the payload are ignored — clinics register and verify on their own path.
 		ClinicDoctorInvite invite = null;
 		if (req.getInviteToken() != null && !req.getInviteToken().isBlank()) {
 			invite = clinicDoctorInviteRepository.findByToken(req.getInviteToken().trim())
@@ -158,18 +160,7 @@ public class AuthServiceImpl implements AuthService {
 			}
 		}
 
-		Clinic clinic = null;
-		if (invite == null && req.getClinicName() != null && !req.getClinicName().isBlank()) {
-			clinic = clinicDao.saveClinic(Clinic.builder()
-					.name(req.getClinicName())
-					.licenseNumber(req.getRegistrationNumber())
-					.address(req.getClinicAddress())
-					.email(user.getEmail())
-					.phone(req.getPhoneNumber())
-					.owner(user)
-					.status(ClinicStatus.PENDING)
-					.build());
-		}
+		Clinic clinic = invite != null ? invite.getClinic() : null;
 
 		String license = req.getLicenseNumber() != null && !req.getLicenseNumber().isBlank()
 				? req.getLicenseNumber()
@@ -187,9 +178,8 @@ public class AuthServiceImpl implements AuthService {
 				.degreeCertificateUrl(req.getDegreeCertificateUrl())
 				.registrationCertificateUrl(req.getRegistrationCertificateUrl())
 				.governmentIdUrl(req.getGovernmentIdUrl())
-				.clinicPhotosUrls(req.getClinicPhotosUrls())
 				.licenseDocumentUrl(req.getRegistrationCertificateUrl())
-				.clinic(invite != null ? invite.getClinic() : clinic)
+				.clinic(clinic)
 				.currency("INR")
 				.emailOtpVerified(true)
 				.phoneOtpVerified(true)
@@ -199,14 +189,10 @@ public class AuthServiceImpl implements AuthService {
 				.submittedAt(LocalDateTime.now())
 				.build());
 
-		if (clinic != null) {
-			clinicDoctorRepository.save(ClinicDoctor.builder()
-					.clinic(clinic)
-					.doctor(profile)
-					.role("owner")
-					.isActive(true)
-					.joinedAt(java.time.LocalDate.now())
-					.build());
+		Clinic personal = provisionPersonalPractice(user, profile);
+		if (profile.getClinic() == null && personal != null) {
+			profile.setClinic(personal);
+			profile = doctorProfileDao.save(profile);
 		}
 
 		if (invite != null) {
@@ -326,6 +312,36 @@ public class AuthServiceImpl implements AuthService {
 		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
 		zeptoMailService.sendWelcomeEmail(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
+	}
+
+	private Clinic provisionPersonalPractice(User user, DoctorProfile profile) {
+		if (user.getId() != null) {
+			for (Clinic owned : clinicDao.findAllByOwnerUserId(user.getId())) {
+				if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(owned.getId(),
+						user.getId())) {
+					return owned;
+				}
+			}
+		}
+		String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
+		String last = user.getLastName() == null ? "" : user.getLastName().trim();
+		String full = (first + " " + last).trim();
+		String name = full.isEmpty() ? "Personal practice" : "Dr. " + full;
+		Clinic personal = clinicDao.saveClinic(Clinic.builder()
+				.name(name)
+				.email(user.getEmail())
+				.phone(profile.getPhoneNumber() != null ? profile.getPhoneNumber() : user.getPhoneNumber())
+				.owner(user)
+				.status(ClinicStatus.VERIFIED)
+				.build());
+		clinicDoctorRepository.save(ClinicDoctor.builder()
+				.clinic(personal)
+				.doctor(profile)
+				.role("owner")
+				.isActive(true)
+				.joinedAt(java.time.LocalDate.now())
+				.build());
+		return personal;
 	}
 
 	private User createUserWithRole(SignupRequestDto signupRequestDto, ERole roleName) {

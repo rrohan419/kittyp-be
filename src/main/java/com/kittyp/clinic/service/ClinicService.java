@@ -80,10 +80,11 @@ public interface ClinicService {
 
     PatientDetailModel addPatient(String clinicUuid, AddPatientRequest request, String email);
 
-    List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email);
+    List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly);
 
     /** Search all active KittyP users (live DB) for existing-customer pickers. */
-    List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email);
+    List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email,
+            boolean emailOrIdOnly);
 
     /** Ensure a clinic client row exists for the given platform user and return it. */
     ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email);
@@ -94,7 +95,7 @@ public interface ClinicService {
 
     ClinicPetListModel addPetToOwner(String clinicUuid, String ownerUuid, AddOwnerPetRequest request, String email);
 
-    List<ClinicPetListModel> listPets(String clinicUuid, String q, String email);
+    List<ClinicPetListModel> listPets(String clinicUuid, String q, String email, boolean emailOrIdOnly);
 
     ClinicPetMedicalProfileModel petMedicalProfile(String clinicUuid, String petUuid, String email);
 

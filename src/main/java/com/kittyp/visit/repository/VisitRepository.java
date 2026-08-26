@@ -75,11 +75,15 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
     @Query("""
             SELECT DISTINCT v FROM Visit v
+            LEFT JOIN v.pet p
+            LEFT JOIN v.clinicOwner co
+            LEFT JOIN co.linkedUser lu
             WHERE v.isActive = true
               AND (
-                  v.pet.uuid IN :petUuids
-                  OR (v.clinicOwner.linkedUser IS NOT NULL AND v.clinicOwner.linkedUser.id = :userId)
-                  OR (v.clinicOwner.email IS NOT NULL AND LOWER(v.clinicOwner.email) = LOWER(:userEmail))
+                  p.uuid IN :petUuids
+                  OR (p.parentUserUuid IS NOT NULL AND LOWER(p.parentUserUuid) = LOWER(:userUuid))
+                  OR (lu IS NOT NULL AND lu.id = :userId)
+                  OR (co.email IS NOT NULL AND LOWER(co.email) = LOWER(:userEmail))
               )
               AND v.status IN (
                   com.kittyp.visit.enums.VisitStatus.WAITLIST,
@@ -94,6 +98,7 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
             """)
     List<Visit> findForParentUser(
             @Param("userId") Long userId,
+            @Param("userUuid") String userUuid,
             @Param("userEmail") String userEmail,
             @Param("petUuids") List<String> petUuids);
 

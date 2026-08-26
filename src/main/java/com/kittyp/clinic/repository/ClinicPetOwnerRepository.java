@@ -50,4 +50,15 @@ public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, 
 			)
 			""")
 	List<ClinicPetOwner> searchByClinic(@Param("clinicId") Long clinicId, @Param("q") String q);
+
+	/** Appointment picker: owner email or generated UUID — not name or phone. */
+	@Query("""
+			SELECT o FROM ClinicPetOwner o
+			WHERE o.clinic.id = :clinicId AND o.isActive = true
+			AND (
+				LOWER(o.email) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(o.uuid) LIKE LOWER(CONCAT('%', :q, '%'))
+			)
+			""")
+	List<ClinicPetOwner> searchByClinicEmailOrId(@Param("clinicId") Long clinicId, @Param("q") String q);
 }

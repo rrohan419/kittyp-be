@@ -102,13 +102,37 @@ class ImageUploadSanitizerTest {
 	}
 
 	@Test
-	void webpMagicMismatchIsRejected() throws Exception {
-		byte[] jpeg = writeImage("jpeg", 4, 4);
+	void jpegLabeledAsPngIsAcceptedAsJpeg() throws Exception {
+		byte[] jpeg = writeImage("jpeg", 6, 6);
 
-		CustomException ex = assertThrows(CustomException.class,
-				() -> sanitizer.sanitize("pet.webp", jpeg, "image/webp"));
+		FileUploadRequest out = sanitizer.sanitize("scan.png", jpeg, "image/png");
 
-		assertEquals(ImageUploadSanitizer.UNSAFE_IMAGE, ex.getMessage());
+		assertEquals("image/jpeg", out.getContentType());
+		assertTrue(out.getFileName().endsWith(".jpg"));
+	}
+
+	@Test
+	void pdfIsAcceptedEvenWhenBrowserSendsOctetStream() {
+		byte[] pdf = "%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF\n".getBytes(StandardCharsets.US_ASCII);
+
+		FileUploadRequest out = sanitizer.sanitize("degree.pdf", pdf, "application/octet-stream");
+
+		assertEquals("application/pdf", out.getContentType());
+		assertTrue(out.getFileName().endsWith(".pdf"));
+	}
+
+	@Test
+	void pdfWithUtf8BomIsAccepted() {
+		byte[] body = "%PDF-1.7\n%%EOF\n".getBytes(StandardCharsets.US_ASCII);
+		byte[] pdf = new byte[3 + body.length];
+		pdf[0] = (byte) 0xEF;
+		pdf[1] = (byte) 0xBB;
+		pdf[2] = (byte) 0xBF;
+		System.arraycopy(body, 0, pdf, 3, body.length);
+
+		FileUploadRequest out = sanitizer.sanitize("reg.pdf", pdf, "application/pdf");
+
+		assertEquals("application/pdf", out.getContentType());
 	}
 
 	private static byte[] writeImage(String format, int width, int height) throws IOException {

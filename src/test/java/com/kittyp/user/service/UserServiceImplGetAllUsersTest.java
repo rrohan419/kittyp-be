@@ -18,7 +18,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import com.kittyp.common.model.PaginationModel;
-import com.kittyp.common.util.Mapper;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Role;
 import com.kittyp.user.entity.User;
@@ -31,9 +30,6 @@ class UserServiceImplGetAllUsersTest {
 
 	@Mock
 	private UserDao userDao;
-
-	@Mock
-	private Mapper mapper;
 
 	@InjectMocks
 	private UserServiceImpl userService;
@@ -48,8 +44,6 @@ class UserServiceImplGetAllUsersTest {
 
 		when(userDao.findPetOwnerUsers(eq(""), any(Pageable.class)))
 				.thenReturn(new PageImpl<>(List.of(owner)));
-		when(mapper.convert(eq(owner), eq(UserDetailsModel.class))).thenReturn(UserDetailsModel.builder()
-				.email("owner@example.com").firstName("Pat").lastName("Owner").uuid("u1").build());
 
 		PaginationModel<UserDetailsModel> page = userService.getAllUsers(1, 10, null);
 

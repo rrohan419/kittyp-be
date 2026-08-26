@@ -57,9 +57,7 @@ public class DoctorProfileController {
         Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
         boolean hasClinic = profile.getClinic() != null;
         boolean clinicPriority = hasClinic || clinicLinkedIds.contains(profile.getId());
-        boolean requiresClinic = hasClinic || clinicPriority;
         boolean requiresGovId = hasText(profile.getGovernmentIdUrl());
-        boolean requiresPhotos = requiresClinic && hasText(profile.getClinicPhotosUrls());
         String clinicAddress = hasClinic ? profile.getClinic().getAddress() : null;
         String clinicName = hasClinic ? profile.getClinic().getName() : null;
         String specialization = profile.getSpecialization() != null ? profile.getSpecialization().name() : null;
@@ -79,11 +77,11 @@ public class DoctorProfileController {
                 profile.getClinicPhotosUrls(),
                 clinicAddress,
                 clinicName,
-                requiresClinic,
+                hasClinic || clinicPriority,
                 clinicPriority,
                 requiresGovId,
-                requiresClinic,
-                requiresPhotos,
+                false,
+                false,
                 profile.isEmailOtpVerified(),
                 profile.isPhoneOtpVerified(),
                 profile.isCheckMobileOtp(),

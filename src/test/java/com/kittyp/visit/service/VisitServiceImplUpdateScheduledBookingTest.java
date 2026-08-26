@@ -28,6 +28,7 @@ import com.kittyp.booking.enums.BookingMode;
 import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.booking.repository.BookingRepository;
 import com.kittyp.booking.repository.DoctorAvailabilityRepository;
+import com.kittyp.booking.service.JitsiMeetService;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.entity.Clinic;
@@ -65,6 +66,8 @@ class VisitServiceImplUpdateScheduledBookingTest {
 	private BookingRepository bookingRepository;
 	@Mock
 	private DoctorAvailabilityRepository doctorAvailabilityRepository;
+	@Mock
+	private JitsiMeetService jitsiMeetService;
 
 	@InjectMocks
 	private VisitServiceImpl visitService;
