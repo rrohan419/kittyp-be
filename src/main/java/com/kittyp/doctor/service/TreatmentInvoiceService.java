@@ -32,6 +32,7 @@ import com.kittyp.common.service.S3StorageService;
 import com.kittyp.common.util.AlphanumericIdService;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
 import com.kittyp.doctor.dto.CreateInvoiceResultDto;
+import com.kittyp.doctor.dto.OwnerInvoiceModel;
 import com.kittyp.doctor.dto.TreatmentInvoiceData;
 import com.kittyp.doctor.dto.TreatmentLineItemDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
@@ -50,6 +51,7 @@ import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
+import com.kittyp.user.service.PetAccessGuard;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.entity.Visit;
 import com.kittyp.visit.enums.VisitStatus;
@@ -71,6 +73,7 @@ public class TreatmentInvoiceService {
     private final DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
     private final PetsRepository petsRepository;
     private final UserRepository userRepository;
+    private final PetAccessGuard petAccessGuard;
     private final DoctorProfileRepository doctorProfileRepository;
     private final VisitDao visitDao;
     private final ObjectMapper objectMapper;
@@ -358,6 +361,84 @@ public class TreatmentInvoiceService {
 
     public List<ConsultationInvoice> listForClinic(Clinic clinic) {
         return invoiceRepository.findAllByClinic_IdOrderByCreatedAtDesc(clinic.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<OwnerInvoiceModel> listForPetOwner(String petUuid, String email) {
+        User user = requireUser(email);
+        petAccessGuard.requireOwner(user, petUuid);
+        LinkedHashMap<String, ConsultationInvoice> merged = new LinkedHashMap<>();
+        invoiceRepository.findAllByPetUuidOrderByCreatedAtDesc(petUuid)
+                .forEach(inv -> merged.put(inv.getUuid(), inv));
+        invoiceRepository.findAllByOwner_IdOrderByCreatedAtDesc(user.getId()).stream()
+                .filter(inv -> invoiceBelongsToPet(inv, petUuid))
+                .forEach(inv -> merged.putIfAbsent(inv.getUuid(), inv));
+        return merged.values().stream().map(this::toOwnerModel).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public String pdfUrlForPetOwner(String petUuid, String invoiceUuid, String email) {
+        User user = requireUser(email);
+        petAccessGuard.requireOwner(user, petUuid);
+        ConsultationInvoice invoice = invoiceRepository.findByUuid(invoiceUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("Consultation invoice", "uuid", invoiceUuid));
+        if (!invoiceBelongsToPet(invoice, petUuid)) {
+            throw new ResourceNotFoundException("Consultation invoice", "uuid", invoiceUuid);
+        }
+        return getPresignedPdfUrl(invoice);
+    }
+
+    private User requireUser(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
+    }
+
+    private boolean invoiceBelongsToPet(ConsultationInvoice invoice, String petUuid) {
+        if (invoice == null || petUuid == null || petUuid.isBlank()) {
+            return false;
+        }
+        if (petUuid.equals(invoice.getPetUuid())) {
+            return true;
+        }
+        if (invoice.getVisitUuid() == null || invoice.getVisitUuid().isBlank()) {
+            return false;
+        }
+        return visitDao.findByUuid(invoice.getVisitUuid())
+                .map(Visit::getPet)
+                .map(Pet::getUuid)
+                .filter(petUuid::equals)
+                .isPresent();
+    }
+
+    private OwnerInvoiceModel toOwnerModel(ConsultationInvoice invoice) {
+        User doctor = invoice.getDoctor();
+        Clinic clinic = invoice.getClinic();
+        String doctorName = null;
+        if (doctor != null) {
+            String name = ((doctor.getFirstName() == null ? "" : doctor.getFirstName()) + " "
+                    + (doctor.getLastName() == null ? "" : doctor.getLastName())).trim();
+            doctorName = name.isBlank() ? null : name;
+        }
+        boolean pdfAvailable = invoice.getPdfUrl() != null && !invoice.getPdfUrl().isBlank();
+        return new OwnerInvoiceModel(
+                invoice.getUuid(),
+                invoice.getInvoiceNumber(),
+                invoice.getVisitUuid(),
+                invoice.getPetUuid(),
+                clinic == null ? null : clinic.getName(),
+                doctorName,
+                invoice.getStatus() == null ? null : invoice.getStatus().name(),
+                invoice.getPaymentStatus(),
+                invoice.getAmount(),
+                invoice.getPaidAmount(),
+                invoice.getCurrency(),
+                invoice.getDiagnosis(),
+                invoice.getReason(),
+                invoice.getDoctorNotes(),
+                invoice.getNextVisitNotes(),
+                pdfAvailable,
+                invoice.getConsultationDate(),
+                invoice.getCreatedAt());
     }
 
     public ConsultationInvoice requireClinicInvoice(Clinic clinic, String invoiceUuid) {

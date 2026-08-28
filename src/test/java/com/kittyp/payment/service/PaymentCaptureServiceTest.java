@@ -77,7 +77,7 @@ class PaymentCaptureServiceTest {
 
 		RecordingInvoiceService() {
 			super(mock(ConsultationInvoiceRepository.class), null, null, null, null, null, null, null, null, null,
-					null, null, null, null, null);
+					null, null, null, null, null, null);
 		}
 
 		@Override

@@ -62,7 +62,7 @@ class RazorPayServiceImplCreateOrderTest {
 		userDao = mock(UserDao.class);
 		TreatmentInvoiceService treatmentInvoiceService = new TreatmentInvoiceService(
 				consultationInvoiceRepository, null, null, null, null, null, null, null, null, null, null, null, null,
-				null, null);
+				null, null, null);
 
 		service = new RazorPayServiceImpl(mock(Environment.class), orderDao, productService, razorpayGateway, null,
 				consultationInvoiceRepository, treatmentInvoiceService, clinicService, userDao);

@@ -190,6 +190,9 @@ public class ApiUrl {
 	public static final String CLINIC_DOCTOR_BUSY = CLINIC_DOCTOR_BY_UUID + "/busy";
 
 	public static final String PET_VISITS = PET_BY_UUID + "/visits";
+	public static final String PET_INVOICES = PET_BY_UUID + "/invoices";
+	public static final String PET_INVOICE_BY_UUID = PET_INVOICES + "/{invoiceUuid}";
+	public static final String PET_INVOICE_PDF = PET_INVOICE_BY_UUID + "/pdf";
 	public static final String USER_VISITS_MINE = "/user/visits/mine";
 	public static final String USER_VISIT_BY_UUID = "/user/visits/{visitUuid}";
 	public static final String USER_VISIT_RATING = USER_VISIT_BY_UUID + "/rating";

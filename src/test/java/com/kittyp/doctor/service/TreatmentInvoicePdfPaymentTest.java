@@ -18,7 +18,7 @@ import com.kittyp.doctor.enums.ConsultationInvoiceStatus;
 class TreatmentInvoicePdfPaymentTest {
 
 	private final TreatmentInvoiceService service = new TreatmentInvoiceService(
-			null, null, null, null, null, null, null, null, null, null,
+			null, null, null, null, null, null, null, null, null, null, null,
 			new ObjectMapper(), null, null, null, null);
 
 	@Test
