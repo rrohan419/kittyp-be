@@ -35,4 +35,7 @@ public class ExceptionConstant {
 
 	//order
 	public static final String ORDER_NOT_FOUND_BY_ORDER_NUMBER = "order.not.found.by.order.number";
+    
+	// ai 
+	public static final String NUTRITION_PLAN_NOT_FOUND = "nutrition.plan.not.found";
 }

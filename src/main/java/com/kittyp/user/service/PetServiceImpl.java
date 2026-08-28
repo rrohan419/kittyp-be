@@ -1,15 +1,17 @@
 package com.kittyp.user.service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.service.S3StorageService;
 import com.kittyp.common.util.Mapper;
+import com.kittyp.common.util.SafePhotoUrl;
 import com.kittyp.user.dao.PetDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.dto.PetDetailDto;
@@ -29,6 +31,7 @@ public class PetServiceImpl implements PetService {
     private final PetDao petDao;
     private final Mapper mapper;
     private final UserDao userDao;
+    private final S3StorageService s3StorageService;
 
     @Transactional
     @Override
@@ -39,9 +42,9 @@ public class PetServiceImpl implements PetService {
         log.info("Adding new pet for email={}", petOwner.getEmail());
 
         Pet newPet = mapper.convert(petDetailDto, Pet.class);
-        newPet.setUuid(UUID.randomUUID().toString());
+        newPet.setProfilePicture(SafePhotoUrl.requireHttps(newPet.getProfilePicture()));
         newPet = petDao.savePets(newPet);
-        
+
         petOwner.addPet(newPet);
         userDao.saveUser(petOwner);
         log.info("Successfully added pet with uuid={} for email={}", newPet.getUuid(), petOwner.getEmail());
@@ -58,7 +61,7 @@ public class PetServiceImpl implements PetService {
 
         if (userPets == null || userPets.isEmpty()) {
             log.warn("No pets found for email={}", email);
-            return List.of(); // Return empty list instead of throwing exception
+            return List.of();
         }
 
         log.info("Found {} pet(s) for email={}", userPets.size(), email);
@@ -72,15 +75,19 @@ public class PetServiceImpl implements PetService {
 
         User petOwner = userDao.userByEmail(email);
 
-        Pet petToDelete = petOwner.getPets().stream().filter(pet -> pet.getUuid().equals(uuid)).findFirst().orElseThrow(() -> {
-            log.info("Pet not found with uuid={}, for owner email {}", uuid, petOwner.getEmail());
-            throw new CustomException("pet not found by uuid : "+uuid, HttpStatus.NOT_FOUND);
-        });
+        Pet petToDelete = petOwner.getPets().stream().filter(pet -> pet.getUuid().equals(uuid)).findFirst()
+                .orElseThrow(() -> {
+                    log.info("Pet not found with uuid={}, for owner email {}", uuid, petOwner.getEmail());
+                    throw new CustomException("pet not found by uuid : " + uuid, HttpStatus.NOT_FOUND);
+                });
 
-        log.info("Deleting pet with uuid={}", uuid);
+        log.info("Hiding pet uuid={} from parent email={} (row kept for clinic/medical history)", uuid,
+                petOwner.getEmail());
+        // Detach from parent account only — never hard-delete (visits/clinic records stay).
+        petToDelete.setHiddenFromParent(true);
         petOwner.getPets().remove(petToDelete);
         userDao.saveUser(petOwner);
-        log.info("Deleted pet with uuid={}", uuid);
+        log.info("Pet uuid={} detached from parent; database row retained", uuid);
     }
 
     @Transactional
@@ -98,10 +105,10 @@ public class PetServiceImpl implements PetService {
 
         // Update pet details
         existingPet.setName(petDetailDto.getName());
-        existingPet.setProfilePicture(petDetailDto.getProfilePicture());
+        existingPet.setProfilePicture(SafePhotoUrl.requireHttps(petDetailDto.getProfilePicture()));
         existingPet.setBreed(petDetailDto.getBreed());
         existingPet.setType(petDetailDto.getType());
-        existingPet.setAge(petDetailDto.getAge());
+        existingPet.setDateOfBirth(petDetailDto.getDateOfBirth());
         existingPet.setWeight(petDetailDto.getWeight());
         existingPet.setActivityLevel(petDetailDto.getActivityLevel());
         existingPet.setGender(petDetailDto.getGender());
@@ -111,7 +118,7 @@ public class PetServiceImpl implements PetService {
         existingPet.setAllergies(petDetailDto.getAllergies());
 
         Pet updatedPet = petDao.savePets(existingPet);
-        
+
         log.info("Successfully updated pet with uuid={} for email={}", updatedPet.getUuid(), petOwner.getEmail());
 
         return mapper.convert(updatedPet, PetModel.class);
@@ -124,12 +131,21 @@ public class PetServiceImpl implements PetService {
             throw new CustomException("Pet not found by uuid: " + petUuid, HttpStatus.NOT_FOUND);
         }
 
+        if (petPhotosDto == null || petPhotosDto.getPhotos() == null || petPhotosDto.getPhotos().isEmpty()) {
+            throw new CustomException("At least one photo URL is required", HttpStatus.BAD_REQUEST);
+        }
         log.info("Updating profile picture for pet with uuid={}", petUuid);
-        pet.setProfilePicture(petPhotosDto.getPhotos().get(0));
+        String primary = SafePhotoUrl.requireHttps(petPhotosDto.getPhotos().get(0));
+        pet.setProfilePicture(primary);
 
-        pet.setPhotos(Set.copyOf(petPhotosDto.getPhotos()));
+        Set<String> mutablePhotos = (pet.getPhotos() != null) ? pet.getPhotos() : new HashSet<>();
+        for (String photo : petPhotosDto.getPhotos()) {
+            mutablePhotos.add(SafePhotoUrl.requireHttps(photo));
+        }
+        pet.setPhotos(mutablePhotos);
+
         Pet updatedPet = petDao.savePets(pet);
-        
+
         log.info("Successfully updated profile picture for pet with uuid={}", updatedPet.getUuid());
 
         return mapper.convert(updatedPet, PetModel.class);

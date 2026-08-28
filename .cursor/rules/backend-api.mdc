@@ -1,0 +1,35 @@
+---
+description: Backend layered architecture, REST API design, database safety, validation, and security protocols.
+globs: **/*.{ts,js,py}
+alwaysApply: false
+---
+# Backend Architecture & Data Integrity Standards
+
+## 1. Strict Layered Architecture (Unidirectional Flow)
+Maintain a strict 3-tier boundary:
+[ Routes / Endpoints ] ---> [ Controllers ] ---> [ Services (Domain Logic) ] ---> [ Data Access / Repositories ]
+
+- **Controllers:** Handle HTTP parsing, parameter extraction, and status code mapping. Keep controllers thin (< 40 lines per action).
+- **Services:** Contain 100% of core business rules, calculations, and domain orchestrations.
+- **Data Access:** All database queries (ORM or SQL) must live strictly in the repository/model layer. Never query the DB directly from a controller.
+
+## 2. API Contract & Response Hygiene
+- **Uniform Response Envelope:** Standardize all API responses:
+  {
+    "success": true,
+    "data": {},
+    "error": null,
+    "message": "Optional status message"
+  }
+- **Error Standard:** Return meaningful HTTP status codes (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 500 Internal Server Error) accompanied by structured error objects.
+- **Backward Compatibility:** Never rename response fields or alter existing payload types without versioning the endpoint.
+
+## 3. Security & Validation
+- **Input Validation:** Validate all incoming `body`, `query`, and `param` payloads at the controller layer using schema validators (e.g., Zod, Joi, or Pydantic) before passing to services.
+- **Zero Sensitive Leaks:** Never return password hashes, raw database IDs (if UUID/public IDs exist), or environment configurations in API payloads.
+- **Environment Isolation:** Access configuration exclusively through structured config services or validated environment files (`.env`).
+
+## 4. Database Safety & Concurrency
+- **Transaction Boundaries:** Wrap multi-write operations in database transactions to guarantee ACID compliance.
+- **Parameterized Queries:** Never concatenate user input into raw SQL queries (prevent SQL injection).
+- **Non-blocking Operations:** Ensure all database, network, and disk I/O operations are strictly asynchronous.

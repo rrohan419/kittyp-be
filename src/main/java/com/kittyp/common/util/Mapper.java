@@ -126,6 +126,17 @@ public class Mapper {
 		}
 	}
 
+	public <T> List<T> convertJsonToList(String jsonString, Class<T> elementClass) {
+    try {
+        return objectMapper.readValue(
+            jsonString,
+            objectMapper.getTypeFactory().constructCollectionType(List.class, elementClass)
+        );
+    } catch (JsonProcessingException e) {
+        throw new CustomException("Error converting JSON string to List<" + elementClass.getSimpleName() + ">: " + e.getMessage());
+    }
+}
+
 	public <T> T readValueFromStream(InputStream inputStream, Class<T> targetClass) {
 		try {
 			return objectMapper.readValue(inputStream, targetClass);

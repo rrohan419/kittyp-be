@@ -3,6 +3,7 @@
  */
 package com.kittyp.common.service;
 
+import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -17,9 +18,12 @@ import com.kittyp.common.exception.CustomException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -63,6 +67,54 @@ public class S3StorageService {
         }
 
         return key;
+    }
+
+    public String uploadTreatmentInvoice(String objectKey, byte[] pdfBytes) {
+        try {
+            PutObjectRequest put = PutObjectRequest.builder()
+                    .bucket(invoiceBucket)
+                    .key(objectKey)
+                    .contentType("application/pdf")
+                    .build();
+            s3.putObject(put, RequestBody.fromBytes(pdfBytes));
+        } catch (Exception e) {
+            log.error("Error uploading treatment invoice {}: {}", objectKey, e.getMessage());
+            throw new CustomException("Failed to upload treatment invoice PDF", HttpStatus.INTERNAL_SERVER_ERROR, e);
+        }
+        return objectKey;
+    }
+
+    public byte[] downloadTreatmentInvoice(String objectKey) {
+        try {
+            ResponseBytes<GetObjectResponse> bytes = s3.getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(invoiceBucket)
+                    .key(objectKey)
+                    .build());
+            return bytes.asByteArray();
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                throw new CustomException("Treatment invoice PDF not found", HttpStatus.NOT_FOUND);
+            }
+            throw new CustomException("Failed to download treatment invoice PDF", HttpStatus.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
+    public URL presignedTreatmentInvoiceUrl(String objectKey, Duration ttl) {
+        try {
+            s3.headObject(HeadObjectRequest.builder()
+                    .bucket(invoiceBucket)
+                    .key(objectKey)
+                    .build());
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                throw new CustomException("Treatment invoice PDF not found", HttpStatus.NOT_FOUND);
+            }
+            throw e;
+        }
+        PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(builder -> builder
+                .signatureDuration(ttl)
+                .getObjectRequest(getReq -> getReq.bucket(invoiceBucket).key(objectKey)));
+        return presignedRequest.url();
     }
 
     // public URL presignedUrl(String orderId, Duration ttl) {
@@ -121,8 +173,8 @@ public class S3StorageService {
 
             // generate S3 URL if needed
             return s3Client.utilities()
-                .getUrl(b -> b.bucket(userBucket).key(key))
-                .toExternalForm();
+                    .getUrl(b -> b.bucket(userBucket).key(key))
+                    .toExternalForm();
         } catch (Exception e) {
             throw new RuntimeException("Failed to upload file to S3: " + e.getMessage(), e);
         }
@@ -144,16 +196,49 @@ public class S3StorageService {
     }
 
     public void deleteUserFileFromS3(String key) {
-		try {
-			DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-					.bucket(userBucket)
-					.key(key).build();
-			s3Client.deleteObject(deleteObjectRequest);
-		} catch (Exception e) {
-			throw new CustomException("Failed to delete file from S3: " + e.getMessage(),
-					HttpStatus.INTERNAL_SERVER_ERROR);
-		}
+        try {
+            DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                    .bucket(userBucket)
+                    .key(key).build();
+            s3Client.deleteObject(deleteObjectRequest);
+        } catch (Exception e) {
+            throw new CustomException("Failed to delete file from S3: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
-    
+    public void deleteUserFileFromS3viaUrl(String fileUrl) {
+        try {
+            // Extract the key from the S3 URL
+            String key = extractKeyFromUrl(fileUrl);
+
+            // Delete the file using the extracted key
+            DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                    .bucket(userBucket)
+                    .key(key)
+                    .build();
+            s3Client.deleteObject(deleteObjectRequest);
+
+        } catch (Exception e) {
+            throw new CustomException("Failed to delete file from S3: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private String extractKeyFromUrl(String fileUrl) throws Exception {
+        // Create a URI from the provided URL
+        URI uri = new URI(fileUrl);
+
+        // Get the path (after the bucket name and domain)
+        String path = uri.getPath();
+
+        // The path will have a leading "/", so remove that
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+
+        // Return the key (the part after the bucket name)
+        return path;
+    }
+
 }

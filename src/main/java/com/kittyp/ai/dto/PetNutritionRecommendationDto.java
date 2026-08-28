@@ -11,11 +11,12 @@ public class PetNutritionRecommendationDto {
     private String profilePicture;
     private String type;
     private String breed;
-    private String age;
+    private String dateOfBirth;
     private String weight;
     private String activityLevel;
     private String gender; 
     private String currentFoodBrand;
     private String healthConditions;
     private String allergies;
+    private Boolean isSpayedOrNeutered;
 }

@@ -18,7 +18,9 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.AdminDashboardResponse;
+import com.kittyp.common.model.SystemHealthResponse;
 import com.kittyp.common.service.AdminService;
+import com.kittyp.common.service.SystemHealthService;
 
 @RestController
 @RequestMapping(ApiUrl.BASE_URL)
@@ -27,6 +29,7 @@ public class AdminDashboardController {
     
     private final ApiResponse<?> responseBuilder;
     private final AdminService adminService;
+    private final SystemHealthService systemHealthService;
 
 @GetMapping("/admin/dashboard-summary")
 @PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
@@ -35,4 +38,11 @@ public ResponseEntity<SuccessResponse<AdminDashboardResponse>> getAdminDashboard
 
     return responseBuilder.buildSuccessResponse(summary, ResponseMessage.SUCCESS, HttpStatus.OK);
 }
+
+    @GetMapping(ApiUrl.ADMIN_SYSTEM_HEALTH)
+    @PreAuthorize(KeyConstant.IS_ROLE_ADMIN_OR_MODERATOR)
+    public ResponseEntity<SuccessResponse<SystemHealthResponse>> systemHealth() {
+        return responseBuilder.buildSuccessResponse(systemHealthService.snapshot(), ResponseMessage.SUCCESS,
+                HttpStatus.OK);
+    }
 }

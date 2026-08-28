@@ -35,6 +35,10 @@ public class PaginationModel<T> {
 
     private List<T> models;
 
+    private Integer pageNumber;
+
+    private Integer pageSize;
+
     public PaginationModel(Integer totalPages, Long totalElements, Boolean isFirst, Boolean isLast) {
         super();
         this.totalPages = totalPages;

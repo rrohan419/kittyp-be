@@ -41,13 +41,14 @@ public class UserDetailsImpl implements UserDetails {
                 .map(userRole -> new SimpleGrantedAuthority(userRole.getRole().getName().name()))
                 .collect(Collectors.toList());
 
+        boolean isEnabled = user.getIsActive() == null || Boolean.TRUE.equals(user.getIsActive());
         return new UserDetailsImpl(
                 user.getId(),
                 user.getUuid(),
                 user.getEmail(),
                 user.getEmail(),
                 user.getPassword(),
-                user.getIsActive(),
+                isEnabled,
                 authorities);
     }
 
@@ -99,7 +100,7 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return isActive;
     }
 
     @Override

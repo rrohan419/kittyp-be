@@ -3,6 +3,7 @@
  */
 package com.kittyp.article.entity;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.hibernate.annotations.BatchSize;
@@ -63,6 +64,9 @@ public class Article extends BaseEntity {
     @Column(nullable = false)
     @Builder.Default
     private ArticleStatus status = ArticleStatus.DRAFT;
+
+    /** When status is SCHEDULED, publish at/after this time (UTC store as LocalDateTime). */
+    private LocalDateTime scheduledPublishAt;
 
     @ElementCollection
     @CollectionTable(name = "article_tags", joinColumns = @JoinColumn(name = "article_id"))

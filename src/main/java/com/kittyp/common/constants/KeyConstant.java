@@ -14,7 +14,13 @@ public class KeyConstant {
 	public static final String IS_AUTHENTICATED = "isAuthenticated()";
 	public static final String SECRET_KEY = "secret.key";
 	public static final String IS_ROLE_ADMIN = "hasRole('ROLE_ADMIN')";
+	public static final String IS_ROLE_ADMIN_OR_MODERATOR = "hasAnyRole('ROLE_ADMIN','ROLE_MODERATOR')";
 	public static final String IS_ROLE_USER = "hasRole('ROLE_USER')";
+	public static final String IS_ROLE_DOCTOR = "hasRole('ROLE_DOCTOR')";
+	public static final String IS_ROLE_CLINIC_ADMIN = "hasRole('ROLE_CLINIC_ADMIN')";
+	public static final String IS_ROLE_CLINIC_STAFF = "hasRole('ROLE_CLINIC_STAFF')";
+	public static final String IS_ROLE_CLINIC_ADMIN_OR_STAFF = "hasAnyRole('ROLE_CLINIC_ADMIN','ROLE_CLINIC_STAFF')";
+	public static final String IS_ROLE_ARTICLE_PUBLISHER = "hasAnyRole('ROLE_ADMIN','ROLE_DOCTOR','ROLE_CLINIC_ADMIN','ROLE_CLINIC_STAFF')";
 	public static final String PAGE_NUMBER = "1";
 	public static final String PAGE_SIZE = "10";
 	

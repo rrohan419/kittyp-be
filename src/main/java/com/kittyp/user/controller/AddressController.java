@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.auth.util.SecurityContextUtils;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -37,14 +38,12 @@ public class AddressController {
 
     private final ApiResponse<?> responseBuilder;
     private final AddressService addressService;
+    private final SecurityContextUtils securityContextUtils;
 
     @GetMapping(ApiUrl.USER_ADDRESS)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<List<AddressModel>>> getAllUserSavedAddress(@RequestParam String userUuid) {
-
-        // String email =
-        // SecurityContextHolder.getContext().getAuthentication().getName();
-
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         List<AddressModel> response = addressService.getAllAddresses(userUuid);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -53,10 +52,7 @@ public class AddressController {
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<AddressModel>> getAddressByUuid(@RequestParam String userUuid,
             @RequestParam String addressUuid) {
-
-        // String email =
-        // SecurityContextHolder.getContext().getAuthentication().getName();
-
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         AddressModel response = addressService.getAddressByUuid(userUuid, addressUuid);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -65,10 +61,7 @@ public class AddressController {
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<String>> deleteAddress(@RequestParam String userUuid,
             @RequestParam String addressUuid) {
-
-        // String email =
-        // SecurityContextHolder.getContext().getAuthentication().getName();
-
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         addressService.deleteAddress(userUuid, addressUuid);
         return responseBuilder.buildSuccessResponse(ResponseMessage.SUCCESS, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -77,10 +70,7 @@ public class AddressController {
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<AddressModel>> saveAddress(@RequestParam String userUuid,
             @Valid @RequestBody AddressSaveDto addressSaveDto) {
-
-        // String email =
-        // SecurityContextHolder.getContext().getAuthentication().getName();
-
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         AddressModel response = addressService.saveAddress(userUuid, addressSaveDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -89,10 +79,7 @@ public class AddressController {
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<AddressModel>> updateAddress(@RequestParam String userUuid,
             @RequestBody @Valid AddressUpdateDto addressUpdateDto) {
-
-        // String email =
-        // SecurityContextHolder.getContext().getAuthentication().getName();
-
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         AddressModel response = addressService.updateAddress(userUuid, addressUpdateDto);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }

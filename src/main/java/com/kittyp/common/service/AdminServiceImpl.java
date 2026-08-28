@@ -26,7 +26,7 @@ public class AdminServiceImpl implements AdminService{
     public AdminDashboardResponse getAdminDashboardData() {
 
         List<OrderStatus> orderStatuses = List.of(OrderStatus.SUCCESSFULL, OrderStatus.DELIVERED, OrderStatus.IN_TRANSIT, OrderStatus.PROCESSING);
-        List<ArticleStatus> articleStatuses = List.of(ArticleStatus.PUBLISHED, ArticleStatus.DRAFT);
+        List<ArticleStatus> articleStatuses = List.of(ArticleStatus.PUBLISHED, ArticleStatus.DRAFT, ArticleStatus.SCHEDULED);
         
         Integer totalUsers = userDao.countActiveUsers();
         Integer totalProducts = productDao.productCount(true);

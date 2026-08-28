@@ -3,6 +3,7 @@
  */
 package com.kittyp.article.repositry;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,4 +20,7 @@ public interface ArticleRepository extends JpaRepository<Article, Long>, JpaSpec
 	Article findBySlug(String slug);
 	Article findByStatus(ArticleStatus status);
 	Integer countByIsActiveAndStatusIn(boolean isActive, List<ArticleStatus> status);
+
+	List<Article> findByIsActiveTrueAndStatusAndScheduledPublishAtLessThanEqual(
+			ArticleStatus status, LocalDateTime when);
 }

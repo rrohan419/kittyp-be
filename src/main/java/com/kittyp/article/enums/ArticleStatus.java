@@ -7,5 +7,5 @@ package com.kittyp.article.enums;
  * @author rrohan419@gmail.com 
  */
 public enum ArticleStatus {
-	DRAFT, PUBLISHED, ARCHIVED
+	DRAFT, SCHEDULED, PUBLISHED, ARCHIVED
 }

@@ -41,6 +41,9 @@ public class Cart extends BaseEntity {
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartItem> cartItems;
 
+    @Column(name = "guest_session_id", length = 100)
+    private String guestSessionId;
+
     public void addCartItem(CartItem item) {
         if (cartItems == null) {
             cartItems = new ArrayList<>();

@@ -39,6 +39,10 @@ public class Author extends BaseEntity {
     
     private String role;
 
+	/** Links this author profile to a platform user (e.g. independent doctor). */
+	@Column(name = "user_uuid", unique = true)
+	private String userUuid;
+
 	@OneToMany(mappedBy = "author")
 	private List<Article> articles;
 

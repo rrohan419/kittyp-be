@@ -73,19 +73,107 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	@Override
 	public void sendPasswordResetCode(String email) {
 		User user = userDao.userByEmail(email);
+		String code = verificationCodeService.generateCode(user.getUuid());
+		System.out.println("code = " + code);
 
 		ZeptoMailDto mailDto = new ZeptoMailDto();
 		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName(), "RESET_CODE",
-				verificationCodeService.generateCode(user.getUuid()), "logo_url",
+				code, "logo_url",
 				AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
 		mailDto.setRecipientEmail(email);
 		mailDto.setRecipientName(user.getFirstName());
 		mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
 
-		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
-		log.info("password reset code sent for email : " + email);
-		addEmailAuditLog(responseModel, email);
+		try {
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			log.info("password reset code sent for email : " + email);
+			addEmailAuditLog(responseModel, email);
+		} catch (Exception e) {
+			log.warn("Failed to send password reset email to {}: {}", email, e.getMessage());
+		}
 
+	}
+
+	@Override
+	public void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint) {
+		log.info("Signup OTP [{}] requested for email={} phoneHint={}", purpose, recipientEmail, phoneHint);
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			String name = "PHONE".equalsIgnoreCase(purpose) && phoneHint != null
+					? "Phone verify (" + phoneHint + ")"
+					: "Doctor Applicant";
+			mailDto.setMergeInfo(Map.of(
+					"Customer_Name", name,
+					"RESET_CODE", code,
+					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			// OTP is still in cache / logs — don't fail signup OTP in local if mail provider is down
+			log.warn("Failed to send signup OTP email to {}: {}", recipientEmail, e.getMessage());
+		}
+	}
+
+	@Override
+	public void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName,
+			String acceptUrl) {
+		log.info("Clinic doctor invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			String name = doctorName == null || doctorName.isBlank() ? "Doctor" : doctorName;
+			mailDto.setMergeInfo(Map.of(
+					"Customer_Name", name,
+					"RESET_CODE", acceptUrl,
+					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send clinic invite email to {}: {} (acceptUrl logged above)", recipientEmail,
+					e.getMessage());
+		}
+	}
+
+	@Override
+	public void sendClinicDoctorInviteReminderEmail(String recipientEmail, String doctorName, String clinicName,
+			String acceptUrl) {
+		log.info("Clinic doctor invite REMINDER to email={} clinic={} acceptUrl={}", recipientEmail, clinicName,
+				acceptUrl);
+		sendClinicDoctorInviteEmail(recipientEmail, doctorName, clinicName, acceptUrl);
+	}
+
+	@Override
+	public void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
+			String doctorEmail, boolean accepted) {
+		String action = accepted ? "accepted" : "declined";
+		log.info("Clinic invite {} — notify clinicEmail={} clinic={} doctor={} <{}>", action, recipientEmail,
+				clinicName, doctorName, doctorEmail);
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			String name = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName;
+			String body = String.format("%s (%s) %s your invite to join %s.",
+					doctorName == null || doctorName.isBlank() ? "A doctor" : doctorName,
+					doctorEmail == null ? "" : doctorEmail, action, name);
+			mailDto.setMergeInfo(Map.of(
+					"Customer_Name", name,
+					"RESET_CODE", body,
+					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send clinic invite response email to {}: {}", recipientEmail, e.getMessage());
+		}
 	}
 
 	@Transactional

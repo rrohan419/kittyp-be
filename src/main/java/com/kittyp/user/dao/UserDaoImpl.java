@@ -3,6 +3,8 @@
  */
 package com.kittyp.user.dao;
 
+import java.util.Optional;
+
 import org.springframework.core.env.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -70,9 +72,30 @@ public class UserDaoImpl implements UserDao {
 	}
 
 	@Override
+	public User userByPetUuid(String petUuid) {
+		return userRepository.findByPets_Uuid(petUuid)
+				.orElseThrow(() -> new ResourceNotFoundException("user", "petUuid", petUuid));
+	}
+
+	@Override
+	public Optional<User> findOptionalByPetUuid(String petUuid) {
+		return userRepository.findByPets_Uuid(petUuid);
+	}
+
+	@Override
 	public Page<User> findAllUsers(Pageable pageable) {
 		try {
 			return userRepository.findAll(pageable);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Page<User> findPetOwnerUsers(String q, Pageable pageable) {
+		try {
+			return userRepository.findPetOwnerUsers(q == null ? "" : q, pageable);
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
 					HttpStatus.INTERNAL_SERVER_ERROR);

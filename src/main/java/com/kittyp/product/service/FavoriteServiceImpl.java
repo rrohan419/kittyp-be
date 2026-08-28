@@ -69,7 +69,7 @@ public class FavoriteServiceImpl implements FavoriteService {
     @Override
     @Transactional
     public void addToFavorites(String userUuid, String productUuid, String category) {
-        Product product = productRepository.findByUuid(productUuid)
+        productRepository.findByUuid(productUuid)
             .orElseThrow(() -> new CustomException("Product not found", HttpStatus.NOT_FOUND));
 
         UserFavouriteProducts userFavorites = userFavouriteProductsRepository.findByUserUuid(userUuid)

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.kittyp.auth.util.SecurityContextUtils;
 import com.kittyp.cart.dto.CartCheckoutRequest;
 import com.kittyp.cart.entity.Cart;
 import com.kittyp.cart.entity.CartItem;
@@ -55,6 +56,7 @@ public class OrderServiceImpl implements OrderService {
 	private final UserDao userDao;
 	private final CartService cartService;
 	private final ProductService productService;
+	private final SecurityContextUtils securityContextUtils;
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -63,6 +65,15 @@ public class OrderServiceImpl implements OrderService {
 	@Transactional(readOnly = true)
 	public OrderModel orderDetailsByOrderNumber(String orderNumber) {
 		Order order = orderDao.orderByOrderNumber(orderNumber);
+		if (order == null) {
+			throw new CustomException("Order not found", HttpStatus.NOT_FOUND);
+		}
+		if (!securityContextUtils.isAdmin()) {
+			String currentUuid = securityContextUtils.getCurrentUserUuid();
+			if (currentUuid == null || order.getUser() == null || !currentUuid.equals(order.getUser().getUuid())) {
+				throw new CustomException("Access denied", HttpStatus.FORBIDDEN);
+			}
+		}
 		return mapper.convert(order, OrderModel.class);
 	}
 
@@ -73,6 +84,15 @@ public class OrderServiceImpl implements OrderService {
 	@Transactional(readOnly = true)
 	public PaginationModel<OrderModel> allOrderByFilter(OrderFilterDto orderFilterDto, Integer pageNumber,
 			Integer pageSize) {
+		if (!securityContextUtils.isAdmin()) {
+			String currentUuid = securityContextUtils.getCurrentUserUuid();
+			if (currentUuid == null) {
+				throw new CustomException("Authentication required", HttpStatus.UNAUTHORIZED);
+			}
+			// Non-admins can only query their own orders
+			orderFilterDto.setUserUuid(currentUuid);
+		}
+
 		Sort sort = Sort.by(Direction.DESC, KeyConstant.CREATED_AT);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
 
@@ -138,8 +158,11 @@ public class OrderServiceImpl implements OrderService {
 		// Calculate totals
 		order.setSubTotal(subTotal);
 
-		// Add shipping cost based on method
+		// Add shipping cost based on method (optional)
 		BigDecimal shippingCost = calculateShippingCost(request.getShippingMethod());
+		if (request.getShippingMethod() != null) {
+			order.setShippingMethod(request.getShippingMethod().name());
+		}
 
 		// Calculate tax
 		BigDecimal tax = calculateTax(subTotal);
@@ -168,6 +191,9 @@ public class OrderServiceImpl implements OrderService {
 	}
 
 	public BigDecimal calculateShippingCost(ShippingTypes shippingMethod) {
+		if (shippingMethod == null) {
+			return BigDecimal.ZERO;
+		}
 	    return shippingMethod.getCost();
 	}
 

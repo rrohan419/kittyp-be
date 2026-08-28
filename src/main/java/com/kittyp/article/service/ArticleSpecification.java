@@ -55,6 +55,10 @@ public class ArticleSpecification {
 				query.distinct(true);
 			}
 
+			if (articleFilterDto.getAuthorId() != null) {
+				predicates.add(builder.equal(root.get("author").get("id"), articleFilterDto.getAuthorId()));
+			}
+
 			return builder.and(predicates.toArray(new Predicate[0]));
 		};
 

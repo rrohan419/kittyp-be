@@ -63,7 +63,7 @@ public class ArticleController {
 	}
 
 	@PostMapping(ApiUrl.ARTICLE_BASE_URL)
-	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+	@PreAuthorize(KeyConstant.IS_ROLE_ARTICLE_PUBLISHER)
 	public ResponseEntity<SuccessResponse<ArticleModel>> saveArticles(
 			@RequestBody ArticleDto articleDto) {
 
@@ -73,7 +73,7 @@ public class ArticleController {
 	}
 
 	@PatchMapping(ApiUrl.ARTICLE_EDIT_BY_SLUG)
-	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+	@PreAuthorize(KeyConstant.IS_ROLE_ARTICLE_PUBLISHER)
 	public ResponseEntity<SuccessResponse<ArticleModel>> editArticles(
 			@RequestBody ArticleEditDto articleEditDto, @PathVariable String slug) {
 

@@ -18,4 +18,4 @@ public class KittypApplication {
 		SpringApplication.run(KittypApplication.class, args);
 	}
 
-}
+} 

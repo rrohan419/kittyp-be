@@ -12,4 +12,5 @@ import com.kittyp.article.entity.Author;
  */
 public interface AuthorRepository extends JpaRepository<Author, Long> {
 
+	java.util.Optional<Author> findByUserUuid(String userUuid);
 }

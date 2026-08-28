@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.auth.util.SecurityContextUtils;
 import com.kittyp.cart.dto.CartItemRequest;
 import com.kittyp.cart.model.CartResponse;
 import com.kittyp.cart.service.CartService;
@@ -30,10 +31,12 @@ import lombok.RequiredArgsConstructor;
 public class CartController {
     private final CartService cartService;
     private final ApiResponse responseBuilder;
+    private final SecurityContextUtils securityContextUtils;
 
     @GetMapping(ApiUrl.GET_CART_BY_USER)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<CartResponse>> getCart(@PathVariable String userUuid) {
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         CartResponse response = cartService.getCartByUser(userUuid);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -43,6 +46,7 @@ public class CartController {
     public ResponseEntity<SuccessResponse<CartResponse>> addToCart(
             @PathVariable String userUuid,
             @Valid @RequestBody CartItemRequest request) {
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         CartResponse response = cartService.addToCart(userUuid, request);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -52,6 +56,7 @@ public class CartController {
     public ResponseEntity<SuccessResponse<CartResponse>> updateCartItem(
             @PathVariable String userUuid,
             @Valid @RequestBody CartItemRequest request) {
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         CartResponse response = cartService.updateCartItem(userUuid, request);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -61,6 +66,7 @@ public class CartController {
     public ResponseEntity<SuccessResponse<CartResponse>> removeFromCart(
             @PathVariable String userUuid,
             @PathVariable String productUuid) {
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         CartResponse response = cartService.removeFromCart(userUuid, productUuid);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -68,9 +74,8 @@ public class CartController {
     @DeleteMapping(ApiUrl.CLEAR_CART)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<Void>> clearCart(@PathVariable String userUuid) {
+        securityContextUtils.requireSelfOrAdmin(userUuid);
         cartService.clearCart(userUuid);
         return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
-
-   
 }

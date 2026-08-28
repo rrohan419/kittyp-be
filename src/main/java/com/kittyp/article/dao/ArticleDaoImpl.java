@@ -3,6 +3,7 @@
  */
 package com.kittyp.article.dao;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.core.env.Environment;
@@ -77,6 +78,17 @@ public class ArticleDaoImpl implements ArticleDao {
 	
 		try {
 			return articleRepository.countByIsActiveAndStatusIn(isActive, status);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public List<Article> findDueScheduledArticles(LocalDateTime when) {
+		try {
+			return articleRepository.findByIsActiveTrueAndStatusAndScheduledPublishAtLessThanEqual(
+					ArticleStatus.SCHEDULED, when);
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
 					HttpStatus.INTERNAL_SERVER_ERROR);

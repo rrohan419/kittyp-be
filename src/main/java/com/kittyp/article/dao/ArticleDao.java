@@ -3,6 +3,7 @@
  */
 package com.kittyp.article.dao;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -42,4 +43,6 @@ public interface ArticleDao {
 	Page<Article> findAllArticles(Pageable pageable, Specification<Article> specification);
 
 	Integer countByIsActiveAndStatusIn(boolean isActive, List<ArticleStatus> status);
+
+	List<Article> findDueScheduledArticles(LocalDateTime when);
 }

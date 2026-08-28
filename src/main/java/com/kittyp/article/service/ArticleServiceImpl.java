@@ -3,6 +3,7 @@
  */
 package com.kittyp.article.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -34,10 +36,12 @@ import com.kittyp.article.entity.ArticleCommentLikes;
 import com.kittyp.article.entity.ArticleComments;
 import com.kittyp.article.entity.ArticlesLikes;
 import com.kittyp.article.entity.Author;
+import com.kittyp.article.enums.ArticleStatus;
 import com.kittyp.article.model.ArticleCommentsModel;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
 import com.kittyp.article.model.AuthorModel;
+import com.kittyp.article.service.AuthorService;
 import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
@@ -64,6 +68,7 @@ public class ArticleServiceImpl implements ArticleService {
 	private final ArticleCommentsDao articleCommentsDao;
 	private final ArticlesLikesDao articlesLikesDao;
 	private final ArticleCommentLikesDao articleCommentLikesDao;
+	private final AuthorService authorService;
 
 	/**
 	 * @author rrohan419@gmail.com
@@ -73,7 +78,8 @@ public class ArticleServiceImpl implements ArticleService {
 
 		Article article = articleDao.findArticleBySlug(slug);
 
-		if (article == null) {
+		if (article == null || (!ArticleVisibility.isPubliclyReadable(article.getStatus())
+				&& !canReadUnpublished(article))) {
 			throw new CustomException("article not found", HttpStatus.NOT_FOUND);
 		}
 
@@ -90,6 +96,8 @@ public class ArticleServiceImpl implements ArticleService {
 	public PaginationModel<ArticleListModel> allArticlesByFilter(ArticleFilterDto articleFilterModel,
 			Integer pageNumber,
 			Integer pageSize) {
+
+		constrainPublicListFilter(articleFilterModel);
 
 		Sort sort = Sort.by(Direction.DESC, KeyConstant.CREATED_AT);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
@@ -131,13 +139,36 @@ public class ArticleServiceImpl implements ArticleService {
 	public ArticleModel saveArticle(ArticleDto articleDto) {
 		Article article = mapper.convert(articleDto, Article.class);
 
-		Author author = authorDao.authorById(articleDto.getAuthorId());
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		User user = userDao.userByEmail(email);
+		boolean admin = user.getUserRoles() != null && user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_ADMIN);
+
+		Author author;
+		if (admin && articleDto.getAuthorId() != null) {
+			author = authorDao.authorById(articleDto.getAuthorId());
+		} else {
+			// Force author from authenticated user — ignore client authorId unless admin.
+			String displayName = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
+					+ (user.getLastName() != null ? user.getLastName() : "")).trim();
+			AuthorModel authorModel = authorService.getOrCreateForUser(user.getUuid(), displayName,
+					user.getProfilePictureUrl(), authorRoleLabel(user));
+			author = authorDao.authorById(authorModel.getId());
+		}
+
+		if (article.getStatus() == null) {
+			article.setStatus(ArticleStatus.DRAFT);
+		}
+		applyScheduleRules(article);
 
 		article.setAuthor(author);
 
 		Article savedArticle = articleDao.saveArticle(article);
 
-		author.getArticles().add(savedArticle);
+		if (author.getArticles() != null) {
+			author.getArticles().add(savedArticle);
+		}
 		authorDao.saveAuthor(author);
 
 		return mapper.convert(savedArticle, ArticleModel.class);
@@ -158,6 +189,8 @@ public class ArticleServiceImpl implements ArticleService {
 			throw new CustomException(String.format(env.getProperty(ExceptionConstant.ARTICLE_NOT_FOUND), slug),
 					HttpStatus.NOT_FOUND);
 		}
+
+		requireArticleOwnerOrAdmin(article);
 
 		if (articleEditDto.getTitle() != null && !articleEditDto.getTitle().isEmpty()) {
 			article.setTitle(articleEditDto.getTitle());
@@ -190,6 +223,14 @@ public class ArticleServiceImpl implements ArticleService {
 		if (articleEditDto.getStatus() != null) {
 			article.setStatus(articleEditDto.getStatus());
 		}
+
+		if (articleEditDto.getScheduledPublishAt() != null
+				|| articleEditDto.getStatus() == ArticleStatus.SCHEDULED
+				|| articleEditDto.getStatus() == ArticleStatus.PUBLISHED
+				|| articleEditDto.getStatus() == ArticleStatus.DRAFT) {
+			article.setScheduledPublishAt(articleEditDto.getScheduledPublishAt());
+		}
+		applyScheduleRules(article);
 
 		Article savedArticle = articleDao.saveArticle(article);
 
@@ -335,6 +376,116 @@ public class ArticleServiceImpl implements ArticleService {
 	    } else {
 	        return Boolean.FALSE;
 	    }
+	}
+
+	@Transactional
+	@Override
+	public int publishDueScheduledArticles() {
+		List<Article> due = articleDao.findDueScheduledArticles(LocalDateTime.now());
+		int n = 0;
+		for (Article article : due) {
+			article.setStatus(ArticleStatus.PUBLISHED);
+			article.setScheduledPublishAt(null);
+			articleDao.saveArticle(article);
+			n++;
+		}
+		return n;
+	}
+
+	private void applyScheduleRules(Article article) {
+		if (article.getStatus() == ArticleStatus.SCHEDULED) {
+			if (article.getScheduledPublishAt() == null) {
+				throw new CustomException("Scheduled publish date is required", HttpStatus.BAD_REQUEST);
+			}
+			if (!article.getScheduledPublishAt().isAfter(LocalDateTime.now())) {
+				article.setStatus(ArticleStatus.PUBLISHED);
+				article.setScheduledPublishAt(null);
+			}
+		} else if (article.getStatus() == ArticleStatus.PUBLISHED
+				|| article.getStatus() == ArticleStatus.DRAFT
+				|| article.getStatus() == ArticleStatus.ARCHIVED) {
+			article.setScheduledPublishAt(null);
+		}
+	}
+
+	private void constrainPublicListFilter(ArticleFilterDto filter) {
+		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+		boolean publisher = isArticlePublisher(auth);
+		boolean admin = hasRole(auth, com.kittyp.user.enums.ERole.ROLE_ADMIN);
+		Long ownAuthorId = null;
+		if (publisher && !admin && auth != null) {
+			User user = userDao.userByEmail(auth.getName());
+			Author author = authorDao.findByUserUuid(user.getUuid());
+			if (author != null) {
+				ownAuthorId = author.getId();
+			}
+		}
+		ArticleVisibility.constrainListFilter(filter, publisher, admin, ownAuthorId);
+	}
+
+	private boolean canReadUnpublished(Article article) {
+		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+		if (!isArticlePublisher(auth)) {
+			return false;
+		}
+		if (hasRole(auth, com.kittyp.user.enums.ERole.ROLE_ADMIN)) {
+			return true;
+		}
+		User user = userDao.userByEmail(auth.getName());
+		Author author = article.getAuthor();
+		return user != null && author != null && author.getUserUuid() != null
+				&& author.getUserUuid().equals(user.getUuid());
+	}
+
+	private static boolean isArticlePublisher(Authentication auth) {
+		return hasRole(auth, com.kittyp.user.enums.ERole.ROLE_ADMIN)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_MODERATOR)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_DOCTOR)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN)
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_CLINIC_STAFF);
+	}
+
+	private static boolean hasRole(Authentication auth, com.kittyp.user.enums.ERole role) {
+		if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+			return false;
+		}
+		String expected = role.name();
+		return auth.getAuthorities().stream().anyMatch(granted -> expected.equals(granted.getAuthority()));
+	}
+
+	private void requireArticleOwnerOrAdmin(Article article) {
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		User user = userDao.userByEmail(email);
+		boolean admin = user.getUserRoles() != null && user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_ADMIN);
+		if (admin) {
+			return;
+		}
+		Author author = article.getAuthor();
+		if (author == null || author.getUserUuid() == null || !author.getUserUuid().equals(user.getUuid())) {
+			throw new CustomException("You are not authorized to edit this article", HttpStatus.FORBIDDEN);
+		}
+	}
+
+	private static String authorRoleLabel(User user) {
+		if (user.getUserRoles() == null) {
+			return "AUTHOR";
+		}
+		boolean doctor = user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_DOCTOR);
+		if (doctor) {
+			return "DOCTOR";
+		}
+		boolean clinic = user.getUserRoles().stream()
+				.anyMatch(ur -> ur.getRole() != null
+						&& (ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN
+								|| ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_CLINIC_STAFF));
+		if (clinic) {
+			return "CLINIC";
+		}
+		return "AUTHOR";
 	}
 
 }

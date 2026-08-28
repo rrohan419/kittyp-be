@@ -1,20 +1,26 @@
-/**
- * @author rrohan419@gmail.com
- */
 package com.kittyp.common.util;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 
 import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.kittyp.common.exception.CustomException;
 
 @Service
 public class VerificationCodeService {
 
+    private static final int MAX_VERIFY_ATTEMPTS = 5;
+    private static final int MAX_SENDS_PER_WINDOW = 5;
+
     private final Cache<String, String> codeCache;
+    private final Cache<String, Boolean> verifiedCache;
+    private final Cache<String, AtomicInteger> attemptCache;
+    private final Cache<String, AtomicInteger> sendRateCache;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public VerificationCodeService() {
@@ -22,38 +28,104 @@ public class VerificationCodeService {
                 .expireAfterWrite(10, TimeUnit.MINUTES)
                 .maximumSize(10_000)
                 .build();
+        this.verifiedCache = Caffeine.newBuilder()
+                .expireAfterWrite(30, TimeUnit.MINUTES)
+                .maximumSize(10_000)
+                .build();
+        this.attemptCache = Caffeine.newBuilder()
+                .expireAfterWrite(15, TimeUnit.MINUTES)
+                .maximumSize(10_000)
+                .build();
+        this.sendRateCache = Caffeine.newBuilder()
+                .expireAfterWrite(15, TimeUnit.MINUTES)
+                .maximumSize(10_000)
+                .build();
     }
 
-    /**
-     * Generates a 6-digit verification code for the given user ID and stores it in the cache.
-     *
-     * @param userId The unique identifier for the user.
-     * @return The generated 6-digit code.
-     */
-    public String generateCode(String userUuid) {
-        int code = 100_000 + secureRandom.nextInt(900_000); // Generates a number between 100000 and 999999
+    public String generateCode(String key) {
+        enforceSendRateLimit(key);
+        int code = 100_000 + secureRandom.nextInt(900_000);
         String codeStr = String.valueOf(code);
-        codeCache.put(userUuid, codeStr);
+        codeCache.put(key, codeStr);
+        attemptCache.invalidate(key);
         return codeStr;
     }
 
-    /**
-     * Verifies the provided code against the stored code for the given user ID.
-     *
-     * @param userId The unique identifier for the user.
-     * @param code   The code to verify.
-     * @return True if the code matches and is valid; false otherwise.
-     */
-    public boolean verifyCode(String userUuid, String code, boolean deactivateCode) {
-        String cachedCode = codeCache.getIfPresent(userUuid);
-        if (cachedCode != null && cachedCode.equals(code)) {
-        	if(deactivateCode) {
-        		codeCache.invalidate(userUuid); // Invalidate the code after successful verification
-        	}
+    public boolean verifyCode(String key, String code, boolean deactivateCode) {
+        if (key == null || code == null || code.isBlank()) {
+            return false;
+        }
+
+        AtomicInteger attempts = attemptCache.get(key, k -> new AtomicInteger(0));
+        if (attempts != null && attempts.get() >= MAX_VERIFY_ATTEMPTS) {
+            throw new CustomException("Too many invalid OTP attempts. Please request a new code.",
+                    HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        String cachedCode = codeCache.getIfPresent(key);
+        if (cachedCode != null && cachedCode.equals(code.trim())) {
+            if (deactivateCode) {
+                codeCache.invalidate(key);
+            }
+            attemptCache.invalidate(key);
             return true;
+        }
+
+        if (attempts != null) {
+            attempts.incrementAndGet();
         }
         return false;
     }
+
+    public void markVerified(String key) {
+        verifiedCache.put(key, Boolean.TRUE);
+    }
+
+    public boolean isVerified(String key) {
+        return Boolean.TRUE.equals(verifiedCache.getIfPresent(key));
+    }
+
+    public void clearVerified(String key) {
+        verifiedCache.invalidate(key);
+    }
+
+    private void enforceSendRateLimit(String key) {
+        AtomicInteger sends = sendRateCache.get(key, k -> new AtomicInteger(0));
+        if (sends != null && sends.incrementAndGet() > MAX_SENDS_PER_WINDOW) {
+            throw new CustomException("Too many OTP requests. Please try again later.",
+                    HttpStatus.TOO_MANY_REQUESTS);
+        }
+    }
+
+    public static String emailOtpKey(String email) {
+        return "signup-email:" + email.trim().toLowerCase();
+    }
+
+    public static String phoneOtpKey(String phone) {
+        return "signup-phone:" + phone.trim();
+    }
+
+    public static String emailVerifiedKey(String email) {
+        return "signup-email-ok:" + email.trim().toLowerCase();
+    }
+
+    public static String phoneVerifiedKey(String phone) {
+        return "signup-phone-ok:" + phone.trim();
+    }
+
+    public static String profileEmailOtpKey(String userUuid, String email) {
+        return "profile-email:" + userUuid + ":" + email.trim().toLowerCase();
+    }
+
+    public static String profilePhoneOtpKey(String userUuid, String phone) {
+        return "profile-phone:" + userUuid + ":" + phone.trim();
+    }
+
+    public static String profileEmailVerifiedKey(String userUuid, String email) {
+        return "profile-email-ok:" + userUuid + ":" + email.trim().toLowerCase();
+    }
+
+    public static String profilePhoneVerifiedKey(String userUuid, String phone) {
+        return "profile-phone-ok:" + userUuid + ":" + phone.trim();
+    }
 }
-
-

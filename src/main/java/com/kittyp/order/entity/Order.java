@@ -82,6 +82,21 @@ public class Order extends BaseEntity {
 
    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
    private List<OrderItem> orderItems;
+
+   @Column(name = "payment_id", length = 255)
+   private String paymentId;
+
+   @Column(name = "refund_id", length = 255)
+   private String refundId;
+
+   @Column(name = "shipping_method", length = 255)
+   private String shippingMethod;
+
+   @Column(name = "shipping_cost", precision = 10, scale = 2)
+   private BigDecimal shippingCost;
+
+   @Column(name = "invoice_url", length = 1024)
+   private String invoiceUrl;
    
    public void removeOrderItems(OrderItem orderItem) {
 	    orderItems.remove(orderItem);

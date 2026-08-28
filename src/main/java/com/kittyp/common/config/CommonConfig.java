@@ -19,16 +19,28 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class CommonConfig {
 
+	private static final List<String> ALLOWED_ORIGINS = List.of(
+			"http://localhost:5173",
+			"http://localhost:3000",
+			"http://localhost:8080",
+			"http://127.0.0.1:8080",
+			"http://127.0.0.1:4173",
+			"http://127.0.0.1:5173",
+			"https://kittyp.netlify.app",
+			"https://kittyp.in",
+			"https://www.kittyp.in");
+
 	@Bean
 	public WebMvcConfigurer corsConfigurer() {
 		return new WebMvcConfigurer() {
 			@Override
 			public void addCorsMappings(CorsRegistry registry) {
-				registry.addMapping("/**") // Allow all endpoints
-						.allowedOrigins("http://localhost:8080", "https://kittyp.netlify.app", "https://kittyp.in",
-								"https://www.kittyp.in") // Frontend URL
-						.allowedMethods("*") // Allow all HTTP methods
-						.allowedHeaders("*").allowCredentials(true);
+				registry.addMapping("/**")
+						.allowedOrigins(ALLOWED_ORIGINS.toArray(String[]::new))
+						.allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+						.allowedHeaders("*")
+						.allowCredentials(true)
+						.maxAge(3600);
 			}
 		};
 	}
@@ -36,11 +48,11 @@ public class CommonConfig {
 	@Bean
 	CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		config.setAllowedOrigins(List.of("http://localhost:8080", "https://kittyp.netlify.app", "https://kittyp.in",
-				"https://www.kittyp.in"));
+		config.setAllowedOrigins(ALLOWED_ORIGINS);
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("*"));
 		config.setAllowCredentials(true);
+		config.setMaxAge(3600L);
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
 		source.registerCorsConfiguration("/**", config);
 		return source;

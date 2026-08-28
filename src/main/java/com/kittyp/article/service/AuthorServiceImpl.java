@@ -70,6 +70,23 @@ public class AuthorServiceImpl implements AuthorService {
         return mapper.convert(updatedAuthor, AuthorModel.class);
     }
 
+    @Override
+    public AuthorModel getOrCreateForUser(String userUuid, String displayName, String avatarUrl, String role) {
+        Author existing = authorDao.findByUserUuid(userUuid);
+        if (existing != null) {
+            return mapper.convert(existing, AuthorModel.class);
+        }
+        String resolvedRole = role != null && !role.isBlank() ? role : "AUTHOR";
+        String fallbackName = "CLINIC".equalsIgnoreCase(resolvedRole) ? "Clinic" : "Doctor";
+        Author created = Author.builder()
+                .name(displayName != null && !displayName.isBlank() ? displayName : fallbackName)
+                .avatar(avatarUrl)
+                .role(resolvedRole)
+                .userUuid(userUuid)
+                .build();
+        return mapper.convert(authorDao.saveAuthor(created), AuthorModel.class);
+    }
+
     
 
 }
