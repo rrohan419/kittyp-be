@@ -141,6 +141,13 @@ public class ApiUrl {
 	public static final String CLINIC_INVITE_BY_TOKEN = CLINIC_BASE_URL + "/invites/{token}";
 	public static final String CLINIC_INVITE_ACCEPT = CLINIC_INVITE_BY_TOKEN + "/accept";
 	public static final String CLINIC_INVITE_REJECT = CLINIC_INVITE_BY_TOKEN + "/reject";
+	public static final String CLINIC_STAFF = CLINIC_BY_UUID + "/staff";
+	public static final String CLINIC_STAFF_INVITE = CLINIC_STAFF + "/invite";
+	public static final String CLINIC_STAFF_INVITES = CLINIC_STAFF + "/invites";
+	public static final String CLINIC_STAFF_DISABLE = CLINIC_STAFF + "/{userUuid}/disable";
+	public static final String CLINIC_STAFF_INVITE_REVOKE = CLINIC_STAFF_INVITES + "/{inviteUuid}/revoke";
+	public static final String CLINIC_STAFF_INVITE_BY_TOKEN = CLINIC_BASE_URL + "/staff-invite/{token}";
+	public static final String CLINIC_STAFF_INVITE_COMPLETE = CLINIC_STAFF_INVITE_BY_TOKEN + "/complete";
 	public static final String CLINIC_PATIENTS = CLINIC_BY_UUID + "/patients";
 	public static final String CLINIC_PATIENT_DETAIL = CLINIC_PATIENTS + "/{petUuid}";
 	public static final String CLINIC_PATIENT_ADD = CLINIC_PATIENTS;

@@ -26,6 +26,11 @@ import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteCompleteRequest;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteModel;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInvitePreview;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteRequest;
+import com.kittyp.clinic.dto.ClinicDtos.StaffMemberModel;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.common.model.PaginationModel;
 
@@ -73,6 +78,20 @@ public interface ClinicService {
     DoctorModel acceptInvite(String token, String email);
 
     void rejectInvite(String token, String email);
+
+    StaffInviteModel inviteStaff(String clinicUuid, StaffInviteRequest request, String email);
+
+    List<StaffInviteModel> listStaffInvites(String clinicUuid, String email);
+
+    List<StaffMemberModel> listStaff(String clinicUuid, String email);
+
+    void revokeStaffInvite(String clinicUuid, String inviteUuid, String email);
+
+    void disableStaff(String clinicUuid, String userUuid, String email);
+
+    StaffInvitePreview previewStaffInvite(String token);
+
+    StaffMemberModel completeStaffInvite(String token, StaffInviteCompleteRequest request);
 
     List<PatientModel> patients(String clinicUuid, String email);
 

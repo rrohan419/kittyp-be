@@ -89,8 +89,7 @@ public class AuthorController {
 			return "DOCTOR";
 		}
 		boolean clinic = user.getUserRoles().stream()
-				.anyMatch(ur -> ur.getRole() != null && (ur.getRole().getName() == ERole.ROLE_CLINIC_ADMIN
-						|| ur.getRole().getName() == ERole.ROLE_CLINIC_STAFF));
+				.anyMatch(ur -> ur.getRole() != null && ur.getRole().getName() == ERole.ROLE_CLINIC_ADMIN);
 		if (clinic) {
 			return "CLINIC";
 		}

@@ -46,7 +46,7 @@ class ClinicServiceImplInviteAuthTest {
 				() -> clinicService.inviteDoctor("clinic-uuid",
 						new DoctorInviteRequest("Dr A", "a@example.com", null), "doc@example.com"));
 
-		assertEquals("Only clinic accounts can invite doctors", ex.getMessage());
+		assertEquals("Only clinic admins can invite doctors", ex.getMessage());
 		verify(clinicDao, never()).findByUuid(anyString());
 	}
 
@@ -72,6 +72,19 @@ class ClinicServiceImplInviteAuthTest {
 				() -> clinicService.inviteDoctor("clinic-uuid",
 						new DoctorInviteRequest("Dr A", "a@example.com", null), "both@example.com"));
 		verify(clinicDao).findByUuid("clinic-uuid");
+	}
+
+	@Test
+	void inviteDoctor_clinicStaff_throwsAccessDenied() {
+		when(userDao.userByEmail("staff@example.com"))
+				.thenReturn(userWithRoles(4L, "staff@example.com", ERole.ROLE_CLINIC_STAFF));
+
+		AccessDeniedException ex = assertThrows(AccessDeniedException.class,
+				() -> clinicService.inviteDoctor("clinic-uuid",
+						new DoctorInviteRequest("Dr A", "a@example.com", null), "staff@example.com"));
+
+		assertEquals("Only clinic admins can invite doctors", ex.getMessage());
+		verify(clinicDao, never()).findByUuid(anyString());
 	}
 
 	private static User userWithRoles(Long id, String email, ERole... roles) {

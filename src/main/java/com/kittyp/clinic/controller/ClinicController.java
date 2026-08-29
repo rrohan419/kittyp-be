@@ -39,6 +39,11 @@ import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicStatsModel;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteCompleteRequest;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteModel;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInvitePreview;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteRequest;
+import com.kittyp.clinic.dto.ClinicDtos.StaffMemberModel;
 import com.kittyp.clinic.dto.ClinicDtos.SwitchClinicRequest;
 import com.kittyp.clinic.service.ClinicService;
 import com.kittyp.common.constants.ApiUrl;
@@ -74,7 +79,7 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_BASE_URL)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN_OR_STAFF)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<ClinicModel>> create(@RequestBody @Valid ClinicRequest request) {
         return success(clinicService.create(request, email()));
     }
@@ -86,7 +91,7 @@ public class ClinicController {
     }
 
     @PatchMapping(ApiUrl.CLINIC_BY_UUID)
-    @PreAuthorize(CLINIC_ACCESS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<ClinicModel>> update(@PathVariable String uuid,
             @RequestBody @Valid ClinicRequest request) {
         return success(clinicService.update(uuid, request, email()));
@@ -119,26 +124,26 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN_OR_STAFF)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<DoctorInviteModel>> inviteDoctor(@PathVariable String uuid,
             @RequestBody @Valid DoctorInviteRequest request) {
         return success(clinicService.inviteDoctor(uuid, request, email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_DOCTOR_LOOKUP)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN_OR_STAFF)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<DoctorLookupModel>> lookupDoctor(@RequestParam String uuid) {
         return success(clinicService.lookupDoctor(uuid, email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_DOCTOR_INVITES)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN_OR_STAFF)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<List<DoctorInviteModel>>> doctorInvites(@PathVariable String uuid) {
         return success(clinicService.listDoctorInvites(uuid, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE_REVOKE)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN_OR_STAFF)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<Void>> revokeDoctorInvite(@PathVariable String uuid,
             @PathVariable String inviteUuid) {
         clinicService.revokeDoctorInvite(uuid, inviteUuid, email());
@@ -146,7 +151,7 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_DOCTOR_INVITE_REMIND)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN_OR_STAFF)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<DoctorInviteModel>> remindDoctorInvite(@PathVariable String uuid,
             @PathVariable String inviteUuid) {
         return success(clinicService.remindDoctorInvite(uuid, inviteUuid, email()));
@@ -174,6 +179,52 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<Void>> rejectInvite(@PathVariable String token) {
         clinicService.rejectInvite(token, email());
         return success(null);
+    }
+
+    @PostMapping(ApiUrl.CLINIC_STAFF_INVITE)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<StaffInviteModel>> inviteStaff(@PathVariable String uuid,
+            @RequestBody @Valid StaffInviteRequest request) {
+        return success(clinicService.inviteStaff(uuid, request, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_STAFF)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<List<StaffMemberModel>>> staff(@PathVariable String uuid) {
+        return success(clinicService.listStaff(uuid, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_STAFF_INVITES)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<List<StaffInviteModel>>> staffInvites(@PathVariable String uuid) {
+        return success(clinicService.listStaffInvites(uuid, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_STAFF_INVITE_REVOKE)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<Void>> revokeStaffInvite(@PathVariable String uuid,
+            @PathVariable String inviteUuid) {
+        clinicService.revokeStaffInvite(uuid, inviteUuid, email());
+        return success(null);
+    }
+
+    @PostMapping(ApiUrl.CLINIC_STAFF_DISABLE)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<Void>> disableStaff(@PathVariable String uuid,
+            @PathVariable String userUuid) {
+        clinicService.disableStaff(uuid, userUuid, email());
+        return success(null);
+    }
+
+    @GetMapping(ApiUrl.CLINIC_STAFF_INVITE_BY_TOKEN)
+    public ResponseEntity<SuccessResponse<StaffInvitePreview>> previewStaffInvite(@PathVariable String token) {
+        return success(clinicService.previewStaffInvite(token));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_STAFF_INVITE_COMPLETE)
+    public ResponseEntity<SuccessResponse<StaffMemberModel>> completeStaffInvite(@PathVariable String token,
+            @RequestBody @Valid StaffInviteCompleteRequest request) {
+        return success(clinicService.completeStaffInvite(token, request));
     }
 
     @GetMapping(ApiUrl.CLINIC_PATIENTS)
@@ -334,13 +385,13 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_SHUTDOWN)
-    @PreAuthorize(CLINIC_ACCESS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<ClinicModel>> shutdown(@PathVariable String uuid) {
         return success(clinicService.shutdown(uuid, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_REOPEN)
-    @PreAuthorize(CLINIC_ACCESS)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<ClinicModel>> reopen(@PathVariable String uuid) {
         return success(clinicService.reopen(uuid, email()));
     }
