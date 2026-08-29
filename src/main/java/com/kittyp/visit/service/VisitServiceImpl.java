@@ -747,9 +747,8 @@ public class VisitServiceImpl implements VisitService {
     @Transactional(readOnly = true)
     public List<VisitModel> listPetVisitsForClinic(String clinicUuid, String petUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
-        petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", petUuid));
-        return visitDao.findByPetAndClinic(petUuid, clinic.getId()).stream()
+        Pet pet = requirePetAtClinic(clinic, petUuid, false);
+        return visitDao.findByPetAndClinic(pet.getUuid(), clinic.getId()).stream()
                 .map(v -> toModel(v, true))
                 .toList();
     }
@@ -1186,36 +1185,57 @@ public class VisitServiceImpl implements VisitService {
         return (owner.getFirstName() + (last.isEmpty() ? "" : " " + last)).trim();
     }
 
+    /**
+     * Resolve a pet at this clinic by public id (pets.uuid), patient number, or
+     * enrollment. Public ids are 6-character codes, not UUID v4.
+     */
+    private Pet requirePetAtClinic(Clinic clinic, String petKey, boolean requireActive) {
+        Pet pet = findPetByPublicKey(clinic, petKey);
+        if (pet == null || (requireActive && !Boolean.TRUE.equals(pet.getIsActive()))) {
+            throw new ResourceNotFoundException("pet", "uuid", petKey);
+        }
+        if (petBelongsToClinic(clinic, pet)) {
+            return pet;
+        }
+        if (!requireActive && !visitDao.findByPetAndClinic(pet.getUuid(), clinic.getId()).isEmpty()) {
+            return pet;
+        }
+        throw new ResourceNotFoundException("pet", "uuid", petKey);
+    }
+
+    private Pet findPetByPublicKey(Clinic clinic, String petKey) {
+        if (petKey == null || petKey.isBlank()) {
+            return null;
+        }
+        String key = petKey.trim();
+        Pet pet = petsRepository.findByUuidIgnoreCase(key).orElse(null);
+        if (pet != null) {
+            return pet;
+        }
+        return petsRepository.findFirstByClinic_IdAndPatientNumberIgnoreCase(clinic.getId(), key).orElse(null);
+    }
+
+    private boolean petBelongsToClinic(Clinic clinic, Pet pet) {
+        if (pet.getClinic() != null && pet.getClinic().getId().equals(clinic.getId())) {
+            return true;
+        }
+        if (clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
+                .isPresent()) {
+            return true;
+        }
+        DoctorProfile practiceDoctor = clinic.getOwner() == null
+                ? null
+                : doctorProfileDao.findByUserId(clinic.getOwner().getId());
+        return practiceDoctor != null
+                && ParentBookingEnrollmentService.isPersonalPractice(clinic, practiceDoctor)
+                && doctorPatientEnrollmentRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrue(
+                        practiceDoctor.getId(), pet.getUuid());
+    }
+
     private Pet resolvePetForWalkIn(Clinic clinic, WalkInCreateRequest request) {
         if (request.petUuid() != null && !request.petUuid().isBlank()) {
-            Optional<Pet> byClinic = petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(request.petUuid(),
-                    clinic.getId());
-            if (byClinic.isPresent()) {
-                return byClinic.get();
-            }
-            Optional<Pet> enrolled = clinicPetEnrollmentRepository
-                    .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), request.petUuid())
-                    .map(ClinicPetEnrollment::getPet)
-                    .filter(p -> Boolean.TRUE.equals(p.getIsActive()));
-            if (enrolled.isPresent()) {
-                return enrolled.get();
-            }
-            Pet byPublicId = petsRepository.findByUuidIgnoreCase(request.petUuid().trim()).orElse(null);
-            if (byPublicId != null && Boolean.TRUE.equals(byPublicId.getIsActive())) {
-                if (byPublicId.getClinic() != null && byPublicId.getClinic().getId().equals(clinic.getId())) {
-                    return byPublicId;
-                }
-                DoctorProfile practiceDoctor = clinic.getOwner() == null
-                        ? null
-                        : doctorProfileDao.findByUserId(clinic.getOwner().getId());
-                if (practiceDoctor != null
-                        && ParentBookingEnrollmentService.isPersonalPractice(clinic, practiceDoctor)
-                        && doctorPatientEnrollmentRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrue(
-                                practiceDoctor.getId(), byPublicId.getUuid())) {
-                    return byPublicId;
-                }
-            }
-            throw new ResourceNotFoundException("pet", "uuid", request.petUuid());
+            return requirePetAtClinic(clinic, request.petUuid(), true);
         }
 
         WalkInOwnerRequest ownerReq = request.owner();

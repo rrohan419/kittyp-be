@@ -1088,9 +1088,15 @@ public class TreatmentInvoiceService {
      * (personal practice only) on the doctor's patient roster.
      */
     private Pet requireInvoiceClinicPet(Clinic clinic, User doctorUser, String petUuid) {
-        return petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(petUuid, clinic.getId())
+        String key = petUuid == null ? "" : petUuid.trim();
+        Pet resolved = petsRepository.findByUuidIgnoreCase(key).orElse(null);
+        if (resolved == null) {
+            resolved = petsRepository.findFirstByClinic_IdAndPatientNumberIgnoreCase(clinic.getId(), key).orElse(null);
+        }
+        String id = resolved != null ? resolved.getUuid() : key;
+        return petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(id, clinic.getId())
                 .or(() -> clinicPetEnrollmentRepository
-                        .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), petUuid)
+                        .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), id)
                         .map(ClinicPetEnrollment::getPet)
                         .filter(p -> Boolean.TRUE.equals(p.getIsActive())))
                 .or(() -> {
@@ -1104,10 +1110,10 @@ public class TreatmentInvoiceService {
                         return java.util.Optional.empty();
                     }
                     if (!doctorPatientEnrollmentRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrue(profile.getId(),
-                            petUuid)) {
+                            id)) {
                         return java.util.Optional.empty();
                     }
-                    return petsRepository.findOptionalByUuid(petUuid)
+                    return petsRepository.findOptionalByUuid(id)
                             .filter(p -> Boolean.TRUE.equals(p.getIsActive()));
                 })
                 .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));

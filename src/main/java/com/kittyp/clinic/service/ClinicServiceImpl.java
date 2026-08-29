@@ -25,6 +25,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -64,6 +65,11 @@ import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientPetModel;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteCompleteRequest;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteModel;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInvitePreview;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInviteRequest;
+import com.kittyp.clinic.dto.ClinicDtos.StaffMemberModel;
 import com.kittyp.clinic.dto.ClinicDtos.VaccineScheduleModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicDoctor;
@@ -71,13 +77,17 @@ import com.kittyp.clinic.entity.ClinicDoctorInvite;
 import com.kittyp.clinic.entity.ClinicPatientPet;
 import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
+import com.kittyp.clinic.entity.ClinicStaff;
+import com.kittyp.clinic.entity.ClinicStaffInvite;
 import com.kittyp.clinic.enums.ClinicDoctorInviteStatus;
+import com.kittyp.clinic.enums.ClinicStaffInviteStatus;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPatientPetRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
+import com.kittyp.clinic.repository.ClinicStaffInviteRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.util.SafePhotoUrl;
@@ -98,6 +108,7 @@ import com.kittyp.notification.entity.NotificationLog;
 import com.kittyp.notification.enums.NotificationType;
 import com.kittyp.notification.repository.NotificationLogRepository;
 import com.kittyp.user.dao.PetDao;
+import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Address;
 import com.kittyp.user.entity.Pet;
@@ -146,6 +157,9 @@ public class ClinicServiceImpl implements ClinicService {
     private final ConsultationInvoiceRepository consultationInvoiceRepository;
     private final VisitDao visitDao;
     private final UserRepository userRepository;
+    private final ClinicStaffInviteRepository clinicStaffInviteRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final RoleDao roleDao;
 
     @Value("${app.frontend.base-url:http://localhost:8080}")
     private String frontendBaseUrl;
@@ -836,6 +850,259 @@ public class ClinicServiceImpl implements ClinicService {
         notifyClinicOfInviteResponse(invite, false);
     }
 
+    @Override
+    @Transactional
+    public StaffInviteModel inviteStaff(String clinicUuid, StaffInviteRequest request, String email) {
+        User inviter = userDao.userByEmail(email);
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, inviter);
+        requireActivated(clinic);
+
+        long invitesLastHour = clinicStaffInviteRepository.countByClinic_IdAndCreatedAtAfter(
+                clinic.getId(), LocalDateTime.now().minusHours(1));
+        if (invitesLastHour >= 20) {
+            throw new CustomException("Too many staff invites sent recently. Try again later.",
+                    HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        if (request.name() == null || request.name().isBlank()) {
+            throw new CustomException("Staff name is required", HttpStatus.BAD_REQUEST);
+        }
+        if (request.email() == null || request.email().isBlank()) {
+            throw new CustomException("Staff email is required", HttpStatus.BAD_REQUEST);
+        }
+        String inviteEmail = request.email().trim().toLowerCase();
+        if (!inviteEmail.contains("@") || inviteEmail.length() < 5) {
+            throw new CustomException("Enter a valid staff email", HttpStatus.BAD_REQUEST);
+        }
+        if (inviteEmail.equalsIgnoreCase(inviter.getEmail())) {
+            throw new CustomException("You cannot invite your own account as staff", HttpStatus.BAD_REQUEST);
+        }
+
+        userRepository.findByEmailIgnoreCase(inviteEmail).ifPresent(existing -> {
+            if (!isStaffOnly(existing)) {
+                throw new CustomException(
+                        "This email already has a KittyP account. Invite a dedicated staff work email.",
+                        HttpStatus.CONFLICT);
+            }
+            if (clinicStaffDao.existsActiveByUserId(existing.getId())) {
+                throw new CustomException(
+                        "This person is already active staff at a clinic. Disable them there first.",
+                        HttpStatus.CONFLICT);
+            }
+        });
+
+        ClinicStaffInvite invite = clinicStaffInviteRepository
+                .findByClinic_IdAndEmailIgnoreCaseAndStatus(clinic.getId(), inviteEmail, ClinicStaffInviteStatus.PENDING)
+                .orElse(null);
+
+        String token = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(7);
+        String staffName = request.name().trim();
+
+        if (invite == null) {
+            invite = ClinicStaffInvite.builder()
+                    .uuid(UUID.randomUUID().toString())
+                    .clinic(clinic)
+                    .email(inviteEmail)
+                    .staffName(staffName)
+                    .token(token)
+                    .status(ClinicStaffInviteStatus.PENDING)
+                    .invitedByUserId(inviter.getId())
+                    .expiresAt(expiresAt)
+                    .build();
+        } else {
+            invite.setStaffName(staffName);
+            invite.setToken(token);
+            invite.setExpiresAt(expiresAt);
+            invite.setInvitedByUserId(inviter.getId());
+        }
+        invite = clinicStaffInviteRepository.save(invite);
+
+        String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/staff-invite/accept?token=" + invite.getToken();
+        zeptoMailService.sendClinicStaffInviteEmail(inviteEmail, staffName, clinic.getName(), acceptUrl);
+        return staffInviteModel(invite, true);
+    }
+
+    @Override
+    @Transactional
+    public List<StaffInviteModel> listStaffInvites(String clinicUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        LocalDateTime now = LocalDateTime.now();
+        return clinicStaffInviteRepository.findByClinic_IdOrderByCreatedAtDesc(clinic.getId()).stream()
+                .map(invite -> {
+                    if (invite.getStatus() == ClinicStaffInviteStatus.PENDING
+                            && invite.getExpiresAt().isBefore(now)) {
+                        invite.setStatus(ClinicStaffInviteStatus.EXPIRED);
+                        clinicStaffInviteRepository.save(invite);
+                    }
+                    return invite;
+                })
+                .filter(invite -> invite.getStatus() == ClinicStaffInviteStatus.PENDING
+                        || invite.getStatus() == ClinicStaffInviteStatus.ACCEPTED)
+                .map(invite -> staffInviteModel(invite, true))
+                .toList();
+    }
+
+    @Override
+    public List<StaffMemberModel> listStaff(String clinicUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        return clinicStaffDao.findActiveByClinicId(clinic.getId()).stream()
+                .map(this::staffMemberModel)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void revokeStaffInvite(String clinicUuid, String inviteUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        ClinicStaffInvite invite = clinicStaffInviteRepository.findByUuid(inviteUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("staff invite", "uuid", inviteUuid));
+        if (!invite.getClinic().getId().equals(clinic.getId())) {
+            throw new CustomException("Invite does not belong to this clinic", HttpStatus.FORBIDDEN);
+        }
+        if (invite.getStatus() != ClinicStaffInviteStatus.PENDING) {
+            throw new CustomException("Only pending invites can be revoked", HttpStatus.BAD_REQUEST);
+        }
+        invite.setStatus(ClinicStaffInviteStatus.REVOKED);
+        clinicStaffInviteRepository.save(invite);
+    }
+
+    @Override
+    @Transactional
+    public void disableStaff(String clinicUuid, String userUuid, String email) {
+        User actor = userDao.userByEmail(email);
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, actor);
+        User staffUser = userDao.userByUuid(userUuid);
+        if (staffUser.getId().equals(actor.getId())) {
+            throw new CustomException("You cannot disable your own staff account", HttpStatus.BAD_REQUEST);
+        }
+        ClinicStaff membership = clinicStaffDao.findLatestByClinicAndUser(clinic.getId(), staffUser.getId())
+                .filter(row -> Boolean.TRUE.equals(row.getIsActive()))
+                .orElseThrow(() -> new CustomException("This person is not active staff at this clinic",
+                        HttpStatus.NOT_FOUND));
+        if (!isStaffOnly(staffUser)) {
+            throw new CustomException("Only dedicated staff accounts can be disabled from here", HttpStatus.BAD_REQUEST);
+        }
+        membership.setIsActive(false);
+        clinicStaffDao.save(membership);
+        staffUser.setEnabled(false);
+        staffUser.setIsActive(false);
+        userDao.saveUser(staffUser);
+    }
+
+    @Override
+    public StaffInvitePreview previewStaffInvite(String token) {
+        ClinicStaffInvite invite = requireStaffInviteByToken(token);
+        boolean expired = invite.getExpiresAt() != null && invite.getExpiresAt().isBefore(LocalDateTime.now());
+        boolean accepted = invite.getStatus() == ClinicStaffInviteStatus.ACCEPTED;
+        ClinicStaffInviteStatus status = invite.getStatus();
+        if (expired && status == ClinicStaffInviteStatus.PENDING) {
+            status = ClinicStaffInviteStatus.EXPIRED;
+        }
+        return new StaffInvitePreview(invite.getClinic().getName(), invite.getStaffName(), invite.getEmail(), expired,
+                accepted, status.name());
+    }
+
+    @Override
+    @Transactional
+    public StaffMemberModel completeStaffInvite(String token, StaffInviteCompleteRequest request) {
+        ClinicStaffInvite invite = requireStaffInviteByToken(token);
+        if (invite.getStatus() != ClinicStaffInviteStatus.PENDING) {
+            throw new CustomException("This invite is no longer valid", HttpStatus.BAD_REQUEST);
+        }
+        if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+            invite.setStatus(ClinicStaffInviteStatus.EXPIRED);
+            clinicStaffInviteRepository.save(invite);
+            throw new CustomException("This invite has expired", HttpStatus.BAD_REQUEST);
+        }
+        Clinic clinic = invite.getClinic();
+        requireActivated(clinic);
+
+        User user = userRepository.findByEmailIgnoreCase(invite.getEmail()).orElse(null);
+        if (user == null) {
+            user = User.builder()
+                    .email(invite.getEmail())
+                    .password(passwordEncoder.encode(request.password()))
+                    .firstName(request.firstName().trim())
+                    .lastName(request.lastName() == null ? null : request.lastName().trim())
+                    .enabled(true)
+                    .build();
+            user.setIsActive(true);
+            user.addRole(roleDao.roleByName(ERole.ROLE_CLINIC_STAFF));
+            user = userDao.saveUser(user);
+        } else {
+            if (!isStaffOnly(user)) {
+                throw new CustomException(
+                        "This email already has a KittyP account. Invite a dedicated staff work email.",
+                        HttpStatus.CONFLICT);
+            }
+            if (clinicStaffDao.existsActiveByUserId(user.getId())
+                    && !clinicStaffDao.isActiveMember(clinic.getId(), user.getId())) {
+                throw new CustomException(
+                        "This person is already active staff at a clinic. Disable them there first.",
+                        HttpStatus.CONFLICT);
+            }
+            user.setPassword(passwordEncoder.encode(request.password()));
+            user.setFirstName(request.firstName().trim());
+            user.setLastName(request.lastName() == null ? null : request.lastName().trim());
+            user.setEnabled(true);
+            user.setIsActive(true);
+            user = userDao.saveUser(user);
+        }
+
+        ClinicStaff membership = clinicStaffDao.findLatestByClinicAndUser(clinic.getId(), user.getId()).orElse(null);
+        if (membership == null) {
+            membership = ClinicStaff.builder()
+                    .clinic(clinic)
+                    .user(user)
+                    .role("staff")
+                    .joinedAt(LocalDateTime.now())
+                    .build();
+            membership.setIsActive(true);
+        } else {
+            membership.setIsActive(true);
+            membership.setRole("staff");
+            membership.setJoinedAt(LocalDateTime.now());
+        }
+        membership = clinicStaffDao.save(membership);
+
+        invite.setStatus(ClinicStaffInviteStatus.ACCEPTED);
+        clinicStaffInviteRepository.save(invite);
+        return staffMemberModel(membership);
+    }
+
+    private ClinicStaffInvite requireStaffInviteByToken(String token) {
+        return clinicStaffInviteRepository.findByToken(token)
+                .orElseThrow(() -> new ResourceNotFoundException("staff invite", "token", token));
+    }
+
+    private StaffInviteModel staffInviteModel(ClinicStaffInvite invite, boolean includeToken) {
+        String createdAt = invite.getCreatedAt() != null ? invite.getCreatedAt().toString() : null;
+        return new StaffInviteModel(invite.getUuid(), invite.getEmail(), invite.getStaffName(),
+                invite.getStatus().name(), invite.getExpiresAt().toString(), invite.getClinic().getUuid(),
+                invite.getClinic().getName(), includeToken ? invite.getToken() : null, createdAt);
+    }
+
+    private StaffMemberModel staffMemberModel(ClinicStaff membership) {
+        User user = membership.getUser();
+        boolean enabled = user.isEnabled() && (user.getIsActive() == null || Boolean.TRUE.equals(user.getIsActive()));
+        return new StaffMemberModel(user.getUuid(), user.getEmail(), fullName(user), membership.getRole(),
+                membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(), enabled);
+    }
+
+    private static boolean isStaffOnly(User user) {
+        if (user.getUserRoles() == null || user.getUserRoles().isEmpty()) {
+            return false;
+        }
+        return user.getUserRoles().stream().allMatch(userRole -> userRole.getRole() != null
+                && userRole.getRole().getName() == ERole.ROLE_CLINIC_STAFF);
+    }
+
     private void notifyClinicOfInviteResponse(ClinicDoctorInvite invite, boolean accepted) {
         Clinic clinic = invite.getClinic();
         String action = accepted ? "accepted" : "declined";
@@ -1517,7 +1784,7 @@ public class ClinicServiceImpl implements ClinicService {
         pet.setDateOfBirth(request.dateOfBirth());
         pet.setWeight(blankToNull(request.weight()));
         User viewer = userDao.userByEmail(email);
-        if (hasClinicInviteRole(viewer)) {
+        if (hasClinicInviteRole(viewer) || hasClinicStaffRole(viewer)) {
             pet.setMicrochipNumber(blankToNull(request.microchipNumber()));
         }
         pet.setProfilePicture(SafePhotoUrl.requireHttps(blankToNull(request.photoUrl())));
@@ -1545,10 +1812,10 @@ public class ClinicServiceImpl implements ClinicService {
         if (homeHere) {
             pet.setIsActive(false);
             petsRepository.save(pet);
-            log.info("Soft-hid clinic pet {} at clinic {} (visits retained)", petUuid, clinicUuid);
+            log.info("Soft-hid clinic pet {} at clinic {} (visits retained)", pet.getUuid(), clinicUuid);
             return;
         }
-        clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), petUuid)
+        clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
                 .ifPresent(enr -> {
                     enr.setIsActive(false);
                     clinicPetEnrollmentRepository.save(enr);
@@ -1556,7 +1823,7 @@ public class ClinicServiceImpl implements ClinicService {
         User viewer = userDao.userByEmail(email);
         DoctorProfile doctor = doctorProfileDao.findByUserId(viewer.getId());
         if (doctor != null && clinic.getOwner() != null && clinic.getOwner().getId().equals(viewer.getId())) {
-            doctorPatientEnrollmentRepository.findByDoctor_IdAndPet_UuidAndIsActiveTrue(doctor.getId(), petUuid)
+            doctorPatientEnrollmentRepository.findByDoctor_IdAndPet_UuidAndIsActiveTrue(doctor.getId(), pet.getUuid())
                     .ifPresent(enr -> {
                         enr.setIsActive(false);
                         doctorPatientEnrollmentRepository.save(enr);
@@ -1686,9 +1953,17 @@ public class ClinicServiceImpl implements ClinicService {
     /**
      * Pet is accessible at this clinic if home-registered, multi-clinic enrolled, or
      * (personal practice) on the viewing doctor's patient roster — without moving clinic_id.
+     * {@code petUuid} may be the public 6-character id or a clinic patient number.
      */
     private AccessiblePet resolveAccessiblePet(Clinic clinic, String petUuid, String email) {
-        Optional<Pet> home = petsRepository.findByUuidAndClinic_Id(petUuid, clinic.getId());
+        String key = petUuid == null ? "" : petUuid.trim();
+        Pet resolved = petsRepository.findByUuidIgnoreCase(key).orElse(null);
+        if (resolved == null) {
+            resolved = petsRepository.findFirstByClinic_IdAndPatientNumberIgnoreCase(clinic.getId(), key).orElse(null);
+        }
+        String id = resolved != null ? resolved.getUuid() : key;
+
+        Optional<Pet> home = petsRepository.findByUuidAndClinic_Id(id, clinic.getId());
         if (home.isPresent()) {
             Pet pet = home.get();
             if (pet.getClinicOwner() != null) {
@@ -1698,7 +1973,7 @@ public class ClinicServiceImpl implements ClinicService {
         }
 
         Optional<ClinicPetEnrollment> enrollment = clinicPetEnrollmentRepository
-                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), petUuid);
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), id);
         if (enrollment.isPresent()) {
             ClinicPetEnrollment enr = enrollment.get();
             User linked = enr.getClinicOwner() != null ? enr.getClinicOwner().getLinkedUser() : null;
@@ -1710,7 +1985,7 @@ public class ClinicServiceImpl implements ClinicService {
             DoctorProfile doctor = doctorProfileDao.findByUserId(viewer.getId());
             if (doctor != null) {
                 Optional<DoctorPatientEnrollment> docEnr = doctorPatientEnrollmentRepository
-                        .findByDoctor_IdAndPet_UuidAndIsActiveTrue(doctor.getId(), petUuid);
+                        .findByDoctor_IdAndPet_UuidAndIsActiveTrue(doctor.getId(), id);
                 if (docEnr.isPresent()) {
                     DoctorPatientEnrollment enr = docEnr.get();
                     return new AccessiblePet(enr.getPet(), null, enr.getOwnerUser());
@@ -1718,9 +1993,9 @@ public class ClinicServiceImpl implements ClinicService {
             }
         }
 
-        if (patientMap(clinic).containsKey(petUuid)) {
-            Pet pet = requirePet(petUuid);
-            User owner = userDao.userByPetUuid(petUuid);
+        if (patientMap(clinic).containsKey(id)) {
+            Pet pet = requirePet(id);
+            User owner = userDao.userByPetUuid(id);
             if (pet.getClinicOwner() != null && pet.getClinic() != null
                     && pet.getClinic().getId().equals(clinic.getId())) {
                 return new AccessiblePet(pet, pet.getClinicOwner(), owner);
@@ -1969,6 +2244,16 @@ public class ClinicServiceImpl implements ClinicService {
         });
     }
 
+    private static boolean hasClinicStaffRole(User user) {
+        if (user.getUserRoles() == null || user.getUserRoles().isEmpty()) {
+            return false;
+        }
+        return user.getUserRoles().stream().anyMatch(userRole -> {
+            ERole role = userRole.getRole() == null ? null : userRole.getRole().getName();
+            return ERole.ROLE_CLINIC_STAFF.equals(role);
+        });
+    }
+
     private void requireOperational(Clinic clinic) {
         if (clinic.getStatus() == ClinicStatus.SHUTDOWN) {
             throw new CustomException("This clinic is shut down and is read-only.", HttpStatus.BAD_REQUEST);
@@ -1994,7 +2279,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     private void requireCanInviteDoctors(User user) {
         if (!hasClinicInviteRole(user)) {
-            throw new AccessDeniedException("Only clinic accounts can invite doctors");
+            throw new AccessDeniedException("Only clinic admins can invite doctors");
         }
     }
 
@@ -2004,18 +2289,13 @@ public class ClinicServiceImpl implements ClinicService {
         }
         return user.getUserRoles().stream().anyMatch(userRole -> {
             ERole role = userRole.getRole() == null ? null : userRole.getRole().getName();
-            return ERole.ROLE_CLINIC_ADMIN.equals(role) || ERole.ROLE_CLINIC_STAFF.equals(role)
-                    || ERole.ROLE_ADMIN.equals(role);
+            return ERole.ROLE_CLINIC_ADMIN.equals(role) || ERole.ROLE_ADMIN.equals(role);
         });
     }
 
     private void requireClinicManager(Clinic clinic, User user) {
         boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(user.getId());
         if (owner) {
-            return;
-        }
-        // Active staff (clinic admin or staff role) can manage invites/doctors for this clinic.
-        if (clinicStaffDao.isActiveMember(clinic.getId(), user.getId())) {
             return;
         }
         boolean clinicAdmin = user.getUserRoles().stream()
@@ -2191,7 +2471,7 @@ public class ClinicServiceImpl implements ClinicService {
                 .map(UserRole::getRole)
                 .filter(Objects::nonNull)
                 .map(Role::getName)
-                .anyMatch(role -> role == ERole.ROLE_CLINIC_ADMIN || role == ERole.ROLE_CLINIC_STAFF);
+                .anyMatch(role -> role == ERole.ROLE_CLINIC_ADMIN);
     }
 
     /** Solo doctor practice: clinic owner is an active affiliated doctor. Not "viewer owns this clinic". */

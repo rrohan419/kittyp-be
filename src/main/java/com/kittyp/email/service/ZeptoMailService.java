@@ -20,6 +20,9 @@ public interface ZeptoMailService {
 	/** Clinic doctor invitation with accept link. */
 	void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);
 
+	/** Clinic staff invitation with complete-signup link. */
+	void sendClinicStaffInviteEmail(String recipientEmail, String staffName, String clinicName, String acceptUrl);
+
 	/** Reminder for a pending clinic doctor invite. */
 	void sendClinicDoctorInviteReminderEmail(String recipientEmail, String doctorName, String clinicName,
 			String acceptUrl);

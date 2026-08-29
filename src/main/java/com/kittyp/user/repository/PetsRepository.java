@@ -62,5 +62,7 @@ public interface PetsRepository extends JpaRepository<Pet, Long> {
 
 	Optional<Pet> findByUuidIgnoreCase(String uuid);
 
+	Optional<Pet> findFirstByClinic_IdAndPatientNumberIgnoreCase(Long clinicId, String patientNumber);
+
 	List<Pet> findByParentUserUuid(String parentUserUuid);
 }

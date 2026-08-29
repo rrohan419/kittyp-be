@@ -140,6 +140,28 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	public void sendClinicStaffInviteEmail(String recipientEmail, String staffName, String clinicName,
+			String acceptUrl) {
+		log.info("Clinic staff invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			String name = staffName == null || staffName.isBlank() ? "Staff" : staffName;
+			mailDto.setMergeInfo(Map.of(
+					"Customer_Name", name,
+					"RESET_CODE", acceptUrl,
+					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send clinic staff invite email to {}: {} (acceptUrl logged above)", recipientEmail,
+					e.getMessage());
+		}
+	}
+
+	@Override
 	public void sendClinicDoctorInviteReminderEmail(String recipientEmail, String doctorName, String clinicName,
 			String acceptUrl) {
 		log.info("Clinic doctor invite REMINDER to email={} clinic={} acceptUrl={}", recipientEmail, clinicName,

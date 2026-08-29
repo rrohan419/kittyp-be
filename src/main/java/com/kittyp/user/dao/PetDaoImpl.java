@@ -43,7 +43,11 @@ public class PetDaoImpl implements PetDao {
   @Override
   public Pet petByUuid(String uuid) {
     try {
-      return petsRepository.findByUuid(uuid);
+      Pet pet = petsRepository.findByUuid(uuid);
+      if (pet != null) {
+        return pet;
+      }
+      return petsRepository.findByUuidIgnoreCase(uuid == null ? "" : uuid.trim()).orElse(null);
     } catch (Exception e) {
       throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
           HttpStatus.INTERNAL_SERVER_ERROR, e);

@@ -441,8 +441,7 @@ public class ArticleServiceImpl implements ArticleService {
 		return hasRole(auth, com.kittyp.user.enums.ERole.ROLE_ADMIN)
 				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_MODERATOR)
 				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_DOCTOR)
-				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN)
-				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_CLINIC_STAFF);
+				|| hasRole(auth, com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN);
 	}
 
 	private static boolean hasRole(Authentication auth, com.kittyp.user.enums.ERole role) {
@@ -480,8 +479,7 @@ public class ArticleServiceImpl implements ArticleService {
 		}
 		boolean clinic = user.getUserRoles().stream()
 				.anyMatch(ur -> ur.getRole() != null
-						&& (ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN
-								|| ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_CLINIC_STAFF));
+						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_CLINIC_ADMIN);
 		if (clinic) {
 			return "CLINIC";
 		}

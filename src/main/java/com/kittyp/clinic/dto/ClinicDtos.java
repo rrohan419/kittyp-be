@@ -12,6 +12,8 @@ import com.kittyp.health.enums.HealthEventType;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 public final class ClinicDtos {
 
@@ -270,6 +272,29 @@ public final class ClinicDtos {
 
     public record DoctorInvitePreview(String clinicName, String doctorName, String email, boolean expired,
             boolean accepted, String status) {
+    }
+
+    public record StaffInviteRequest(@NotBlank String name, @NotBlank @Email String email) {
+    }
+
+    public record StaffInviteCompleteRequest(
+            @NotBlank @Size(min = 2, max = 50) String firstName,
+            @Size(max = 50) String lastName,
+            @NotBlank @Size(min = 8, max = 72) @Pattern(
+                    regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,72}$",
+                    message = "Password must be 8-72 chars with upper, lower, digit, and special character") String password) {
+    }
+
+    public record StaffInviteModel(String uuid, String email, String staffName, String status, String expiresAt,
+            String clinicUuid, String clinicName, String token, String createdAt) {
+    }
+
+    public record StaffInvitePreview(String clinicName, String staffName, String email, boolean expired,
+            boolean accepted, String status) {
+    }
+
+    public record StaffMemberModel(String userUuid, String email, String name, String role, String joinedAt,
+            boolean enabled) {
     }
 
     public record AddPatientRequest(
