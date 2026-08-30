@@ -182,6 +182,7 @@ public class VisitServiceImpl implements VisitService {
 
         // Always snap to half-hour grid; self-book may still stack in the same window.
         LocalDateTime slotStart = snapToHalfHour(request.slotStart());
+        requireNotInPast(clinic, slotStart);
         LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
         requireWithinDoctorHours(doctor, slotStart);
 
@@ -327,9 +328,7 @@ public class VisitServiceImpl implements VisitService {
         boolean slotOrDoctorChanged = hasSlot || hasDoctor;
         if (hasSlot) {
             LocalDateTime slotStart = snapToHalfHour(request.slotStart());
-            if (slotStart.isBefore(LocalDateTime.now().minusMinutes(5))) {
-                throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
-            }
+            requireNotInPast(clinic, slotStart);
             booking.setSlotStart(slotStart);
             booking.setSlotEnd(slotStart.plusMinutes(APPOINTMENT_MINUTES));
         }
@@ -380,9 +379,7 @@ public class VisitServiceImpl implements VisitService {
                 .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", request.petUuid()));
 
         LocalDateTime slotStart = snapToHalfHour(request.slotStart());
-        if (slotStart.isBefore(LocalDateTime.now().minusMinutes(5))) {
-            throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
-        }
+        requireNotInPast(clinic, slotStart);
         LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
         requireWithinDoctorHours(doctor, slotStart);
 
@@ -433,10 +430,8 @@ public class VisitServiceImpl implements VisitService {
         }
         requireOperational(clinic);
         DoctorProfile doctor = requireClinicDoctor(clinic, doctorUuid);
-        LocalDate day = date == null ? LocalDate.now() : date;
-        if (day.isBefore(LocalDate.now())) {
-            return List.of();
-        }
+        LocalDateTime nowClinic = DoctorHours.nowLocal(clinic.getTimezone());
+        LocalDate day = date == null ? nowClinic.toLocalDate() : date;
 
         int duration = APPOINTMENT_MINUTES;
         DoctorAvailability availability = doctorAvailabilityRepository.findByDoctor_Id(doctor.getId()).orElse(null);
@@ -453,28 +448,12 @@ public class VisitServiceImpl implements VisitService {
 
         LocalDateTime rangeFrom = day.atStartOfDay();
         LocalDateTime rangeTo = day.plusDays(1).atStartOfDay();
-        List<Booking> busy = bookingRepository.findOverlappingForDoctor(
-                doctor.getId(), rangeFrom, rangeTo, ACTIVE_BOOKING_STATUSES);
+        List<DoctorHours.BusyRange> busy = bookingRepository.findOverlappingForDoctor(
+                doctor.getId(), rangeFrom, rangeTo, ACTIVE_BOOKING_STATUSES).stream()
+                .map(b -> new DoctorHours.BusyRange(b.getSlotStart(), b.getSlotEnd()))
+                .toList();
 
-        List<LocalDateTime> free = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
-        for (LocalTime[] window : windows) {
-            LocalDateTime cursor = day.atTime(window[0]);
-            LocalDateTime windowEnd = day.atTime(window[1]);
-            while (!cursor.plusMinutes(duration).isAfter(windowEnd)) {
-                LocalDateTime slotEnd = cursor.plusMinutes(duration);
-                if (!cursor.isBefore(now)) {
-                    LocalDateTime start = cursor;
-                    boolean conflict = busy.stream()
-                            .anyMatch(b -> b.getSlotStart().isBefore(slotEnd) && b.getSlotEnd().isAfter(start));
-                    if (!conflict) {
-                        free.add(start);
-                    }
-                }
-                cursor = cursor.plusMinutes(duration);
-            }
-        }
-        return free;
+        return DoctorHours.freeSlotStarts(day, windows, duration, nowClinic, busy);
     }
 
     private void requireWithinDoctorHours(DoctorProfile doctor, LocalDateTime slotStart) {
@@ -485,6 +464,14 @@ public class VisitServiceImpl implements VisitService {
         LocalTime end = slotStart.plusMinutes(APPOINTMENT_MINUTES).toLocalTime();
         if (!DoctorHours.fitsWindow(windows, start, end)) {
             throw new CustomException("Doctor is not available at this time", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    /** Slot times are clinic-local wall clock; JVM/UTC now would still allow this morning's 9:30 at 2:40pm IST. */
+    private void requireNotInPast(Clinic clinic, LocalDateTime slotStart) {
+        LocalDateTime nowClinic = DoctorHours.nowLocal(clinic == null ? null : clinic.getTimezone());
+        if (slotStart.isBefore(nowClinic.minusMinutes(5))) {
+            throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
         }
     }
 

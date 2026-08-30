@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,18 +79,19 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         log.info("Saving nutrition plan for pet: {} and user: {}", petUuid, userUuid);
 
         try {
+            String petId = canonicalPetUuid(petUuid);
             LocalDate today = LocalDate.now();
             int month = today.getMonthValue();
             int year = today.getYear();
 
-            nutritionPlanDao.deactivatePlansForMonth(petUuid, month, year);
+            nutritionPlanDao.deactivatePlansForMonth(petId, month, year);
 
-            String parentUuid = resolveParentUserUuid(petUuid);
+            String parentUuid = resolveParentUserUuid(petId);
             boolean doctorCaller = isDoctorCaller(userUuid);
 
             NutritionPlan nutritionPlan = NutritionPlan.builder()
                     .uuid(nutritionResponse.getUuid())
-                    .petUuid(petUuid)
+                    .petUuid(petId)
                     .userUuid(doctorCaller && parentUuid != null ? parentUuid : userUuid)
                     .parentUserUuid(parentUuid)
                     .doctorUserUuid(doctorCaller ? userUuid : null)
@@ -367,19 +369,23 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
 
     @Override
     public NutritionPlanModel getActivePlanForParent(String petUuid, String parentUserUuid) {
+        String petId = canonicalPetUuid(petUuid);
         return toModel(nutritionPlanRepository
                 .findFirstByPetUuidAndParentUserUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
-                        petUuid, parentUserUuid, NutritionPlanStatus.SENT)
+                        petId, parentUserUuid, NutritionPlanStatus.SENT)
                 .or(() -> nutritionPlanRepository.findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(
-                        petUuid, NutritionPlanStatus.SENT))
-                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet")));
+                        petId, NutritionPlanStatus.SENT))
+                .orElseThrow(() -> new CustomException(
+                        "No sent nutrition plan found for this pet", HttpStatus.NOT_FOUND)));
     }
 
     @Override
     public NutritionPlanModel getActiveSentPlanForPet(String petUuid) {
+        String petId = canonicalPetUuid(petUuid);
         return toModel(nutritionPlanRepository
-                .findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(petUuid, NutritionPlanStatus.SENT)
-                .orElseThrow(() -> new CustomException("No sent nutrition plan found for this pet")));
+                .findFirstByPetUuidAndStatusAndIsActiveTrueOrderBySentAtDesc(petId, NutritionPlanStatus.SENT)
+                .orElseThrow(() -> new CustomException(
+                        "No sent nutrition plan found for this pet", HttpStatus.NOT_FOUND)));
     }
 
     NutritionPlanModel toModel(NutritionPlan plan) {
@@ -406,7 +412,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     }
 
     private String resolveParentUserUuid(String petUuid) {
-        Pet pet = petsRepository.findOptionalByUuid(petUuid).orElse(null);
+        Pet pet = petsRepository.findByUuidIgnoreCase(petUuid == null ? "" : petUuid.trim()).orElse(null);
         if (pet != null) {
             if (pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
                 return pet.getParentUserUuid();
@@ -416,9 +422,19 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
                 return clinicOwner.getLinkedUser().getUuid();
             }
         }
-        return userRepository.findByPets_Uuid(petUuid)
+        return userRepository.findByPets_Uuid(pet != null && pet.getUuid() != null ? pet.getUuid() : petUuid)
                 .map(User::getUuid)
                 .orElse(null);
+    }
+
+    private String canonicalPetUuid(String petKey) {
+        if (petKey == null || petKey.isBlank()) {
+            return petKey;
+        }
+        String key = petKey.trim();
+        return petsRepository.findByUuidIgnoreCase(key)
+                .map(Pet::getUuid)
+                .orElse(key);
     }
 
     private String generateDefaultPlanName() {

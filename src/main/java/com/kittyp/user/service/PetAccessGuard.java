@@ -81,10 +81,10 @@ public class PetAccessGuard {
 
     public boolean isOwner(User user, String petUuid) {
         if (user.getPets() != null
-                && user.getPets().stream().anyMatch(p -> petUuid.equals(p.getUuid()))) {
+                && user.getPets().stream().anyMatch(p -> p.getUuid() != null && p.getUuid().equalsIgnoreCase(petUuid))) {
             return true;
         }
-        Pet pet = petsRepository.findOptionalByUuid(petUuid).orElse(null);
+        Pet pet = findPet(petUuid);
         if (pet == null) {
             return false;
         }
@@ -110,10 +110,11 @@ public class PetAccessGuard {
     }
 
     public boolean hasClinicalRelationship(User user, String petUuid) {
-        Pet pet = petsRepository.findOptionalByUuid(petUuid).orElse(null);
+        Pet pet = findPet(petUuid);
         if (pet == null) {
             return false;
         }
+        String id = pet.getUuid();
         Clinic clinic = pet.getClinic();
         if (clinic != null) {
             Long clinicId = clinic.getId();
@@ -132,7 +133,7 @@ public class PetAccessGuard {
             return false;
         }
         return visitRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrueAndStatusIn(
-                profile.getId(), petUuid, ATTENDED);
+                profile.getId(), id, ATTENDED);
     }
 
     public boolean isAdmin(User user) {
@@ -148,5 +149,15 @@ public class PetAccessGuard {
     private boolean hasRole(User user, ERole role) {
         return user.getUserRoles() != null && user.getUserRoles().stream()
                 .anyMatch(ur -> ur.getRole() != null && ur.getRole().getName() == role);
+    }
+
+    private Pet findPet(String petUuid) {
+        if (petUuid == null || petUuid.isBlank()) {
+            return null;
+        }
+        String key = petUuid.trim();
+        return petsRepository.findOptionalByUuid(key)
+                .or(() -> petsRepository.findByUuidIgnoreCase(key))
+                .orElse(null);
     }
 }

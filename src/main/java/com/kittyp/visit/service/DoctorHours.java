@@ -1,7 +1,11 @@
 package com.kittyp.visit.service;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -14,9 +18,67 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /** Weekly doctor hours used by slot listing and booking create. */
 final class DoctorHours {
 
+    static final String DEFAULT_ZONE = "Asia/Kolkata";
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private DoctorHours() {
+    }
+
+    /** Slot wall-clock times are clinic-local; never compare them to JVM/UTC now. */
+    static ZoneId zoneId(String timezone) {
+        if (timezone == null || timezone.isBlank()) {
+            return ZoneId.of(DEFAULT_ZONE);
+        }
+        try {
+            return ZoneId.of(timezone.trim());
+        } catch (Exception e) {
+            return ZoneId.of(DEFAULT_ZONE);
+        }
+    }
+
+    static LocalDateTime nowLocal(String timezone) {
+        return ZonedDateTime.now(zoneId(timezone)).toLocalDateTime();
+    }
+
+    record BusyRange(LocalDateTime start, LocalDateTime end) {
+    }
+
+    /**
+     * Free slot starts on {@code day} that have not begun yet in clinic-local time
+     * and do not overlap busy ranges.
+     */
+    static List<LocalDateTime> freeSlotStarts(LocalDate day, List<LocalTime[]> windows, int durationMinutes,
+            LocalDateTime nowClinicLocal, List<BusyRange> busy) {
+        if (day == null || windows == null || windows.isEmpty() || durationMinutes <= 0 || nowClinicLocal == null) {
+            return List.of();
+        }
+        if (day.isBefore(nowClinicLocal.toLocalDate())) {
+            return List.of();
+        }
+        List<BusyRange> busySafe = busy == null ? List.of() : busy;
+        List<LocalDateTime> free = new ArrayList<>();
+        for (LocalTime[] window : windows) {
+            if (window == null || window.length < 2 || window[0] == null || window[1] == null) {
+                continue;
+            }
+            LocalDateTime cursor = day.atTime(window[0]);
+            LocalDateTime windowEnd = day.atTime(window[1]);
+            while (!cursor.plusMinutes(durationMinutes).isAfter(windowEnd)) {
+                LocalDateTime slotEnd = cursor.plusMinutes(durationMinutes);
+                if (!cursor.isBefore(nowClinicLocal)) {
+                    LocalDateTime start = cursor;
+                    boolean conflict = busySafe.stream()
+                            .anyMatch(b -> b.start() != null && b.end() != null
+                                    && b.start().isBefore(slotEnd) && b.end().isAfter(start));
+                    if (!conflict) {
+                        free.add(start);
+                    }
+                }
+                cursor = cursor.plusMinutes(durationMinutes);
+            }
+        }
+        return free;
     }
 
     static boolean hasWeeklySchedule(String weeklyScheduleJson) {
