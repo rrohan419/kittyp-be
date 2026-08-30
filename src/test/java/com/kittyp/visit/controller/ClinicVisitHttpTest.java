@@ -72,13 +72,15 @@ class ClinicVisitHttpTest {
 
 	@Test
 	void visits_listsBoard() throws Exception {
-		when(visitService.listClinicVisits(eq("clinic-1"), isNull(), isNull(), isNull(), eq("clinic@test.com")))
+		when(visitService.listClinicVisits(eq("clinic-1"), isNull(), isNull(), isNull(), isNull(), isNull(),
+				eq("clinic@test.com")))
 				.thenReturn(List.of());
 
 		mockMvc.perform(get("/api/v1/clinic/clinic-1/visits"))
 				.andExpect(status().isOk());
 
-		verify(visitService).listClinicVisits(eq("clinic-1"), isNull(), isNull(), isNull(), eq("clinic@test.com"));
+		verify(visitService).listClinicVisits(eq("clinic-1"), isNull(), isNull(), isNull(), isNull(), isNull(),
+				eq("clinic@test.com"));
 	}
 
 	@Test

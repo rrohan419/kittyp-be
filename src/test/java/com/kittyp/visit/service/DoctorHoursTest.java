@@ -120,4 +120,69 @@ class DoctorHoursTest {
         List<LocalDateTime> free = DoctorHours.freeSlotStarts(day, windows, 30, now, busy);
         assertEquals(List.of(LocalDateTime.of(2026, 8, 29, 15, 30)), free);
     }
+
+    @Test
+    void unavailableExceptionClosesDate() {
+        String exceptions = """
+                [{"date":"2026-08-24","type":"unavailable","title":"Off"}]
+                """;
+        assertTrue(DoctorHours.windowsForDate(MON_FRI, exceptions, LocalDate.of(2026, 8, 24)).isEmpty());
+    }
+
+    @Test
+    void holidayExceptionClosesDate() {
+        String exceptions = """
+                [{"date":"2026-08-24","type":"holiday"}]
+                """;
+        assertTrue(DoctorHours.windowsForDate(MON_FRI, exceptions, LocalDate.of(2026, 8, 24)).isEmpty());
+    }
+
+    @Test
+    void reducedHoursOverridesWeekly() {
+        String exceptions = """
+                [{"date":"2026-08-24","type":"reduced-hours","startTime":"11:00","endTime":"13:00"}]
+                """;
+        List<LocalTime[]> windows = DoctorHours.windowsForDate(MON_FRI, exceptions, LocalDate.of(2026, 8, 24));
+        assertEquals(1, windows.size());
+        assertEquals(LocalTime.of(11, 0), windows.get(0)[0]);
+        assertEquals(LocalTime.of(13, 0), windows.get(0)[1]);
+        assertTrue(DoctorHours.fitsWindow(windows, LocalTime.of(11, 0), LocalTime.of(11, 30)));
+        assertFalse(DoctorHours.fitsWindow(windows, LocalTime.of(9, 0), LocalTime.of(9, 30)));
+    }
+
+    @Test
+    void exceptionOnOtherDateDoesNotCloseWeekly() {
+        String exceptions = """
+                [{"date":"2026-08-25","type":"unavailable"}]
+                """;
+        List<LocalTime[]> windows = DoctorHours.windowsForDate(MON_FRI, exceptions, LocalDate.of(2026, 8, 24));
+        assertTrue(DoctorHours.fitsWindow(windows, LocalTime.of(9, 0), LocalTime.of(9, 30)));
+    }
+
+    @Test
+    void walkInNowInsideConfiguredWindow() {
+        String monday = "[{\"dayOfWeek\":1,\"startTime\":\"09:00\",\"endTime\":\"23:00\",\"isActive\":true}]";
+        LocalDate mondayDate = LocalDate.of(2026, 8, 31);
+        List<LocalTime[]> windows = DoctorHours.windowsForDate(monday, null, mondayDate);
+        LocalTime atNight = LocalTime.of(22, 12);
+        assertTrue(DoctorHours.fitsWindow(windows, atNight, atNight));
+    }
+
+    @Test
+    void parsesSingleDigitHourTimes() {
+        String sunday = """
+                [{"dayOfWeek":0,"startTime":"9:00","endTime":"23:30","isActive":true}]
+                """;
+        List<LocalTime[]> windows = DoctorHours.windowsForDate(sunday, null, LocalDate.of(2026, 8, 30));
+        assertEquals(1, windows.size());
+        assertTrue(DoctorHours.fitsWindow(windows, LocalTime.of(22, 20), LocalTime.of(22, 20)));
+    }
+
+    @Test
+    void walkInNowOutsideConfiguredDayEmpty() {
+        String mondayOnly = "[{\"dayOfWeek\":1,\"startTime\":\"09:00\",\"endTime\":\"23:00\",\"isActive\":true}]";
+        LocalDate sunday = LocalDate.of(2026, 8, 30);
+        List<LocalTime[]> windows = DoctorHours.windowsForDate(mondayOnly, null, sunday);
+        assertTrue(windows.isEmpty());
+    }
 }

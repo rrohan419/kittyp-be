@@ -157,11 +157,12 @@ public class AdminDoctorController {
         String clinicAddress = hasClinic ? p.getClinic().getAddress() : null;
         String clinicName = hasClinic ? p.getClinic().getName() : null;
         String specialization = p.getSpecialization() != null ? p.getSpecialization().name() : null;
+        var user = p.getUser();
         return new DoctorVerificationModel(
                 p.getUuid(),
-                p.getUser().getFirstName(),
-                p.getUser().getLastName(),
-                p.getUser().getEmail(),
+                user != null ? user.getFirstName() : "",
+                user != null ? user.getLastName() : "",
+                user != null ? user.getEmail() : "",
                 p.getPhoneNumber(),
                 specialization,
                 p.getRegistrationNumber(),

@@ -32,7 +32,16 @@ public class ClinicDaoImpl implements ClinicDao {
 
     @Override
     public Clinic findByUuid(String uuid) {
-        return clinicRepository.findByUuid(uuid);
+        Clinic fetched = clinicRepository.findByUuidFetchOwner(uuid);
+        return fetched != null ? fetched : clinicRepository.findByUuid(uuid);
+    }
+
+    @Override
+    public Long findOwnerUserId(Long clinicId) {
+        if (clinicId == null) {
+            return null;
+        }
+        return clinicRepository.findOwnerUserIdByClinicId(clinicId);
     }
 
     @Override

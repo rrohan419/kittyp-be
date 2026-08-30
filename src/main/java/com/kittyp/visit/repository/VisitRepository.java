@@ -34,6 +34,42 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
             Long doctorId, LocalDateTime from, LocalDateTime to);
 
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
+    @Query("""
+            SELECT v FROM Visit v
+            WHERE v.clinic.id = :clinicId
+              AND v.isActive = true
+              AND (
+                (v.completedAt BETWEEN :from AND :to)
+                OR (v.startedAt BETWEEN :from AND :to)
+                OR (v.checkedInAt BETWEEN :from AND :to)
+                OR (v.createdAt BETWEEN :from AND :to)
+              )
+            ORDER BY v.urgency DESC, v.createdAt ASC
+            """)
+    List<Visit> findByClinic_IdAndScheduleBetween(
+            @Param("clinicId") Long clinicId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
+    @Query("""
+            SELECT v FROM Visit v
+            WHERE v.doctor.id = :doctorId
+              AND v.isActive = true
+              AND (
+                (v.completedAt BETWEEN :from AND :to)
+                OR (v.startedAt BETWEEN :from AND :to)
+                OR (v.checkedInAt BETWEEN :from AND :to)
+                OR (v.createdAt BETWEEN :from AND :to)
+              )
+            ORDER BY v.urgency DESC, v.createdAt ASC
+            """)
+    List<Visit> findByDoctor_IdAndScheduleBetween(
+            @Param("doctorId") Long doctorId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
     List<Visit> findByPet_UuidAndClinic_IdOrderByCreatedAtDesc(String petUuid, Long clinicId);
 
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
