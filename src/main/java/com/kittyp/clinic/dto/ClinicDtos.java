@@ -57,17 +57,17 @@ public final class ClinicDtos {
 
     public record DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
             String role, Boolean isActive, String status, String photoUrl, Double rating, Integer reviewsCount,
-            String ratingLabel, String joinedAt, Double experienceYears, String registrationNumber) {
+            String ratingLabel, String joinedAt, Double experienceYears, String registrationNumber, String clinicUuid) {
         public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
                 String role, Boolean isActive) {
             this(doctorUuid, userUuid, name, email, specialization, role, isActive, null, null, null, null, null,
-                    null, null, null);
+                    null, null, null, null);
         }
 
         public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
                 String role, Boolean isActive, String status, String photoUrl) {
             this(doctorUuid, userUuid, name, email, specialization, role, isActive, status, photoUrl, null, null,
-                    null, null, null, null);
+                    null, null, null, null, null);
         }
     }
 
@@ -301,7 +301,7 @@ public final class ClinicDtos {
     }
 
     public record DoctorInvitePreview(String clinicName, String doctorName, String email, boolean expired,
-            boolean accepted, String status) {
+            boolean accepted, String status, String clinicUuid) {
     }
 
     public record StaffInviteRequest(@NotBlank String name, @NotBlank @Email String email) {

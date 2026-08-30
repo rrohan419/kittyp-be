@@ -26,6 +26,7 @@ class BackgroundWorkersHealthIndicatorTest {
 			assertEquals(2, health.getDetails().get("maxPoolSize"));
 			assertEquals(0, health.getDetails().get("queueSize"));
 			assertEquals(8, health.getDetails().get("queueCapacity"));
+			assertEquals(0, health.getDetails().get("cancelled"));
 		} finally {
 			executor.shutdown();
 		}

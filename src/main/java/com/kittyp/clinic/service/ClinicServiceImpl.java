@@ -186,7 +186,11 @@ public class ClinicServiceImpl implements ClinicService {
         clinicStaffDao.findActiveByUserId(user.getId()).forEach(staff -> clinics.put(staff.getClinic().getId(), staff.getClinic()));
         clinicDoctorRepository.findByDoctor_User_IdAndIsActiveTrue(user.getId())
                 .forEach(affiliation -> clinics.put(affiliation.getClinic().getId(), affiliation.getClinic()));
-        return clinics.values().stream().map(this::clinicModel).toList();
+        return clinics.values().stream()
+                .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
+                        String.CASE_INSENSITIVE_ORDER))
+                .map(clinic -> clinicModel(clinic, user))
+                .toList();
     }
 
     @Override
@@ -217,7 +221,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public ClinicModel get(String clinicUuid, String email) {
-        return clinicModel(access(clinicUuid, email));
+        return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
     }
 
     @Override
@@ -282,7 +286,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public ClinicModel switchClinic(String clinicUuid, String email) {
-        return clinicModel(access(clinicUuid, email));
+        return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
     }
 
     @Override
@@ -756,7 +760,8 @@ public class ClinicServiceImpl implements ClinicService {
                 || invite.getStatus() == ClinicDoctorInviteStatus.EXPIRED;
         boolean accepted = invite.getStatus() == ClinicDoctorInviteStatus.ACCEPTED;
         return new DoctorInvitePreview(invite.getClinic().getName(), invite.getDoctorName(),
-                maskEmail(invite.getEmail()), expired, accepted, invite.getStatus().name());
+                maskEmail(invite.getEmail()), expired, accepted, invite.getStatus().name(),
+                invite.getClinic().getUuid());
     }
 
     private static String maskEmail(String email) {
@@ -2409,6 +2414,9 @@ public class ClinicServiceImpl implements ClinicService {
 
     private void requireActivated(Clinic clinic) {
         requireOperational(clinic);
+        if (isOwnerAffiliatedDoctor(clinic)) {
+            return;
+        }
         if (clinic.getStatus() == null || !clinic.getStatus().isActivated()) {
             throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
         }
@@ -2550,7 +2558,13 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicModel clinicModel(Clinic clinic) {
-        boolean personal = isOwnerAffiliatedDoctor(clinic);
+        return clinicModel(clinic, null);
+    }
+
+    private ClinicModel clinicModel(Clinic clinic, User viewer) {
+        boolean personal = viewer != null
+                ? isViewerPersonalPractice(clinic, viewer)
+                : isOwnerAffiliatedDoctor(clinic);
         boolean waConfigured = WhatsAppSettingsSupport.isConfigured(
                 clinic.getWhatsappPhoneNumberId(),
                 clinic.getWhatsappBusinessAccountId(),
@@ -2621,21 +2635,45 @@ public class ClinicServiceImpl implements ClinicService {
                 .anyMatch(role -> role == ERole.ROLE_CLINIC_ADMIN);
     }
 
-    /** Solo doctor practice: clinic owner is an active affiliated doctor. Not "viewer owns this clinic". */
-    private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
-        if (clinic == null || clinic.getId() == null) {
+    /** Viewer-owned solo practice. Invited doctors on someone else's clinic are not personal. */
+    private boolean isViewerPersonalPractice(Clinic clinic, User viewer) {
+        if (clinic == null || viewer == null || viewer.getId() == null) {
             return false;
+        }
+        if (clinic.getOwner() == null || clinic.getOwner().getId() == null) {
+            return false;
+        }
+        if (!clinic.getOwner().getId().equals(viewer.getId())) {
+            return false;
+        }
+        return isOwnerAffiliatedDoctor(clinic);
+    }
+
+    /** Solo doctor practice: owner has a doctor profile or an active clinic affiliation. */
+    private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
+        Long ownerUserId = resolveOwnerUserId(clinic);
+        if (ownerUserId == null) {
+            return false;
+        }
+        if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
+                clinic.getId(), ownerUserId)) {
+            return true;
+        }
+        return doctorProfileDao.findByUserId(ownerUserId) != null;
+    }
+
+    private Long resolveOwnerUserId(Clinic clinic) {
+        if (clinic == null || clinic.getId() == null) {
+            return null;
         }
         try {
-            if (clinic.getOwner() == null || clinic.getOwner().getId() == null) {
-                return false;
+            if (clinic.getOwner() != null && clinic.getOwner().getId() != null) {
+                return clinic.getOwner().getId();
             }
-            return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
-                    clinic.getId(), clinic.getOwner().getId());
         } catch (RuntimeException ex) {
-            log.warn("Could not resolve owner affiliation for clinic {}: {}", clinic.getUuid(), ex.getMessage());
-            return false;
+            log.warn("Could not read clinic owner for {}: {}", clinic.getUuid(), ex.getMessage());
         }
+        return clinicDao.findOwnerUserId(clinic.getId());
     }
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {
@@ -2649,7 +2687,8 @@ public class ClinicServiceImpl implements ClinicService {
                 rating, reviews, ratingLabel(rating),
                 affiliation.getJoinedAt() == null ? null : affiliation.getJoinedAt().toString(),
                 doctor.getExperienceYears(),
-                doctor.getRegistrationNumber());
+                doctor.getRegistrationNumber(),
+                affiliation.getClinic() == null ? null : affiliation.getClinic().getUuid());
     }
 
     private static String ratingLabel(Double rating) {

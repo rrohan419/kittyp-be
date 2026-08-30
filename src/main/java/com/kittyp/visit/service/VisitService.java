@@ -42,8 +42,8 @@ public interface VisitService {
     /** Doctor starts treatment from a scheduled booking — creates an IN_PROGRESS visit. */
     VisitModel startTreatmentFromBooking(String bookingUuid, String email);
 
-    List<VisitModel> listClinicVisits(String clinicUuid, LocalDate date, VisitStatus status, String doctorUuid,
-            String email);
+    List<VisitModel> listClinicVisits(String clinicUuid, LocalDate date, LocalDate from, LocalDate to,
+            VisitStatus status, String doctorUuid, String email);
 
     VisitModel patchVisit(String clinicUuid, String visitUuid, VisitPatchRequest request, String email);
 
