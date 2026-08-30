@@ -13,6 +13,7 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,8 @@ import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
+import com.kittyp.common.model.PaginationModel;
+import com.kittyp.common.util.PaginationSupport;
 import com.kittyp.common.service.S3StorageService;
 import com.kittyp.common.util.AlphanumericIdService;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
@@ -361,6 +364,40 @@ public class TreatmentInvoiceService {
 
     public List<ConsultationInvoice> listForClinic(Clinic clinic) {
         return invoiceRepository.findAllByClinic_IdOrderByCreatedAtDesc(clinic.getId());
+    }
+
+    public PaginationModel<ConsultationInvoice> pageForDoctor(User doctor, String clinicUuid, Integer pageNumber,
+            Integer pageSize) {
+        Pageable pageable = PaginationSupport.pageable(pageNumber, pageSize, "createdAt");
+        if (clinicUuid == null || clinicUuid.isBlank()) {
+            return PaginationSupport.fromPage(
+                    invoiceRepository.findPersonalPracticeForDoctor(doctor.getId(), pageable));
+        }
+        Clinic clinic = requireClinic(clinicUuid);
+        requireDoctorAffiliated(clinic, doctor);
+        if (!isOwnedByDoctor(clinic, doctor)) {
+            return PaginationSupport.fromPage(
+                    invoiceRepository.findAllByDoctor_IdAndClinic_IdOrderByCreatedAtDesc(
+                            doctor.getId(), clinic.getId(), pageable));
+        }
+        return PaginationSupport.fromPage(
+                invoiceRepository.findByDoctorAndClinicOrUnscoped(doctor.getId(), clinic.getId(), pageable));
+    }
+
+    public PaginationModel<ConsultationInvoice> pageForClinic(Clinic clinic, Integer pageNumber, Integer pageSize) {
+        Pageable pageable = PaginationSupport.pageable(pageNumber, pageSize, "createdAt");
+        return PaginationSupport.fromPage(
+                invoiceRepository.findAllByClinic_IdOrderByCreatedAtDesc(clinic.getId(), pageable));
+    }
+
+    @Transactional(readOnly = true)
+    public PaginationModel<OwnerInvoiceModel> pageForPetOwner(String petUuid, String email, Integer pageNumber,
+            Integer pageSize) {
+        User user = requireUser(email);
+        petAccessGuard.requireOwner(user, petUuid);
+        Pageable pageable = PaginationSupport.pageable(pageNumber, pageSize, "createdAt");
+        return PaginationSupport.fromPage(
+                invoiceRepository.findAllByPetUuidOrderByCreatedAtDesc(petUuid, pageable).map(this::toOwnerModel));
     }
 
     @Transactional(readOnly = true)

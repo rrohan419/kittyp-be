@@ -45,6 +45,8 @@ import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
+import com.kittyp.common.model.PaginationModel;
+import com.kittyp.common.util.PaginationSupport;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
@@ -1047,6 +1049,30 @@ public class VisitServiceImpl implements VisitService {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public PaginationModel<AttendedPatientModel> pageMyAttendedPatients(String email, String clinicUuid, String q,
+            Integer pageNumber, Integer pageSize) {
+        List<AttendedPatientModel> all = listMyAttendedPatients(email, clinicUuid);
+        if (q != null && !q.isBlank()) {
+            String n = q.trim().toLowerCase();
+            all = all.stream().filter(p -> attendedMatches(p, n)).toList();
+        }
+        return PaginationSupport.slice(all, pageNumber, pageSize);
+    }
+
+    private static boolean attendedMatches(AttendedPatientModel p, String n) {
+        return containsIgnoreCase(p.petName(), n)
+                || containsIgnoreCase(p.ownerName(), n)
+                || containsIgnoreCase(p.ownerEmail(), n)
+                || containsIgnoreCase(p.ownerPhone(), n)
+                || containsIgnoreCase(p.clinicName(), n);
+    }
+
+    private static boolean containsIgnoreCase(String value, String n) {
+        return value != null && value.toLowerCase().contains(n);
+    }
+
     private void absorbAttendedVisit(Visit visit, Map<String, AttendedPatientModel> byPet) {
         Pet pet = visit.getPet();
         if (pet == null) {
@@ -1062,25 +1088,28 @@ public class VisitServiceImpl implements VisitService {
                         : visit.getCheckedInAt() != null ? visit.getCheckedInAt() : visit.getCreatedAt();
         String assessment = visit.getAssessment();
         byPet.merge(pet.getUuid(),
-                new AttendedPatientModel(
-                        pet.getUuid(),
-                        pet.getName(),
-                        pet.getType(),
-                        pet.getBreed(),
+                attendedFromPet(pet,
                         clinicOwner != null ? clinicOwner.getUuid() : platformOwner.getUuid(),
                         clinicOwner != null ? clinicOwnerDisplayName(clinicOwner) : userDisplayName(platformOwner),
                         clinicOwner != null ? clinicOwner.getEmail() : platformOwner.getEmail(),
                         clinicOwner != null ? clinicOwner.getPhone() : platformOwner.getPhoneNumber(),
                         visit.getClinic() != null ? visit.getClinic().getUuid() : null,
                         visit.getClinic() != null ? visit.getClinic().getName() : null,
-                        1,
-                        when,
-                        assessment),
+                        1, when, assessment),
                 (existing, added) -> new AttendedPatientModel(
                         existing.petUuid(),
-                        existing.petName(),
-                        existing.species(),
-                        existing.breed(),
+                        preferText(existing.petName(), added.petName()),
+                        preferText(existing.species(), added.species()),
+                        preferText(existing.breed(), added.breed()),
+                        existing.dateOfBirth() != null ? existing.dateOfBirth() : added.dateOfBirth(),
+                        preferText(existing.weight(), added.weight()),
+                        preferText(existing.profilePicture(), added.profilePicture()),
+                        preferText(existing.activityLevel(), added.activityLevel()),
+                        preferText(existing.gender(), added.gender()),
+                        preferText(existing.currentFoodBrand(), added.currentFoodBrand()),
+                        preferText(existing.healthConditions(), added.healthConditions()),
+                        preferText(existing.allergies(), added.allergies()),
+                        existing.isNeutered() || added.isNeutered(),
                         existing.ownerUuid(),
                         existing.ownerName(),
                         existing.ownerEmail(),
@@ -1125,20 +1154,51 @@ public class VisitServiceImpl implements VisitService {
             return;
         }
         LocalDateTime when = enrollment.getUpdatedAt() != null ? enrollment.getUpdatedAt() : enrollment.getCreatedAt();
-        byPet.put(pet.getUuid(), new AttendedPatientModel(
+        byPet.put(pet.getUuid(), attendedFromPet(pet, owner.getUuid(), userDisplayName(owner), owner.getEmail(),
+                owner.getPhoneNumber(), personalClinic != null ? personalClinic.getUuid() : null,
+                personalClinic != null ? personalClinic.getName() : null, 0, when, null));
+    }
+
+    private static AttendedPatientModel attendedFromPet(Pet pet, String ownerUuid, String ownerName, String ownerEmail,
+            String ownerPhone, String clinicUuid, String clinicName, int visitCount, LocalDateTime lastVisitAt,
+            String lastAssessment) {
+        return new AttendedPatientModel(
                 pet.getUuid(),
                 pet.getName(),
                 pet.getType(),
                 pet.getBreed(),
-                owner.getUuid(),
-                userDisplayName(owner),
-                owner.getEmail(),
-                owner.getPhoneNumber(),
-                personalClinic != null ? personalClinic.getUuid() : null,
-                personalClinic != null ? personalClinic.getName() : null,
-                0,
-                when,
-                null));
+                pet.getDateOfBirth(),
+                pet.getWeight(),
+                petPhoto(pet),
+                pet.getActivityLevel(),
+                pet.getGender(),
+                pet.getCurrentFoodBrand(),
+                pet.getHealthConditions(),
+                pet.getAllergies(),
+                pet.isNeutered(),
+                ownerUuid,
+                ownerName,
+                ownerEmail,
+                ownerPhone,
+                clinicUuid,
+                clinicName,
+                visitCount,
+                lastVisitAt,
+                lastAssessment);
+    }
+
+    private static String petPhoto(Pet pet) {
+        if (pet.getProfilePicture() != null && !pet.getProfilePicture().isBlank()) {
+            return pet.getProfilePicture().trim();
+        }
+        if (pet.getPhotos() != null) {
+            for (String url : pet.getPhotos()) {
+                if (url != null && !url.isBlank()) {
+                    return url.trim();
+                }
+            }
+        }
+        return null;
     }
 
     private User platformOwnerFor(Pet pet, DoctorProfile doctor, ClinicPetOwner clinicOwner) {

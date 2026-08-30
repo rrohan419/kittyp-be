@@ -93,4 +93,8 @@ public class NutritionPlan extends BaseEntity {
     @Column
     private int planYear;
 
+    /** Days the parent should follow the plan, set when the doctor sends it. */
+    @Column(name = "duration_days")
+    private Integer durationDays;
+
 }

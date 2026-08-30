@@ -2,6 +2,7 @@ package com.kittyp.vaccine.dao;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
 
@@ -24,5 +25,15 @@ public class PetVaccineScheduleDaoImpl implements PetVaccineScheduleDao {
     @Override
     public List<PetVaccineSchedule> findDueOnOrBefore(LocalDate date) {
         return petVaccineScheduleRepository.findByCompletedFalseAndDueDateLessThanEqual(date);
+    }
+
+    @Override
+    public PetVaccineSchedule save(PetVaccineSchedule schedule) {
+        return petVaccineScheduleRepository.save(schedule);
+    }
+
+    @Override
+    public Optional<PetVaccineSchedule> findById(Long id) {
+        return petVaccineScheduleRepository.findById(id);
     }
 }

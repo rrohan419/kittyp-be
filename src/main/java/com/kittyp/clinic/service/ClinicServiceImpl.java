@@ -36,6 +36,11 @@ import com.kittyp.booking.entity.Booking;
 import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
+import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
+import com.kittyp.clinic.dto.ClinicDtos.MarkVaccineGivenRequest;
+import com.kittyp.clinic.dto.ClinicDtos.VaccineCatalogModel;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
@@ -92,6 +97,7 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.util.SafePhotoUrl;
 import com.kittyp.common.model.PaginationModel;
+import com.kittyp.common.util.PaginationSupport;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
@@ -120,6 +126,8 @@ import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 import com.kittyp.vaccine.dao.PetVaccineScheduleDao;
 import com.kittyp.vaccine.entity.PetVaccineSchedule;
+import com.kittyp.vaccine.entity.VaccineMaster;
+import com.kittyp.vaccine.repository.VaccineMasterRepository;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.entity.Visit;
 import com.kittyp.visit.enums.VisitStatus;
@@ -149,6 +157,7 @@ public class ClinicServiceImpl implements ClinicService {
     private final BookingDao bookingDao;
     private final HealthEventDao healthEventDao;
     private final PetVaccineScheduleDao petVaccineScheduleDao;
+    private final VaccineMasterRepository vaccineMasterRepository;
     private final NotificationLogRepository notificationLogRepository;
     private final UserDao userDao;
     private final PetDao petDao;
@@ -920,6 +929,8 @@ public class ClinicServiceImpl implements ClinicService {
         invite = clinicStaffInviteRepository.save(invite);
 
         String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/staff-invite/accept?token=" + invite.getToken();
+        log.info("Sending staff invite email to {} for clinic {}", inviteEmail, clinic.getName());
+        log.info("Accept URL: {}", acceptUrl);
         zeptoMailService.sendClinicStaffInviteEmail(inviteEmail, staffName, clinic.getName(), acceptUrl);
         return staffInviteModel(invite, true);
     }
@@ -1347,6 +1358,13 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
+    @Transactional
+    public PaginationModel<ClinicOwnerModel> pageOwners(String clinicUuid, String q, String email,
+            boolean emailOrIdOnly, Integer pageNumber, Integer pageSize) {
+        return PaginationSupport.slice(listOwners(clinicUuid, q, email, emailOrIdOnly), pageNumber, pageSize);
+    }
+
+    @Override
     public List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email,
             boolean emailOrIdOnly) {
         Clinic clinic = access(clinicUuid, email);
@@ -1561,6 +1579,13 @@ public class ClinicServiceImpl implements ClinicService {
                 .toList();
     }
 
+    @Override
+    @Transactional
+    public PaginationModel<ClinicPetListModel> pagePets(String clinicUuid, String q, String email,
+            boolean emailOrIdOnly, Integer pageNumber, Integer pageSize) {
+        return PaginationSupport.slice(listPets(clinicUuid, q, email, emailOrIdOnly), pageNumber, pageSize);
+    }
+
     /**
      * Soft-hide pets that were bulk-copied from a doctor's other clinics / personal roster.
      * Clinic CRM must only show clients registered or walked-in at THIS clinic.
@@ -1755,18 +1780,19 @@ public class ClinicServiceImpl implements ClinicService {
                 .map(this::bookingModel)
                 .toList();
 
-        List<InvoiceSummaryModel> invoices = List.of();
-        if (invoiceOwner != null) {
-            invoices = consultationInvoiceRepository
-                    .findAllByOwner_IdAndClinic_IdOrderByCreatedAtDesc(invoiceOwner.getId(), clinic.getId())
-                    .stream()
-                    .filter(inv -> inv.getPetUuid() == null || medicalPetKey.equals(inv.getPetUuid()))
-                    .map(this::invoiceSummary)
-                    .toList();
-        }
+        List<InvoiceSummaryModel> invoices = invoicesForMedicalProfile(clinic.getId(), medicalPetKey,
+                invoiceOwner == null ? null : invoiceOwner.getId());
+        List<ClinicalRecordModel> labReports = timeline.stream()
+                .filter(ev -> HealthEventType.LAB_REPORT.name().equals(ev.type()))
+                .map(this::clinicalRecord)
+                .toList();
+        List<ClinicalRecordModel> surgeries = timeline.stream()
+                .filter(ev -> HealthEventType.SURGERY.name().equals(ev.type()))
+                .map(this::clinicalRecord)
+                .toList();
 
         return new ClinicPetMedicalProfileModel(petModel, ownerSummary, timeline, appointments, vaccines,
-                List.of(), List.of(), List.of(), invoices);
+                List.of(), labReports, surgeries, invoices);
     }
 
     @Override
@@ -1852,6 +1878,48 @@ public class ClinicServiceImpl implements ClinicService {
         return new InvoiceSummaryModel(inv.getUuid(), inv.getStatus() == null ? null : inv.getStatus().name(),
                 inv.getAmount() == null ? null : inv.getAmount().toPlainString(), inv.getCurrency(), inv.getPetUuid(),
                 inv.getCreatedAt());
+    }
+
+    List<InvoiceSummaryModel> invoicesForMedicalProfile(Long clinicId, String petUuid, Long ownerUserId) {
+        LinkedHashMap<String, InvoiceSummaryModel> byUuid = new LinkedHashMap<>();
+        for (ConsultationInvoice inv : consultationInvoiceRepository.findAllByPetUuidOrderByCreatedAtDesc(petUuid)) {
+            if (inv.getClinic() != null && clinicId.equals(inv.getClinic().getId())) {
+                byUuid.put(inv.getUuid(), invoiceSummary(inv));
+            }
+        }
+        if (ownerUserId != null) {
+            for (ConsultationInvoice inv : consultationInvoiceRepository
+                    .findAllByOwner_IdAndClinic_IdOrderByCreatedAtDesc(ownerUserId, clinicId)) {
+                if (inv.getPetUuid() == null || petUuid.equals(inv.getPetUuid())) {
+                    byUuid.putIfAbsent(inv.getUuid(), invoiceSummary(inv));
+                }
+            }
+        }
+        return new ArrayList<>(byUuid.values());
+    }
+
+    private ClinicalRecordModel clinicalRecord(HealthEventModel event) {
+        return new ClinicalRecordModel(event.uuid(), event.title(), event.description(), event.date(),
+                event.visitUuid(), event.attachments());
+    }
+
+    private String validateVisitLink(Clinic clinic, Pet pet, String visitUuid, HealthEventType type) {
+        String trimmed = visitUuid == null || visitUuid.isBlank() ? null : visitUuid.trim();
+        if (type == HealthEventType.LAB_REPORT && trimmed == null) {
+            List<Visit> visits = visitDao.findByPetAndClinic(pet.getUuid(), clinic.getId());
+            if (!visits.isEmpty()) {
+                throw new CustomException("Select the visit this lab report belongs to.", HttpStatus.BAD_REQUEST);
+            }
+        }
+        if (trimmed == null) {
+            return null;
+        }
+        Visit visit = visitDao.findByUuidAndClinicId(trimmed, clinic.getId())
+                .orElseThrow(() -> new CustomException("Visit not found at this clinic.", HttpStatus.NOT_FOUND));
+        if (visit.getPet() == null || !pet.getUuid().equals(visit.getPet().getUuid())) {
+            throw new CustomException("Visit does not belong to this pet.", HttpStatus.BAD_REQUEST);
+        }
+        return trimmed;
     }
 
     private Pet saveClinicPet(Clinic clinic, ClinicPetOwner owner, String name, String species, String breed,
@@ -2189,11 +2257,90 @@ public class ClinicServiceImpl implements ClinicService {
     public HealthEventModel createHealthEvent(String clinicUuid, String petUuid, HealthEventRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requirePatient(clinic, petUuid, email);
-        HealthEvent event = HealthEvent.builder().uuid(UUID.randomUUID().toString()).clinic(clinic).pet(requirePet(petUuid))
+        Pet pet = resolveAccessiblePet(clinic, petUuid, email).pet();
+        String visitUuid = validateVisitLink(clinic, pet, request.visitUuid(), request.type());
+        HealthEvent event = HealthEvent.builder().uuid(UUID.randomUUID().toString()).clinic(clinic).pet(pet)
                 .type(request.type()).title(request.title()).description(request.description()).date(request.date())
-                .isPast(request.isPast()).status(request.status()).attachments(request.attachments()).build();
+                .isPast(request.isPast()).status(request.status()).attachments(request.attachments())
+                .visitUuid(visitUuid).build();
         return healthEventModel(healthEventDao.save(event));
+    }
+
+    @Override
+    @Transactional
+    public HealthEventModel createClinicalRecord(String clinicUuid, String petUuid, ClinicalRecordRequest request,
+            String email) {
+        if (request.type() != HealthEventType.LAB_REPORT && request.type() != HealthEventType.SURGERY) {
+            throw new CustomException("Record type must be LAB_REPORT or SURGERY", HttpStatus.BAD_REQUEST);
+        }
+        return createHealthEvent(clinicUuid, petUuid,
+                new HealthEventRequest(request.type(), request.title(), request.description(), request.date(), true,
+                        HealthEventStatus.COMPLETED, request.attachments(), request.visitUuid()),
+                email);
+    }
+
+    @Override
+    public void assertClinicalUploadAllowed(String clinicUuid, String petUuid, String visitUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        Pet pet = resolveAccessiblePet(clinic, petUuid, email).pet();
+        validateVisitLink(clinic, pet, visitUuid, null);
+    }
+
+    @Override
+    public List<VaccineCatalogModel> vaccineCatalog(String clinicUuid, String species, String email) {
+        access(clinicUuid, email);
+        String speciesFilter = species == null ? "" : species.trim();
+        List<VaccineCatalogModel> all = vaccineMasterRepository.findAll().stream()
+                .map(v -> new VaccineCatalogModel(v.getId(), v.getName(), v.getSpecies(), v.getDescription()))
+                .toList();
+        if (speciesFilter.isBlank()) {
+            return all;
+        }
+        List<VaccineCatalogModel> filtered = all.stream()
+                .filter(v -> v.species() == null || v.species().isBlank() || v.species().equalsIgnoreCase(speciesFilter))
+                .toList();
+        return filtered.isEmpty() ? all : filtered;
+    }
+
+    @Override
+    @Transactional
+    public VaccineScheduleModel addVaccineDue(String clinicUuid, String petUuid, AddVaccineDueRequest request,
+            String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        Pet pet = resolveAccessiblePet(clinic, petUuid, email).pet();
+        VaccineMaster vaccine = vaccineMasterRepository.findById(request.vaccineMasterId())
+                .orElseThrow(() -> new ResourceNotFoundException("vaccine", "id", String.valueOf(request.vaccineMasterId())));
+        PetVaccineSchedule schedule = PetVaccineSchedule.builder()
+                .pet(pet)
+                .vaccine(vaccine)
+                .dueDate(request.dueDate())
+                .completed(false)
+                .build();
+        return vaccineModel(petVaccineScheduleDao.save(schedule));
+    }
+
+    @Override
+    @Transactional
+    public VaccineScheduleModel markVaccineGiven(String clinicUuid, String petUuid, Long scheduleId,
+            MarkVaccineGivenRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        Pet pet = resolveAccessiblePet(clinic, petUuid, email).pet();
+        PetVaccineSchedule schedule = petVaccineScheduleDao.findById(scheduleId)
+                .orElseThrow(() -> new ResourceNotFoundException("vaccine schedule", "id", String.valueOf(scheduleId)));
+        if (schedule.getPet() == null || !pet.getUuid().equals(schedule.getPet().getUuid())) {
+            throw new CustomException("Vaccine schedule does not belong to this pet.", HttpStatus.NOT_FOUND);
+        }
+        schedule.setCompleted(true);
+        schedule.setCompletedDate(request != null && request.completedDate() != null
+                ? request.completedDate()
+                : LocalDate.now());
+        if (request != null && request.certificateUrl() != null && !request.certificateUrl().isBlank()) {
+            schedule.setCertificateUrl(request.certificateUrl().trim());
+        }
+        return vaccineModel(petVaccineScheduleDao.save(schedule));
     }
 
     private Clinic access(String clinicUuid, String email) {
@@ -2563,12 +2710,12 @@ public class ClinicServiceImpl implements ClinicService {
     private HealthEventModel healthEventModel(HealthEvent event) {
         return new HealthEventModel(event.getUuid(), event.getType().name(), event.getTitle(), event.getDescription(),
                 event.getDate(), event.getIsPast(), event.getStatus() == null ? null : event.getStatus().name(),
-                event.getAttachments());
+                event.getAttachments(), event.getVisitUuid());
     }
 
     private VaccineScheduleModel vaccineModel(PetVaccineSchedule schedule) {
         return new VaccineScheduleModel(schedule.getId(), schedule.getVaccine().getName(), schedule.getDueDate(),
-                schedule.getCompleted(), schedule.getCompletedDate());
+                schedule.getCompleted(), schedule.getCompletedDate(), schedule.getCertificateUrl());
     }
 
     private RetentionAlertModel vaccineAlert(PetVaccineSchedule schedule, LocalDate today) {

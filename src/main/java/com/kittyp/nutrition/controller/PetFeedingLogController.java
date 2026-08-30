@@ -50,12 +50,14 @@ public class PetFeedingLogController {
             @RequestParam(required = false) LocalDateTime from,
             @RequestParam(required = false) LocalDateTime to) {
         petAccessGuard.requirePetAccess(currentUser(), petUuid);
+        String petId = petAccessGuard.canonicalPetUuid(petUuid);
         LocalDateTime start = from == null ? LocalDate.now().minusDays(30).atStartOfDay() : from;
-        LocalDateTime end = to == null ? LocalDateTime.now() : to;
+        // End of today, not "now" — parent logs use midday so a morning GET would hide them.
+        LocalDateTime end = to == null ? LocalDate.now().atTime(23, 59, 59) : to;
         if (end.isBefore(start)) {
             throw new CustomException("'to' must not be before 'from'", HttpStatus.BAD_REQUEST);
         }
-        List<PetFeedingLogModel> logs = petFeedingLogDao.findByPetUuidBetween(petUuid, start, end).stream()
+        List<PetFeedingLogModel> logs = petFeedingLogDao.findByPetUuidBetween(petId, start, end).stream()
                 .map(this::toModel)
                 .toList();
         return responseBuilder.buildSuccessResponse(logs, ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -68,8 +70,9 @@ public class PetFeedingLogController {
             @RequestBody @Valid PetFeedingLogRequest request) {
         User user = currentUser();
         petAccessGuard.requireOwner(user, petUuid);
+        String petId = petAccessGuard.canonicalPetUuid(petUuid);
         PetFeedingLog log = PetFeedingLog.builder()
-                .petUuid(petUuid)
+                .petUuid(petId)
                 .userUuid(user.getUuid())
                 .dailyPlanId(request.dailyPlanId())
                 .status(request.status())

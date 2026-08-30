@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
@@ -74,4 +75,7 @@ public interface VisitService {
 
     /** Pets this doctor attended across clinics (or one clinic when clinicUuid is set). */
     List<AttendedPatientModel> listMyAttendedPatients(String email, String clinicUuid);
+
+    PaginationModel<AttendedPatientModel> pageMyAttendedPatients(String email, String clinicUuid, String q,
+            Integer pageNumber, Integer pageSize);
 }

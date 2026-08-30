@@ -21,6 +21,7 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
 import com.kittyp.doctor.dto.CreateInvoiceResultDto;
@@ -55,10 +56,12 @@ public class ConsultationInvoiceController {
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_MINE)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<List<ConsultationInvoice>>> myInvoices(
-            @RequestParam(required = false) String clinicUuid) {
+    public ResponseEntity<SuccessResponse<PaginationModel<ConsultationInvoice>>> myInvoices(
+            @RequestParam(required = false) String clinicUuid,
+            @RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) Integer pageNumber,
+            @RequestParam(defaultValue = KeyConstant.PAGE_SIZE) Integer pageSize) {
         return responseBuilder.buildSuccessResponse(
-                treatmentInvoiceService.listForDoctor(currentUser(), clinicUuid),
+                treatmentInvoiceService.pageForDoctor(currentUser(), clinicUuid, pageNumber, pageSize),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

@@ -21,6 +21,7 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
@@ -51,9 +52,12 @@ public class DoctorVisitController {
 
     @GetMapping(ApiUrl.DOCTOR_ATTENDED_PATIENTS)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<List<AttendedPatientModel>>> attendedPatients(
-            @RequestParam(required = false) String clinicUuid) {
-        return success(visitService.listMyAttendedPatients(email(), clinicUuid));
+    public ResponseEntity<SuccessResponse<PaginationModel<AttendedPatientModel>>> attendedPatients(
+            @RequestParam(required = false) String clinicUuid,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) Integer pageNumber,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return success(visitService.pageMyAttendedPatients(email(), clinicUuid, q, pageNumber, pageSize));
     }
 
     @PostMapping(ApiUrl.DOCTOR_VISIT_START)

@@ -9,6 +9,8 @@ import lombok.Data;
 
 @Data
 public class PetDailyPlanModel {
+
+    private Long id;
     
     private String petUuid;
 

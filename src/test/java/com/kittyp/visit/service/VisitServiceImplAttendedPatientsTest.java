@@ -3,6 +3,7 @@ package com.kittyp.visit.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -79,7 +80,10 @@ class VisitServiceImplAttendedPatientsTest {
 		User parent = User.builder().email("parent@test.com").password("x").uuid("parent-1").firstName("Ada")
 				.lastName("Lovelace").build();
 		parent.setId(2L);
-		Pet pet = Pet.builder().uuid("pet-1").name("Milo").type("CAT").build();
+		Pet pet = Pet.builder().uuid("pet-1").name("Milo").type("CAT").breed("DSH")
+				.dateOfBirth(LocalDate.of(2022, 5, 12)).weight("4.2").gender("female")
+				.currentFoodBrand("Hill's").allergies("fish").healthConditions("URI")
+				.isNeutered(true).profilePicture("https://cdn.example/milo.jpg").build();
 		pet.setId(3L);
 		Visit visit = Visit.builder()
 				.uuid("visit-1")
@@ -97,6 +101,13 @@ class VisitServiceImplAttendedPatientsTest {
 
 		assertEquals(1, rows.size());
 		assertEquals("Milo", rows.get(0).petName());
+		assertEquals(LocalDate.of(2022, 5, 12), rows.get(0).dateOfBirth());
+		assertEquals("4.2", rows.get(0).weight());
+		assertEquals("female", rows.get(0).gender());
+		assertEquals("Hill's", rows.get(0).currentFoodBrand());
+		assertEquals("fish", rows.get(0).allergies());
+		assertEquals("https://cdn.example/milo.jpg", rows.get(0).profilePicture());
+		assertEquals(Boolean.TRUE, rows.get(0).isNeutered());
 		assertEquals("Ada Lovelace", rows.get(0).ownerName());
 		assertEquals("URI", rows.get(0).lastAssessment());
 	}

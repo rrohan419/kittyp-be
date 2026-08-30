@@ -2,11 +2,15 @@ package com.kittyp.clinic.service;
 
 import java.util.List;
 
+import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
+import com.kittyp.clinic.dto.ClinicDtos.MarkVaccineGivenRequest;
+import com.kittyp.clinic.dto.ClinicDtos.VaccineCatalogModel;
+import com.kittyp.clinic.dto.ClinicDtos.VaccineScheduleModel;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorDetailModel;
-import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorPatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerProfileModel;
@@ -101,6 +105,9 @@ public interface ClinicService {
 
     List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly);
 
+    PaginationModel<ClinicOwnerModel> pageOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly,
+            Integer pageNumber, Integer pageSize);
+
     /** Search all active KittyP users (live DB) for existing-customer pickers. */
     List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email,
             boolean emailOrIdOnly);
@@ -115,6 +122,9 @@ public interface ClinicService {
     ClinicPetListModel addPetToOwner(String clinicUuid, String ownerUuid, AddOwnerPetRequest request, String email);
 
     List<ClinicPetListModel> listPets(String clinicUuid, String q, String email, boolean emailOrIdOnly);
+
+    PaginationModel<ClinicPetListModel> pagePets(String clinicUuid, String q, String email, boolean emailOrIdOnly,
+            Integer pageNumber, Integer pageSize);
 
     ClinicPetMedicalProfileModel petMedicalProfile(String clinicUuid, String petUuid, String email);
 
@@ -135,6 +145,18 @@ public interface ClinicService {
     List<HealthEventModel> healthEvents(String clinicUuid, String petUuid, String email);
 
     HealthEventModel createHealthEvent(String clinicUuid, String petUuid, HealthEventRequest request, String email);
+
+    HealthEventModel createClinicalRecord(String clinicUuid, String petUuid, ClinicalRecordRequest request,
+            String email);
+
+    void assertClinicalUploadAllowed(String clinicUuid, String petUuid, String visitUuid, String email);
+
+    List<VaccineCatalogModel> vaccineCatalog(String clinicUuid, String species, String email);
+
+    VaccineScheduleModel addVaccineDue(String clinicUuid, String petUuid, AddVaccineDueRequest request, String email);
+
+    VaccineScheduleModel markVaccineGiven(String clinicUuid, String petUuid, Long scheduleId,
+            MarkVaccineGivenRequest request, String email);
 
     ClinicModel switchClinic(String clinicUuid, String email);
 

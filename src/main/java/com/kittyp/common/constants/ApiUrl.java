@@ -42,6 +42,7 @@ public class ApiUrl {
 	public static final String DOCTOR_ME_AVAILABILITY = DOCTOR_ME + "/availability";
 
 	public static final String UPLOAD_SIGNUP_DOCUMENTS = "/upload/signup-documents";
+	public static final String UPLOAD_CLINICAL = "/upload/clinical";
 
 	// User controller
 	public static final String USER_BASE_URL = "/user";
@@ -160,6 +161,10 @@ public class ApiUrl {
 	public static final String CLINIC_PETS = CLINIC_BY_UUID + "/pets";
 	public static final String CLINIC_PET_DETAIL = CLINIC_PETS + "/{petUuid}";
 	public static final String CLINIC_PET_HIDE = CLINIC_PET_DETAIL + "/hide";
+	public static final String CLINIC_PET_RECORDS = CLINIC_PET_DETAIL + "/records";
+	public static final String CLINIC_PET_VACCINES = CLINIC_PET_DETAIL + "/vaccines";
+	public static final String CLINIC_PET_VACCINE = CLINIC_PET_VACCINES + "/{scheduleId}";
+	public static final String CLINIC_VACCINE_CATALOG = CLINIC_BY_UUID + "/vaccine-catalog";
 	public static final String CLINIC_BOOKINGS = CLINIC_BY_UUID + "/bookings";
 	public static final String CLINIC_BOOKING_BY_UUID = CLINIC_BOOKINGS + "/{bookingUuid}";
 	public static final String CLINIC_VISITS = CLINIC_BY_UUID + "/visits";

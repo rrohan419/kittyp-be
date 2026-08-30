@@ -34,5 +34,7 @@ public class NutritionPlanModel {
 
     private LocalDateTime sentAt;
 
+    private Integer durationDays;
+
     private NutritionRecommendationResponse nutritionRecommendationResponse;
 }

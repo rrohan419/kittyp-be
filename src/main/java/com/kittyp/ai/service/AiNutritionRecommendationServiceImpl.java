@@ -25,7 +25,9 @@ import com.kittyp.common.model.WeatherResponse;
 import com.kittyp.common.service.GoogleService;
 import com.kittyp.common.util.Mapper;
 import com.kittyp.user.dao.UserDao;
+import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.repository.PetsRepository;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +41,7 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
     private final Mapper mapper;
     private final GoogleService googleService;
     private final UserDao userDao;
-    // private final NutritionPlanService nutritionPlanService;
+    private final PetsRepository petsRepository;
 
     @Override
     public NutritionRecommendationResponse generateNutritionRecommendation(PetNutritionRecommendationDto petDetailDto,
@@ -113,10 +115,13 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
         environmentDataDto.setUvIndex(weatherResponse.getUvIndex());
         environmentDataDto.setPrecipitation(weatherResponse.getPrecipitation().getQpf().getQuantity());
 
-        // PetNutritionRecommendationDto petProfile = nutritionistRecommendationRequest.getPetProfile();
+        PetNutritionRecommendationDto petProfile = nutritionistRecommendationRequest.getPetProfile();
+        if (petProfile != null && petProfile.getUuid() != null && !petProfile.getUuid().isBlank()) {
+            Pet stored = petsRepository.findByUuidIgnoreCase(petProfile.getUuid().trim()).orElse(null);
+            petProfile.overlayFromStoredPet(stored);
+        }
 
-        NutritionRecommendationResponse response = generateNutritionRecommendation(
-                nutritionistRecommendationRequest.getPetProfile(), environmentDataDto);
+        NutritionRecommendationResponse response = generateNutritionRecommendation(petProfile, environmentDataDto);
         response.setEnvironment(mapToEnvironment(environmentDataDto));
         return response;
     }

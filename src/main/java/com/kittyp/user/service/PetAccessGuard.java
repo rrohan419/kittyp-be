@@ -5,6 +5,7 @@ import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.entity.Clinic;
@@ -29,6 +30,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class PetAccessGuard {
 
     private static final Set<VisitStatus> ATTENDED = EnumSet.of(
@@ -149,6 +151,16 @@ public class PetAccessGuard {
     private boolean hasRole(User user, ERole role) {
         return user.getUserRoles() != null && user.getUserRoles().stream()
                 .anyMatch(ur -> ur.getRole() != null && ur.getRole().getName() == role);
+    }
+
+    /** Stored public id, or the trimmed key if the pet row is missing. */
+    public String canonicalPetUuid(String petKey) {
+        if (petKey == null || petKey.isBlank()) {
+            return petKey;
+        }
+        String key = petKey.trim();
+        Pet pet = findPet(key);
+        return pet != null && pet.getUuid() != null ? pet.getUuid() : key;
     }
 
     private Pet findPet(String petUuid) {
