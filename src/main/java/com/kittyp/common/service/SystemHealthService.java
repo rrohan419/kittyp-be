@@ -15,6 +15,8 @@ import org.springframework.boot.actuate.health.StatusAggregator;
 import org.springframework.boot.actuate.jdbc.DataSourceHealthIndicator;
 import org.springframework.stereotype.Service;
 
+import com.kittyp.common.health.HealthActionPlanner;
+import com.kittyp.common.health.KittyPDiskCleanup;
 import com.kittyp.common.model.SystemHealthResponse;
 import com.kittyp.common.model.SystemHealthResponse.Component;
 
@@ -23,21 +25,35 @@ public class SystemHealthService {
 
 	private final Map<String, HealthIndicator> indicators;
 	private final ObjectProvider<DataSourceHealthIndicator> dbIndicator;
+	private final KittyPDiskCleanup diskCleanup;
+	private final ObjectProvider<HealthLoadTestService> loadTest;
 
 	public SystemHealthService(Map<String, HealthIndicator> indicators,
-			ObjectProvider<DataSourceHealthIndicator> dbIndicator) {
+			ObjectProvider<DataSourceHealthIndicator> dbIndicator, KittyPDiskCleanup diskCleanup,
+			ObjectProvider<HealthLoadTestService> loadTest) {
 		this.indicators = indicators;
 		this.dbIndicator = dbIndicator;
+		this.diskCleanup = diskCleanup;
+		this.loadTest = loadTest;
 	}
 
 	public SystemHealthResponse snapshot() {
 		Map<String, Health> healths = new LinkedHashMap<>();
 		indicators.forEach((beanName, indicator) -> healths.put(contributorName(beanName), indicator.health()));
 		DataSourceHealthIndicator db = dbIndicator.getIfAvailable();
-		if (db != null) {
+		HealthLoadTestService load = loadTest == null ? null : loadTest.getIfAvailable();
+		boolean poolLoad = load != null && load.activeTargets().contains("POOL");
+		if (db != null && !poolLoad) {
 			healths.putIfAbsent("db", db.health());
 		}
-		return assemble(healths);
+		SystemHealthResponse base = assemble(healths);
+		long reclaimable = 0;
+		if (diskCleanup != null) {
+			reclaimable = diskCleanup.reclaimableBytes();
+		}
+		return new SystemHealthResponse(base.status(), base.components(),
+				HealthActionPlanner.plan(base.components(), reclaimable), load != null,
+				load == null ? List.of() : load.activeTargets());
 	}
 
 	static SystemHealthResponse assemble(Map<String, Health> healths) {

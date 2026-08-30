@@ -100,7 +100,7 @@ public class VisitServiceImpl implements VisitService {
             VisitStatus.WAITLIST, VisitStatus.CHECKED_IN, VisitStatus.IN_PROGRESS, VisitStatus.CHECKING_OUT);
     private static final Set<VisitStatus> STARTABLE = EnumSet.of(
             VisitStatus.WAITLIST, VisitStatus.CHECKED_IN);
-    /** Doctor finish treatment → checkout (not final COMPLETED). */
+    /** Doctor finish treatment → COMPLETED (invoice-ready). */
     private static final Set<VisitStatus> FINISHABLE = EnumSet.of(VisitStatus.IN_PROGRESS);
     private static final Set<BookingStatus> ACTIVE_BOOKING_STATUSES = EnumSet.of(
             BookingStatus.PENDING, BookingStatus.CONFIRMED);
@@ -133,16 +133,17 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     public VisitModel createWalkIn(String clinicUuid, WalkInCreateRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
-        requireOperational(clinic);
-
-        Pet pet = resolvePetForWalkIn(clinic, request);
-        ClinicPetOwner owner = pet.getClinicOwner();
+        requireOperational(clinic, email);
 
         DoctorProfile doctor = null;
         if (request.doctorUuid() != null && !request.doctorUuid().isBlank()) {
             doctor = requireClinicDoctor(clinic, request.doctorUuid());
             requirePracticeReady(doctor);
+            requireDoctorAvailableAt(doctor, DoctorHours.nowLocal(availabilityTimezone(doctor, clinic)));
         }
+
+        Pet pet = resolvePetForWalkIn(clinic, request);
+        ClinicPetOwner owner = pet.getClinicOwner();
 
         Visit visit = Visit.builder()
                 .uuid(UUID.randomUUID().toString())
@@ -169,7 +170,7 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     public BookingModel createScheduledBooking(String clinicUuid, ScheduleBookingCreateRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
-        requireOperational(clinic);
+        requireOperational(clinic, email);
 
         if (request.doctorUuid() == null || request.doctorUuid().isBlank()) {
             throw new CustomException("Doctor is required to schedule an appointment", HttpStatus.BAD_REQUEST);
@@ -265,7 +266,7 @@ public class VisitServiceImpl implements VisitService {
     public BookingModel updateScheduledBooking(String clinicUuid, String bookingUuid,
             ScheduleBookingPatchRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
-        requireOperational(clinic);
+        requireOperational(clinic, email);
 
         if (request == null) {
             throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
@@ -373,7 +374,7 @@ public class VisitServiceImpl implements VisitService {
         if (clinic == null || Boolean.FALSE.equals(clinic.getIsActive())) {
             throw new ResourceNotFoundException("clinic", "uuid", request.clinicUuid());
         }
-        requireOperational(clinic);
+        requireOperational(clinic, email);
 
         DoctorProfile doctor = requireClinicDoctor(clinic, request.doctorUuid());
         requirePracticeReady(doctor);
@@ -430,7 +431,7 @@ public class VisitServiceImpl implements VisitService {
         if (clinic == null || Boolean.FALSE.equals(clinic.getIsActive())) {
             throw new ResourceNotFoundException("clinic", "uuid", clinicUuid);
         }
-        requireOperational(clinic);
+        requireOperational(clinic, email);
         DoctorProfile doctor = requireClinicDoctor(clinic, doctorUuid);
         LocalDateTime nowClinic = DoctorHours.nowLocal(clinic.getTimezone());
         LocalDate day = date == null ? nowClinic.toLocalDate() : date;
@@ -442,8 +443,10 @@ public class VisitServiceImpl implements VisitService {
             duration = availability.getSlotDurationMinutes();
         }
 
-        List<LocalTime[]> windows = DoctorHours.windowsOrDefault(
-                availability == null ? null : availability.getWeeklyScheduleJson(), day.getDayOfWeek());
+        List<LocalTime[]> windows = DoctorHours.windowsForDate(
+                availability == null ? null : availability.getWeeklyScheduleJson(),
+                availability == null ? null : availability.getExceptionsJson(),
+                day);
         if (windows.isEmpty()) {
             return List.of();
         }
@@ -459,12 +462,9 @@ public class VisitServiceImpl implements VisitService {
     }
 
     private void requireWithinDoctorHours(DoctorProfile doctor, LocalDateTime slotStart) {
-        DoctorAvailability availability = doctorAvailabilityRepository.findByDoctor_Id(doctor.getId()).orElse(null);
-        List<LocalTime[]> windows = DoctorHours.windowsOrDefault(
-                availability == null ? null : availability.getWeeklyScheduleJson(), slotStart.getDayOfWeek());
         LocalTime start = slotStart.toLocalTime();
         LocalTime end = slotStart.plusMinutes(APPOINTMENT_MINUTES).toLocalTime();
-        if (!DoctorHours.fitsWindow(windows, start, end)) {
+        if (!DoctorHours.fitsWindow(doctorWindowsOn(doctor, slotStart.toLocalDate()), start, end)) {
             throw new CustomException("Doctor is not available at this time", HttpStatus.BAD_REQUEST);
         }
     }
@@ -476,6 +476,32 @@ public class VisitServiceImpl implements VisitService {
             throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
         }
     }
+
+    /** Walk-in "here now": doctor must have a window covering this instant. */
+    private void requireDoctorAvailableAt(DoctorProfile doctor, LocalDateTime when) {
+        LocalTime now = when.toLocalTime();
+        if (!DoctorHours.fitsWindow(doctorWindowsOn(doctor, when.toLocalDate()), now, now)) {
+            throw new CustomException("Doctor is not available at this time", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private List<LocalTime[]> doctorWindowsOn(DoctorProfile doctor, LocalDate day) {
+        DoctorAvailability availability = doctorAvailabilityRepository.findByDoctor_Id(doctor.getId()).orElse(null);
+        return DoctorHours.windowsForDate(
+                availability == null ? null : availability.getWeeklyScheduleJson(),
+                availability == null ? null : availability.getExceptionsJson(),
+                day);
+    }
+
+    private String availabilityTimezone(DoctorProfile doctor, Clinic clinic) {
+        return doctorAvailabilityRepository.findByDoctor_Id(doctor.getId())
+                .map(DoctorAvailability::getTimezone)
+                .filter(tz -> tz != null && !tz.isBlank())
+                .orElse(clinic != null && clinic.getTimezone() != null && !clinic.getTimezone().isBlank()
+                        ? clinic.getTimezone()
+                        : DoctorHours.DEFAULT_ZONE);
+    }
+
 
     private void notifyDoctorOfBooking(Booking booking) {
         DoctorProfile doctor = booking.getDoctor();
@@ -584,7 +610,7 @@ public class VisitServiceImpl implements VisitService {
         if (booking.getClinic() == null || booking.getPet() == null) {
             throw new CustomException("Booking is missing clinic or pet", HttpStatus.BAD_REQUEST);
         }
-        requireOperational(booking.getClinic());
+        requireOperational(booking.getClinic(), email);
 
         // Idempotent: booking already converted — return today's open visit for this pet if any.
         if (booking.getStatus() == BookingStatus.COMPLETED) {
@@ -644,16 +670,26 @@ public class VisitServiceImpl implements VisitService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<VisitModel> listClinicVisits(String clinicUuid, LocalDate date, VisitStatus status,
-            String doctorUuid, String email) {
+    public List<VisitModel> listClinicVisits(String clinicUuid, LocalDate date, LocalDate from, LocalDate to,
+            VisitStatus status, String doctorUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
-        LocalDate day = date == null ? LocalDate.now() : date;
-        LocalDateTime from = day.atStartOfDay();
-        LocalDateTime to = day.atTime(LocalTime.MAX);
-
-        List<Visit> visits = status == null
-                ? visitDao.findByClinicAndDay(clinic.getId(), from, to)
-                : visitDao.findByClinicStatusAndDay(clinic.getId(), status, from, to);
+        List<Visit> visits;
+        if (from != null || to != null) {
+            LocalDate[] range = normalizeDateRange(from, to);
+            LocalDateTime rangeFrom = range[0].atStartOfDay();
+            LocalDateTime rangeTo = range[1].atTime(LocalTime.MAX);
+            visits = visitDao.findByClinicScheduleBetween(clinic.getId(), rangeFrom, rangeTo);
+            if (status != null) {
+                visits = visits.stream().filter(v -> v.getStatus() == status).toList();
+            }
+        } else {
+            LocalDate day = date == null ? LocalDate.now() : date;
+            LocalDateTime dayFrom = day.atStartOfDay();
+            LocalDateTime dayTo = day.atTime(LocalTime.MAX);
+            visits = status == null
+                    ? visitDao.findByClinicAndDay(clinic.getId(), dayFrom, dayTo)
+                    : visitDao.findByClinicStatusAndDay(clinic.getId(), status, dayFrom, dayTo);
+        }
 
         if (doctorUuid != null && !doctorUuid.isBlank()) {
             visits = visits.stream()
@@ -677,7 +713,7 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     public VisitModel patchVisit(String clinicUuid, String visitUuid, VisitPatchRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
-        requireOperational(clinic);
+        requireOperational(clinic, email);
         Visit visit = visitDao.findByUuidAndClinicId(visitUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("visit", "uuid", visitUuid));
 
@@ -762,7 +798,7 @@ public class VisitServiceImpl implements VisitService {
         }
         LocalDateTime rangeFrom = start.atStartOfDay();
         LocalDateTime rangeTo = end.atTime(LocalTime.MAX);
-        return visitDao.findByDoctorAndDay(profile.getId(), rangeFrom, rangeTo).stream()
+        return visitDao.findByDoctorScheduleBetween(profile.getId(), rangeFrom, rangeTo).stream()
                 .filter(v -> clinicUuid == null || clinicUuid.isBlank()
                         || (v.getClinic() != null && clinicUuid.equals(v.getClinic().getUuid())))
                 .map(v -> toModel(v, true))
@@ -856,8 +892,7 @@ public class VisitServiceImpl implements VisitService {
             throw new CustomException("Add an assessment / diagnosis before finishing treatment",
                     HttpStatus.BAD_REQUEST);
         }
-        // Send to clinic Checkout — reception completes the visit afterward.
-        applyStatusTransition(visit, VisitStatus.CHECKING_OUT);
+        applyStatusTransition(visit, VisitStatus.COMPLETED);
         ensureHealthEvent(visit);
         if (visit.getClinicOwner() != null) {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(visit.getClinicOwner());
@@ -1372,7 +1407,7 @@ public class VisitServiceImpl implements VisitService {
                         HttpStatus.BAD_REQUEST);
             }
         } else if (target == VisitStatus.COMPLETED) {
-            allowed = current == VisitStatus.CHECKING_OUT;
+            allowed = current == VisitStatus.CHECKING_OUT || current == VisitStatus.IN_PROGRESS;
         } else if (target == VisitStatus.CANCELLED || target == VisitStatus.NO_SHOW) {
             allowed = current == VisitStatus.WAITLIST || current == VisitStatus.CHECKED_IN;
         } else {
@@ -1629,13 +1664,62 @@ public class VisitServiceImpl implements VisitService {
         return clinic;
     }
 
-    private void requireOperational(Clinic clinic) {
+    private void requireOperational(Clinic clinic, String email) {
         if (clinic.getStatus() == ClinicStatus.SHUTDOWN) {
             throw new CustomException("This clinic is shut down and is read-only.", HttpStatus.BAD_REQUEST);
+        }
+        if (isOwnerAffiliatedDoctor(clinic)) {
+            return;
+        }
+        User actor = email == null || email.isBlank() ? null : userDao.userByEmail(email);
+        if (isActorPersonalPractice(clinic, actor)) {
+            return;
         }
         if (clinic.getStatus() == null || !clinic.getStatus().isActivated()) {
             throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
         }
+    }
+
+    /** Actor owns this clinic and is an active affiliated doctor (solo practice). */
+    private boolean isActorPersonalPractice(Clinic clinic, User actor) {
+        if (clinic == null || clinic.getId() == null || actor == null || actor.getId() == null) {
+            return false;
+        }
+        Clinic owned = clinicDao.findByOwnerUserId(actor.getId());
+        if (owned == null || owned.getId() == null || !owned.getId().equals(clinic.getId())) {
+            return false;
+        }
+        return isDoctorPracticeOwner(actor.getId(), clinic.getId());
+    }
+
+    /** Solo doctor practice: owner has a doctor profile or an active clinic affiliation. */
+    private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
+        Long ownerUserId = resolveOwnerUserId(clinic);
+        if (ownerUserId == null) {
+            return false;
+        }
+        return isDoctorPracticeOwner(ownerUserId, clinic.getId());
+    }
+
+    private boolean isDoctorPracticeOwner(Long userId, Long clinicId) {
+        if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinicId, userId)) {
+            return true;
+        }
+        return doctorProfileDao.findByUserId(userId) != null;
+    }
+
+    private Long resolveOwnerUserId(Clinic clinic) {
+        if (clinic == null || clinic.getId() == null) {
+            return null;
+        }
+        try {
+            if (clinic.getOwner() != null && clinic.getOwner().getId() != null) {
+                return clinic.getOwner().getId();
+            }
+        } catch (RuntimeException ex) {
+            log.warn("Could not read clinic owner for {}: {}", clinic.getUuid(), ex.getMessage());
+        }
+        return clinicDao.findOwnerUserId(clinic.getId());
     }
 
     private void requirePracticeReady(DoctorProfile doctor) {
@@ -1815,6 +1899,17 @@ public class VisitServiceImpl implements VisitService {
 
     private static int urgencyRank(VisitUrgency urgency) {
         return urgency == VisitUrgency.URGENT ? 1 : 0;
+    }
+
+    static LocalDate[] normalizeDateRange(LocalDate from, LocalDate to) {
+        LocalDate start = from == null ? (to == null ? LocalDate.now() : to) : from;
+        LocalDate end = to == null ? start : to;
+        if (end.isBefore(start)) {
+            LocalDate tmp = start;
+            start = end;
+            end = tmp;
+        }
+        return new LocalDate[] { start, end };
     }
 
     private static String blankToNull(String value) {
