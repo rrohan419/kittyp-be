@@ -47,7 +47,7 @@ public interface NutritionPlanService {
 
     NutritionPlanModel approvePlan(String planUuid, String doctorUserUuid);
 
-    NutritionPlanModel sendPlan(String planUuid, String doctorUserUuid);
+    NutritionPlanModel sendPlan(String planUuid, String doctorUserUuid, Integer durationDays);
 
     NutritionPlanModel getActivePlanForParent(String petUuid, String parentUserUuid);
 

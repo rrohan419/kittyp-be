@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.clinic.entity.Clinic;
@@ -24,6 +25,7 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
@@ -58,10 +60,14 @@ public class ClinicInvoiceController {
 
     @GetMapping(ApiUrl.CLINIC_INVOICES)
     @PreAuthorize(CLINIC_BILLING)
-    public ResponseEntity<SuccessResponse<List<ConsultationInvoice>>> list(@PathVariable String uuid) {
+    public ResponseEntity<SuccessResponse<PaginationModel<ConsultationInvoice>>> list(
+            @PathVariable String uuid,
+            @RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) Integer pageNumber,
+            @RequestParam(defaultValue = KeyConstant.PAGE_SIZE) Integer pageSize) {
         Clinic clinic = requireAccessibleClinic(uuid);
         return responseBuilder.buildSuccessResponse(
-                treatmentInvoiceService.listForClinic(clinic), ResponseMessage.SUCCESS, HttpStatus.OK);
+                treatmentInvoiceService.pageForClinic(clinic, pageNumber, pageSize),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @PostMapping(ApiUrl.CLINIC_INVOICES)

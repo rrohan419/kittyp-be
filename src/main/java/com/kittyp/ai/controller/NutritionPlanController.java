@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.ai.dto.NutritionPlanFilter;
 import com.kittyp.ai.dto.SaveNutritionPlanDto;
+import com.kittyp.ai.dto.SendNutritionPlanRequest;
 import com.kittyp.ai.model.NutritionPlanModel;
 import com.kittyp.ai.service.NutritionPlanService;
 import com.kittyp.common.constants.ApiUrl;
@@ -130,9 +131,12 @@ public class NutritionPlanController {
 
     @PostMapping(ApiUrl.NUTRITION_PLAN_SEND)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<NutritionPlanModel>> sendPlan(@PathVariable String uuid) {
+    public ResponseEntity<SuccessResponse<NutritionPlanModel>> sendPlan(
+            @PathVariable String uuid,
+            @RequestBody(required = false) SendNutritionPlanRequest request) {
+        Integer durationDays = request == null ? null : request.durationDays();
         return responseBuilder.buildSuccessResponse(
-                nutritionPlanService.sendPlan(uuid, currentUser().getUuid()),
+                nutritionPlanService.sendPlan(uuid, currentUser().getUuid(), durationDays),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

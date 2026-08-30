@@ -7,5 +7,7 @@ public enum HealthEventType {
     GROOMING,
     ILLNESS,
     MEDICATION,
-    CUSTOM
+    CUSTOM,
+    LAB_REPORT,
+    SURGERY
 }

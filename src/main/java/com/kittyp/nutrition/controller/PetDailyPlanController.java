@@ -60,8 +60,9 @@ public class PetDailyPlanController {
     public ResponseEntity<SuccessResponse<List<PetDailyPlanModel>>> activeDailyPlan(
             @PathVariable String petUuid) {
         petAccessGuard.requirePetAccess(currentUser(), petUuid);
+        String petId = petAccessGuard.canonicalPetUuid(petUuid);
         return responseBuilder.buildSuccessResponse(
-                petDailyPlanService.getPetsDailyPlanActivePlan(petUuid),
+                petDailyPlanService.getPetsDailyPlanActivePlan(petId),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

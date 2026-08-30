@@ -15,6 +15,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
+import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
+import com.kittyp.clinic.dto.ClinicDtos.MarkVaccineGivenRequest;
+import com.kittyp.clinic.dto.ClinicDtos.VaccineCatalogModel;
+import com.kittyp.clinic.dto.ClinicDtos.VaccineScheduleModel;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
@@ -32,7 +38,6 @@ import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteRequest;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
 import com.kittyp.clinic.dto.ClinicDtos.EnsureOwnerFromUserRequest;
-import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
@@ -250,9 +255,11 @@ public class ClinicController {
 
     @GetMapping(ApiUrl.CLINIC_OWNERS)
     @PreAuthorize(CLINIC_ACCESS)
-    public ResponseEntity<SuccessResponse<List<ClinicOwnerModel>>> owners(@PathVariable String uuid,
-            @RequestParam(required = false) String q, @RequestParam(required = false) String by) {
-        return success(clinicService.listOwners(uuid, q, email(), emailOrIdOnly(by)));
+    public ResponseEntity<SuccessResponse<PaginationModel<ClinicOwnerModel>>> owners(@PathVariable String uuid,
+            @RequestParam(required = false) String q, @RequestParam(required = false) String by,
+            @RequestParam(defaultValue = "1") Integer pageNumber,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return success(clinicService.pageOwners(uuid, q, email(), emailOrIdOnly(by), pageNumber, pageSize));
     }
 
     @GetMapping(ApiUrl.CLINIC_USERS_SEARCH)
@@ -295,9 +302,11 @@ public class ClinicController {
 
     @GetMapping(ApiUrl.CLINIC_PETS)
     @PreAuthorize(CLINIC_ACCESS)
-    public ResponseEntity<SuccessResponse<List<ClinicPetListModel>>> pets(@PathVariable String uuid,
-            @RequestParam(required = false) String q, @RequestParam(required = false) String by) {
-        return success(clinicService.listPets(uuid, q, email(), emailOrIdOnly(by)));
+    public ResponseEntity<SuccessResponse<PaginationModel<ClinicPetListModel>>> pets(@PathVariable String uuid,
+            @RequestParam(required = false) String q, @RequestParam(required = false) String by,
+            @RequestParam(defaultValue = "1") Integer pageNumber,
+            @RequestParam(defaultValue = "20") Integer pageSize) {
+        return success(clinicService.pagePets(uuid, q, email(), emailOrIdOnly(by), pageNumber, pageSize));
     }
 
     @GetMapping(ApiUrl.CLINIC_PET_DETAIL)
@@ -382,6 +391,36 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<HealthEventModel>> createHealthEvent(@PathVariable String uuid,
             @PathVariable String petUuid, @RequestBody @Valid HealthEventRequest request) {
         return success(clinicService.createHealthEvent(uuid, petUuid, request, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_PET_RECORDS)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<HealthEventModel>> createClinicalRecord(@PathVariable String uuid,
+            @PathVariable String petUuid, @RequestBody @Valid ClinicalRecordRequest request) {
+        return success(clinicService.createClinicalRecord(uuid, petUuid, request, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_VACCINE_CATALOG)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<VaccineCatalogModel>>> vaccineCatalog(@PathVariable String uuid,
+            @RequestParam(required = false) String species) {
+        return success(clinicService.vaccineCatalog(uuid, species, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_PET_VACCINES)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<VaccineScheduleModel>> addVaccineDue(@PathVariable String uuid,
+            @PathVariable String petUuid, @RequestBody @Valid AddVaccineDueRequest request) {
+        return success(clinicService.addVaccineDue(uuid, petUuid, request, email()));
+    }
+
+    @PatchMapping(ApiUrl.CLINIC_PET_VACCINE)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<VaccineScheduleModel>> markVaccineGiven(@PathVariable String uuid,
+            @PathVariable String petUuid, @PathVariable Long scheduleId,
+            @RequestBody(required = false) MarkVaccineGivenRequest request) {
+        return success(clinicService.markVaccineGiven(uuid, petUuid, scheduleId,
+                request == null ? new MarkVaccineGivenRequest(null, null) : request, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_SHUTDOWN)

@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.user.entity.Pet;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
@@ -39,6 +40,9 @@ public class PetVaccineSchedule extends BaseEntity{
     private Boolean completed = false;
  
     private LocalDate completedDate;
+
+    @Column(name = "certificate_url", length = 1024)
+    private String certificateUrl;
 
     @Builder.Default
     private Boolean reminderSent = false;

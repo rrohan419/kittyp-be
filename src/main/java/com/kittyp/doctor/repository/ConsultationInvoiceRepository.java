@@ -3,7 +3,11 @@ package com.kittyp.doctor.repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.kittyp.doctor.entity.ConsultationInvoice;
 
@@ -22,9 +26,32 @@ public interface ConsultationInvoiceRepository extends JpaRepository<Consultatio
 
     List<ConsultationInvoice> findAllByPetUuidOrderByCreatedAtDesc(String petUuid);
 
+    Page<ConsultationInvoice> findAllByPetUuidOrderByCreatedAtDesc(String petUuid, Pageable pageable);
+
     List<ConsultationInvoice> findAllByClinic_IdOrderByCreatedAtDesc(Long clinicId);
 
+    Page<ConsultationInvoice> findAllByClinic_IdOrderByCreatedAtDesc(Long clinicId, Pageable pageable);
+
     List<ConsultationInvoice> findAllByDoctor_IdAndClinic_IdOrderByCreatedAtDesc(Long doctorId, Long clinicId);
+
+    Page<ConsultationInvoice> findAllByDoctor_IdAndClinic_IdOrderByCreatedAtDesc(
+            Long doctorId, Long clinicId, Pageable pageable);
+
+    @Query("""
+            SELECT i FROM ConsultationInvoice i
+            LEFT JOIN i.clinic c
+            WHERE i.doctor.id = :doctorId
+              AND (c IS NULL OR c.owner.id = :doctorId)
+            """)
+    Page<ConsultationInvoice> findPersonalPracticeForDoctor(@Param("doctorId") Long doctorId, Pageable pageable);
+
+    @Query("""
+            SELECT i FROM ConsultationInvoice i
+            WHERE i.doctor.id = :doctorId
+              AND (i.clinic.id = :clinicId OR i.clinic IS NULL)
+            """)
+    Page<ConsultationInvoice> findByDoctorAndClinicOrUnscoped(
+            @Param("doctorId") Long doctorId, @Param("clinicId") Long clinicId, Pageable pageable);
 
     Optional<ConsultationInvoice> findByUuidAndClinic_Id(String uuid, Long clinicId);
 

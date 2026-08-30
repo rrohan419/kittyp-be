@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import javax.naming.AuthenticationException;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -227,6 +228,20 @@ public class GlobalExceptionHandler {
 				ex.getParameterName() + " parameter is missing", path);
 
 		log.error("Missing parameter exception: {}", ex.getMessage());
+		return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+	}
+
+	@ExceptionHandler(DataIntegrityViolationException.class)
+	public ResponseEntity<ApiError> handleDataIntegrityViolation(DataIntegrityViolationException ex,
+			WebRequest request) {
+		String path = extractPath(request);
+		String cause = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
+		String message = "The request could not be saved because of invalid or incomplete data";
+		if (cause != null && cause.toLowerCase().contains("daily_plan_id")) {
+			message = "Could not save this feeding log. Try again from a scheduled meal, or contact support.";
+		}
+		ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST.value(), "Invalid Request", message, path);
+		log.warn("Data integrity violation: {}", cause);
 		return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
 	}
 

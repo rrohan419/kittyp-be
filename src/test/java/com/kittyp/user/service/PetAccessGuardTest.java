@@ -1,5 +1,6 @@
 package com.kittyp.user.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -85,6 +86,14 @@ class PetAccessGuardTest {
         when(petsRepository.findOptionalByUuid("pet-uuid")).thenReturn(Optional.of(pet));
         when(doctorProfileDao.findByUserId(1L)).thenReturn(null);
         assertThrows(CustomException.class, () -> guard.requireClinicalAccess(owner, "pet-uuid"));
+    }
+
+    @Test
+    void canonicalPetUuidUsesStoredPublicId() {
+        when(petsRepository.findOptionalByUuid("6up32b")).thenReturn(Optional.empty());
+        when(petsRepository.findByUuidIgnoreCase("6up32b")).thenReturn(Optional.of(pet));
+        pet.setUuid("6UP32B");
+        assertEquals("6UP32B", guard.canonicalPetUuid("6up32b"));
     }
 
     @Test

@@ -140,11 +140,32 @@ public final class ClinicDtos {
     }
 
     public record VaccineScheduleModel(Long id, String vaccineName, LocalDate dueDate, Boolean completed,
-            LocalDate completedDate) {
+            LocalDate completedDate, String certificateUrl) {
+        public VaccineScheduleModel(Long id, String vaccineName, LocalDate dueDate, Boolean completed,
+                LocalDate completedDate) {
+            this(id, vaccineName, dueDate, completed, completedDate, null);
+        }
+    }
+
+    public record VaccineCatalogModel(Long id, String name, String species, String description) {
+    }
+
+    public record AddVaccineDueRequest(@NotNull Long vaccineMasterId, @NotNull LocalDate dueDate) {
+    }
+
+    public record MarkVaccineGivenRequest(LocalDate completedDate, String certificateUrl) {
     }
 
     public record HealthEventModel(String uuid, String type, String title, String description, LocalDate date,
-            Boolean isPast, String status, List<String> attachments) {
+            Boolean isPast, String status, List<String> attachments, String visitUuid) {
+        public HealthEventModel(String uuid, String type, String title, String description, LocalDate date,
+                Boolean isPast, String status, List<String> attachments) {
+            this(uuid, type, title, description, date, isPast, status, attachments, null);
+        }
+    }
+
+    public record ClinicalRecordModel(String uuid, String title, String description, LocalDate date, String visitUuid,
+            List<String> attachments) {
     }
 
     public record PatientDetailModel(PatientModel patient, OwnerSummaryModel owner, List<PatientPetModel> pets,
@@ -185,7 +206,7 @@ public final class ClinicDtos {
 
     public record ClinicPetMedicalProfileModel(ClinicPetListModel pet, OwnerSummaryModel owner,
             List<HealthEventModel> timeline, List<BookingModel> appointments, List<VaccineScheduleModel> vaccinations,
-            List<String> prescriptions, List<String> labReports, List<String> surgeries,
+            List<String> prescriptions, List<ClinicalRecordModel> labReports, List<ClinicalRecordModel> surgeries,
             List<InvoiceSummaryModel> invoices) {
     }
 
@@ -246,7 +267,16 @@ public final class ClinicDtos {
     }
 
     public record HealthEventRequest(@NotNull HealthEventType type, String title, String description,
-            @NotNull LocalDate date, Boolean isPast, HealthEventStatus status, List<String> attachments) {
+            @NotNull LocalDate date, Boolean isPast, HealthEventStatus status, List<String> attachments,
+            String visitUuid) {
+        public HealthEventRequest(@NotNull HealthEventType type, String title, String description,
+                @NotNull LocalDate date, Boolean isPast, HealthEventStatus status, List<String> attachments) {
+            this(type, title, description, date, isPast, status, attachments, null);
+        }
+    }
+
+    public record ClinicalRecordRequest(@NotNull HealthEventType type, String title, String description,
+            @NotNull LocalDate date, String visitUuid, List<String> attachments) {
     }
 
     public record SwitchClinicRequest(@NotBlank String clinicUuid) {

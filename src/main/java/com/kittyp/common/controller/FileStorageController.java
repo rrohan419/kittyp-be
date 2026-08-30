@@ -1,9 +1,12 @@
 package com.kittyp.common.controller;
 
 import java.io.IOException;
+import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.kittyp.clinic.service.ClinicService;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -25,6 +29,7 @@ import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.service.ImageUploadSanitizer;
 import com.kittyp.common.service.S3StorageService;
+import com.kittyp.common.util.ClinicalObjectKeys;
 import com.kittyp.common.util.VerificationCodeService;
 import lombok.RequiredArgsConstructor;
 
@@ -45,6 +50,7 @@ public class FileStorageController {
 	private final S3StorageService s3StorageService;
 	private final VerificationCodeService verificationCodeService;
 	private final ImageUploadSanitizer imageUploadSanitizer;
+	private final ClinicService clinicService;
 
 	@PostMapping(value = "/upload/public-url", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
@@ -94,9 +100,42 @@ public class FileStorageController {
 					HttpStatus.BAD_REQUEST);
 		}
 		validateFiles(multipartFiles);
-
 		return responseBuilder.buildSuccessResponse(
 				s3StorageService.uploadMultipleFiles("doctors/" + sanitizeEmail(normalized), toRequests(multipartFiles)),
+				ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(value = ApiUrl.UPLOAD_CLINICAL, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	@PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+	public ResponseEntity<SuccessResponse<List<String>>> uploadClinical(
+			@RequestParam("files") List<MultipartFile> multipartFiles,
+			@RequestParam String clinicUuid,
+			@RequestParam String petUuid,
+			@RequestParam String kind,
+			@RequestParam(required = false) String visitUuid,
+			@RequestParam(required = false) String eventUuid) {
+
+		String email = SecurityContextHolder.getContext().getAuthentication().getName();
+		clinicService.assertClinicalUploadAllowed(clinicUuid, petUuid, visitUuid, email);
+		validateFiles(multipartFiles);
+
+		String kindNorm = ClinicalObjectKeys.normalizeKind(kind);
+		String visit = visitUuid == null || visitUuid.isBlank() ? null : visitUuid.trim();
+		String event = eventUuid == null || eventUuid.isBlank() ? null : eventUuid.trim();
+		String anchor = visit != null
+				? ClinicalObjectKeys.visitAnchor(visit)
+				: ClinicalObjectKeys.eventAnchor(event != null ? event : UUID.randomUUID().toString());
+		String folder = ClinicalObjectKeys.folder(clinicUuid, petUuid, kindNorm, YearMonth.now());
+
+		List<FileUploadRequest> requests = new ArrayList<>();
+		for (FileUploadRequest request : toRequests(multipartFiles)) {
+			requests.add(new FileUploadRequest(
+					ClinicalObjectKeys.fileName(anchor, request.getFileName()),
+					request.getData(),
+					request.getContentType()));
+		}
+		return responseBuilder.buildSuccessResponse(
+				s3StorageService.uploadMultipleFiles(folder, requests),
 				ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 

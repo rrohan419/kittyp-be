@@ -65,6 +65,9 @@ public class HealthEvent extends BaseEntity {
     @Column(length = 20)
     private HealthEventStatus status;
 
+    @Column(name = "visit_uuid", length = 64)
+    private String visitUuid;
+
     @ElementCollection
     @CollectionTable(name = "health_event_attachments", joinColumns = @JoinColumn(name = "health_event_id"))
     @Column(name = "attachment_url")
