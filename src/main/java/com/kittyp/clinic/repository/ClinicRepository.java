@@ -13,6 +13,9 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
 
     Clinic findByUuid(String uuid);
 
+    @Query("SELECT c.owner.id FROM Clinic c WHERE c.id = :clinicId")
+    Long findOwnerUserIdByClinicId(@Param("clinicId") Long clinicId);
+
     boolean existsByUuid(String uuid);
 
     @Query("SELECT c FROM Clinic c LEFT JOIN FETCH c.owner WHERE c.uuid = :uuid")

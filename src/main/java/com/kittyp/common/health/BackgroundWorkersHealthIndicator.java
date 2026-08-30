@@ -26,6 +26,7 @@ public class BackgroundWorkersHealthIndicator implements HealthIndicator {
 		int maxPoolSize = taskExecutor.getMaxPoolSize();
 		int queueCapacity = taskExecutor.getQueueCapacity();
 		int queueSize = taskExecutor.getThreadPoolExecutor().getQueue().size();
+		int cancelled = CancelledWorkerJobs.count(taskExecutor.getThreadPoolExecutor());
 		boolean queueFull = queueCapacity > 0 && queueSize >= queueCapacity;
 		Health.Builder builder = queueFull ? Health.down() : Health.up();
 		return builder
@@ -34,6 +35,7 @@ public class BackgroundWorkersHealthIndicator implements HealthIndicator {
 				.withDetail("maxPoolSize", maxPoolSize)
 				.withDetail("queueSize", queueSize)
 				.withDetail("queueCapacity", queueCapacity)
+				.withDetail("cancelled", cancelled)
 				.build();
 	}
 }

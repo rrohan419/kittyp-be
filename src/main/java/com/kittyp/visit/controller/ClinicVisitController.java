@@ -47,9 +47,11 @@ public class ClinicVisitController {
     public ResponseEntity<SuccessResponse<List<VisitModel>>> list(
             @PathVariable String uuid,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) VisitStatus status,
             @RequestParam(required = false) String doctorUuid) {
-        return success(visitService.listClinicVisits(uuid, date, status, doctorUuid, email()));
+        return success(visitService.listClinicVisits(uuid, date, from, to, status, doctorUuid, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_VISITS_WALK_IN)

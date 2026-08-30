@@ -29,6 +29,9 @@ public class ApiUrl {
 	public static final String USER_PASSWORD_RESET = AUTH_BASE_URL + "/password-reset";
 
 	public static final String ADMIN_SYSTEM_HEALTH = ADMIN + "/system-health";
+	public static final String ADMIN_SYSTEM_HEALTH_OPTIMIZE = ADMIN_SYSTEM_HEALTH + "/optimize";
+	public static final String ADMIN_SYSTEM_HEALTH_LOAD_START = ADMIN_SYSTEM_HEALTH + "/load-test/start";
+	public static final String ADMIN_SYSTEM_HEALTH_LOAD_STOP = ADMIN_SYSTEM_HEALTH + "/load-test/stop";
 	public static final String ADMIN_DOCTORS = ADMIN + "/doctors";
 	public static final String ADMIN_DOCTOR_BY_UUID = ADMIN_DOCTORS + PATH_VARIABLE_UUID;
 	public static final String ADMIN_DOCTOR_STATUS = ADMIN_DOCTOR_BY_UUID + "/status";

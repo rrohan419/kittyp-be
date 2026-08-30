@@ -6,11 +6,16 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +25,20 @@ final class DoctorHours {
 
     static final String DEFAULT_ZONE = "Asia/Kolkata";
 
+    private static final Set<String> CLOSED_EXCEPTION_TYPES = Set.of(
+            "unavailable", "holiday", "emergency-only");
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static final DateTimeFormatter FLEX_TIME = new DateTimeFormatterBuilder()
+            .appendValue(ChronoField.HOUR_OF_DAY)
+            .appendLiteral(':')
+            .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
+            .optionalStart()
+            .appendLiteral(':')
+            .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
+            .optionalEnd()
+            .toFormatter();
 
     private DoctorHours() {
     }
@@ -81,9 +99,6 @@ final class DoctorHours {
         return free;
     }
 
-    static boolean hasWeeklySchedule(String weeklyScheduleJson) {
-        return !parseSchedule(weeklyScheduleJson).isEmpty();
-    }
 
     /**
      * Windows for that weekday. Empty schedule (never configured) falls back to 09:00–18:00.
@@ -97,8 +112,41 @@ final class DoctorHours {
         return windows;
     }
 
+    /**
+     * Windows for a calendar date. Closed exceptions (unavailable / holiday / emergency-only)
+     * return no windows. reduced-hours replaces the weekly windows for that date.
+     */
+    static List<LocalTime[]> windowsForDate(String weeklyScheduleJson, String exceptionsJson, LocalDate date) {
+        if (date == null) {
+            return List.of();
+        }
+        List<LocalTime[]> reduced = new ArrayList<>();
+        boolean reducedHours = false;
+        for (Map<String, Object> exception : parseJsonList(exceptionsJson)) {
+            if (!dateMatches(exception.get("date"), date)) {
+                continue;
+            }
+            String type = Objects.toString(exception.get("type"), "").trim().toLowerCase(Locale.ROOT);
+            if (CLOSED_EXCEPTION_TYPES.contains(type)) {
+                return List.of();
+            }
+            if ("reduced-hours".equals(type)) {
+                reducedHours = true;
+                LocalTime[] window = parseTimes(exception.get("startTime"), exception.get("endTime"));
+                if (window != null) {
+                    reduced.add(window);
+                }
+            }
+        }
+        if (reducedHours) {
+            reduced.sort(Comparator.comparing(w -> w[0]));
+            return reduced;
+        }
+        return windowsOrDefault(weeklyScheduleJson, date.getDayOfWeek());
+    }
+
     static List<LocalTime[]> windowsForDay(String weeklyScheduleJson, DayOfWeek dayOfWeek) {
-        List<Map<String, Object>> schedule = parseSchedule(weeklyScheduleJson);
+        List<Map<String, Object>> schedule = parseJsonList(weeklyScheduleJson);
         if (schedule.isEmpty()) {
             return List.of();
         }
@@ -128,7 +176,12 @@ final class DoctorHours {
                 continue;
             }
             try {
-                windows.add(new LocalTime[] { LocalTime.parse(start), LocalTime.parse(end) });
+                LocalTime from = parseLocalTime(start);
+                LocalTime to = parseLocalTime(end);
+                if (from == null || to == null) {
+                    continue;
+                }
+                windows.add(new LocalTime[] { from, to });
             } catch (Exception e) {
                 continue;
             }
@@ -150,15 +203,71 @@ final class DoctorHours {
         return false;
     }
 
-    private static List<Map<String, Object>> parseSchedule(String weeklyScheduleJson) {
-        if (weeklyScheduleJson == null || weeklyScheduleJson.isBlank()) {
+    static boolean hasWeeklySchedule(String weeklyScheduleJson) {
+        return !parseJsonList(weeklyScheduleJson).isEmpty();
+    }
+
+    private static boolean dateMatches(Object rawDate, LocalDate date) {
+        if (rawDate == null) {
+            return false;
+        }
+        String text = rawDate.toString().trim();
+        if (text.isEmpty() || "null".equals(text)) {
+            return false;
+        }
+        if (text.length() >= 10) {
+            text = text.substring(0, 10);
+        }
+        try {
+            return date.equals(LocalDate.parse(text));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static LocalTime[] parseTimes(Object startRaw, Object endRaw) {
+        String start = Objects.toString(startRaw, null);
+        String end = Objects.toString(endRaw, null);
+        if (start == null || end == null || "null".equals(start) || "null".equals(end)) {
+            return null;
+        }
+        try {
+            LocalTime from = parseLocalTime(start);
+            LocalTime to = parseLocalTime(end);
+            if (from == null || to == null || to.isBefore(from)) {
+                return null;
+            }
+            return new LocalTime[] { from, to };
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static LocalTime parseLocalTime(String raw) {
+        if (raw == null || raw.isBlank() || "null".equals(raw)) {
+            return null;
+        }
+        String text = raw.trim();
+        try {
+            return LocalTime.parse(text);
+        } catch (Exception e) {
+            try {
+                return LocalTime.parse(text, FLEX_TIME);
+            } catch (Exception e2) {
+                return null;
+            }
+        }
+    }
+
+    private static List<Map<String, Object>> parseJsonList(String json) {
+        if (json == null || json.isBlank()) {
             return List.of();
         }
         try {
-            List<Map<String, Object>> schedule = MAPPER.readValue(weeklyScheduleJson,
+            List<Map<String, Object>> list = MAPPER.readValue(json,
                     new TypeReference<List<Map<String, Object>>>() {
                     });
-            return schedule == null ? List.of() : schedule;
+            return list == null ? List.of() : list;
         } catch (Exception e) {
             return List.of();
         }
