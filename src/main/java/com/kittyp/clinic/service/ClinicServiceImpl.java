@@ -1672,7 +1672,44 @@ public class ClinicServiceImpl implements ClinicService {
                 }
             }
         }
+        for (User platformUser : userRepository.searchActiveUsersByEmailOrUuid(query, PageRequest.of(0, 20))) {
+            String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
+            if (!containsIgnoreCase(ownerEmail, needle) && !containsIgnoreCase(platformUser.getUuid(), needle)) {
+                continue;
+            }
+            for (Pet pet : platformPetsOf(platformUser)) {
+                if (platformPetSelectableForAppointment(pet)) {
+                    found.putIfAbsent(pet.getUuid(), pet);
+                }
+            }
+        }
         return new ArrayList<>(found.values());
+    }
+
+    private List<Pet> platformPetsOf(User platformUser) {
+        if (platformUser == null) {
+            return List.of();
+        }
+        LinkedHashMap<String, Pet> byUuid = new LinkedHashMap<>();
+        for (Pet pet : petsRepository.findByParentUserUuid(platformUser.getUuid())) {
+            if (pet != null && pet.getUuid() != null) {
+                byUuid.put(pet.getUuid(), pet);
+            }
+        }
+        if (platformUser.getPets() != null) {
+            for (Pet pet : platformUser.getPets()) {
+                if (pet != null && pet.getUuid() != null) {
+                    byUuid.putIfAbsent(pet.getUuid(), pet);
+                }
+            }
+        }
+        return new ArrayList<>(byUuid.values());
+    }
+
+    private static boolean platformPetSelectableForAppointment(Pet pet) {
+        return pet != null
+                && Boolean.TRUE.equals(pet.getIsActive())
+                && !Boolean.TRUE.equals(pet.getHiddenFromParent());
     }
 
     private boolean petVisibleForAppointmentSearch(Clinic clinic, Pet pet, User viewer) {
@@ -1948,9 +1985,18 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicOwnerModel toOwnerModel(ClinicPetOwner owner) {
-        List<Pet> pets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId()).stream()
+        List<Pet> pets = new ArrayList<>(petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId()).stream()
                 .filter(p -> !isLegacyDoctorImport(p))
-                .toList();
+                .toList());
+        Set<String> seenPetUuids = pets.stream().map(Pet::getUuid).collect(Collectors.toSet());
+        if (owner.getLinkedUser() != null) {
+            for (Pet pet : platformPetsOf(owner.getLinkedUser())) {
+                if (!seenPetUuids.contains(pet.getUuid()) && platformPetSelectableForAppointment(pet)) {
+                    pets.add(pet);
+                    seenPetUuids.add(pet.getUuid());
+                }
+            }
+        }
         LocalDateTime lastVisit = pets.stream()
                 .map(Pet::getRegisteredAt)
                 .filter(d -> d != null)
