@@ -103,12 +103,11 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		System.out.println("code = " + code);
 
 		ZeptoMailDto mailDto = new ZeptoMailDto();
-		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName(), "RESET_CODE",
-				code, "logo_url",
-				AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+		mailDto.setMergeInfo(Map.of("customer_name", user.getFirstName(), "reset_code",
+				code));
 		mailDto.setRecipientEmail(email);
 		mailDto.setRecipientName(user.getFirstName());
-		mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID));
 
 		try {
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
@@ -130,11 +129,10 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 					: "Doctor Applicant";
 			mailDto.setMergeInfo(Map.of(
 					"Customer_Name", name,
-					"RESET_CODE", code,
-					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+					"OTP", code));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
-			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_SIGNUP_OTP_EMAIL_TEMPLATE_ID));
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
@@ -151,12 +149,12 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name = doctorName == null || doctorName.isBlank() ? "Doctor" : doctorName;
 			mailDto.setMergeInfo(Map.of(
-					"Customer_Name", name,
-					"RESET_CODE", acceptUrl,
-					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+					"doctor_name", name,
+					"clinic_name", clinicName,
+					"acceptUrl", acceptUrl));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
-			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_EMAIL_TEMPLATE_ID));
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
@@ -173,12 +171,12 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name = staffName == null || staffName.isBlank() ? "Staff" : staffName;
 			mailDto.setMergeInfo(Map.of(
-					"Customer_Name", name,
-					"RESET_CODE", acceptUrl,
-					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+					"clinic_name", clinicName,
+					"acceptUrl", acceptUrl,
+					"staff_name", name));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
-			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_EMAIL_TEMPLATE_ID));
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
@@ -198,8 +196,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	@Override
 	public void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
 			String doctorEmail, boolean accepted) {
-		String action = accepted ? "accepted" : "declined";
-		log.info("Clinic invite {} — notify clinicEmail={} clinic={} doctor={} <{}>", action, recipientEmail,
+		String status = accepted ? "accepted" : "declined";
+		log.info("Clinic invite {} — notify clinicEmail={} clinic={} doctor={} <{}>", status, recipientEmail,
 				clinicName, doctorName, doctorEmail);
 		if (recipientEmail == null || recipientEmail.isBlank()) {
 			return;
@@ -207,16 +205,15 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName;
-			String body = String.format("%s (%s) %s your invite to join %s.",
-					doctorName == null || doctorName.isBlank() ? "A doctor" : doctorName,
-					doctorEmail == null ? "" : doctorEmail, action, name);
+			
 			mailDto.setMergeInfo(Map.of(
-					"Customer_Name", name,
-					"RESET_CODE", body,
-					"logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+					"doctor_name", doctorName,
+					"doctor_email", doctorEmail,
+					"clinic_name", name,
+					"status", status));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
-			mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
+			mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_RESPONSE_EMAIL_TEMPLATE_ID));
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
@@ -233,7 +230,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		ZeptoMailDto mailDto = new ZeptoMailDto();
 		mailDto.setRecipientEmail(recipientEmail);
 		mailDto.setRecipientName(user.getFirstName());
-		mailDto.setTemplateKey(TemplateConstant.ZEPTO_ORDER_CONFIRMATION_EMAIL_TEMPLATE_ID);
+		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_ORDER_CONFIRMATION_EMAIL_TEMPLATE_ID));
 
 		// Create the products array
 		List<Map<String, Object>> productsList = new ArrayList<>();
@@ -269,7 +266,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		// Create the root map with all required fields
 		Map<String, Object> root = new HashMap<>();
 		root.put("facebook_url", "facebook_url_value");
-		root.put("logo_url", "logo_url_value");
+		root.put("tracking_url", "tracking_url_value");
+		root.put("twitter_url", "twitter_url_value");
 		root.put("order_number", order.getOrderNumber());
 		root.put("tax", order.getTaxes().getOtherTax().add(order.getTaxes().getServiceCharge()).toString());
 		root.put("billing_address", order.getBillingAddress().getFormattedAddress());
@@ -280,9 +278,6 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		root.put("subtotal", order.getSubTotal().toString());
 		root.put("customer_name", user.getFirstName());
 		root.put("shipping_address", order.getShippingAddress().getFormattedAddress());
-		root.put("tracking_url", "tracking_url_value");
-		root.put("twitter_url", "twitter_url_value");
-		root.put("logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO);
 
 		// Set merge info directly as a map (no JSON serialization/deserialization)
 		mailDto.setMergeInfo(root);
