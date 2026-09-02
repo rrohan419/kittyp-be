@@ -37,7 +37,7 @@ public class AppConstant {
 	    public static final String ZOHO_API_KEY="zoho.api.key";
 	    public static final String KITTYP_MAIL_ID ="kittyp.mail.id";
 	    public static final String ZOHO_EMAIL_SEND_URL="zoho.email.send.url.with.template";
-	    public static final String ZOHO_WELCOME_EMAIL_TEMPLATE_ID="zoho.welcome.template.id";
+	    
 
 		// Google
 		public static final String GOOGLE_WEATHER_API_URL = "google.weather.api.url";

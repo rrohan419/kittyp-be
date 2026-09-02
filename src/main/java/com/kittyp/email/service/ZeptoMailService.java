@@ -8,7 +8,11 @@ package com.kittyp.email.service;
  */
 public interface ZeptoMailService {
 
-	void sendWelcomeEmail(String recipientEmail);
+	void sendWelcomeEmailforParent(String firstName, String recipientEmail);
+
+	void sendWelcomeEmailforDoctor(String recipientEmail);
+
+	void sendWelcomeEmailforClinicAdmin(String recipientEmail);
 	
 	void sendPasswordResetCode(String email);
 
