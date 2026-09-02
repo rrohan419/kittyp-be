@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import com.google.genai.Client;
@@ -24,9 +23,7 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.model.WeatherResponse;
 import com.kittyp.common.service.GoogleService;
 import com.kittyp.common.util.Mapper;
-import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
-import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -40,7 +37,6 @@ public class AiNutritionRecommendationServiceImpl implements AiNutritionRecommen
     private final Client geminiClient;
     private final Mapper mapper;
     private final GoogleService googleService;
-    private final UserDao userDao;
     private final PetsRepository petsRepository;
 
     @Override

@@ -49,7 +49,6 @@ import com.kittyp.clinic.dto.ClinicDtos.StaffInviteModel;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInvitePreview;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInviteRequest;
 import com.kittyp.clinic.dto.ClinicDtos.StaffMemberModel;
-import com.kittyp.clinic.dto.ClinicDtos.SwitchClinicRequest;
 import com.kittyp.clinic.service.ClinicService;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
