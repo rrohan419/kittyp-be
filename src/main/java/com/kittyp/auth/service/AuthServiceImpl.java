@@ -111,7 +111,7 @@ public class AuthServiceImpl implements AuthService {
 		user.getUserRoles().add(new UserRole(user, userRole));
 		user = userDao.saveUser(user);
 		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
-		zeptoMailService.sendWelcomeEmail(user.getEmail());
+		zeptoMailService.sendWelcomeEmailforParent(user.getFirstName(), user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
@@ -210,7 +210,7 @@ public class AuthServiceImpl implements AuthService {
 		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
 		verificationCodeService.clearVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
 
-		zeptoMailService.sendWelcomeEmail(user.getEmail());
+		zeptoMailService.sendWelcomeEmailforDoctor(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
@@ -310,7 +310,7 @@ public class AuthServiceImpl implements AuthService {
 				.build());
 
 		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
-		zeptoMailService.sendWelcomeEmail(user.getEmail());
+		zeptoMailService.sendWelcomeEmailforClinicAdmin(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
@@ -423,7 +423,7 @@ public class AuthServiceImpl implements AuthService {
 				existingUser = userDao.saveUser(existingUser);
 				
 				// Send welcome email
-				zeptoMailService.sendWelcomeEmail(existingUser.getEmail());
+				zeptoMailService.sendWelcomeEmailforParent(existingUser.getFirstName(), existingUser.getEmail());
 			}
 
 			try {
