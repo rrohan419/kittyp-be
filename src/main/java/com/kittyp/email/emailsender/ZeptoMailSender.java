@@ -3,7 +3,10 @@
  */
 package com.kittyp.email.emailsender;
 
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
@@ -40,10 +43,15 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
 		ZohoMailRequest request = new ZohoMailRequest();
         request.setTemplateKey(zeptoMailDto.getTemplateKey());
 //        request.setBounceAddress("bounce@yourdomain.com");
-
+        Map<String, Object> mergeInfo = new HashMap<>();
+        if (zeptoMailDto.getMergeInfo() != null) {
+            mergeInfo.putAll(zeptoMailDto.getMergeInfo());
+        }
+        mergeInfo.put("current_year", LocalDate.now().getYear());
+        mergeInfo.put("logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO);
+        request.setMergeInfo(mergeInfo);
         request.setFrom(new EmailAddress(env.getProperty(AppConstant.KITTYP_MAIL_ID), AppConstant.KITTYP));
         request.setTo(List.of(new Recipient(new EmailAddress(zeptoMailDto.getRecipientEmail(), zeptoMailDto.getRecipientName()))));
-        request.setMergeInfo(zeptoMailDto.getMergeInfo());
 
         ResponseEntity<ZeptoMailResponseModel> responseEntity = restClient.post().uri(env.getProperty(AppConstant.ZOHO_EMAIL_SEND_URL))
         		.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)

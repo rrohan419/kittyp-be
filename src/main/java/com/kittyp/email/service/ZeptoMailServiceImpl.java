@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -44,27 +45,52 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	private final UserDao userDao;
 	private final VerificationCodeService verificationCodeService;
 	private final OrderDao orderDao;
+	private final Environment env;
 
 	/**
 	 * @author rrohan419@gmail.com
 	 */
 	@Async
 	@Override
-	public void sendWelcomeEmail(String recipientEmail) {
-		User user = userDao.userByEmail(recipientEmail);
+	public void sendWelcomeEmailforParent(String firstName, String recipientEmail) {
+		// User user = userDao.userByEmail(recipientEmail);
 
 		ZeptoMailDto mailDto = new ZeptoMailDto();
 		mailDto.setMergeInfo(
-				Map.of("Customer_Name", user.getFirstName(), "logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+				Map.of("Customer_Name",firstName));
 		mailDto.setRecipientEmail(recipientEmail);
-		mailDto.setRecipientName(user.getFirstName());
-		mailDto.setTemplateKey(TemplateConstant.ZEPTO_WELCOME_EMAIL_TEMPLATE_ID);
+		mailDto.setRecipientName(firstName);
+		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID));
 		// mailDto.setProvider("Zepto Mail");
 
 		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 		log.info("welcome email sent for email : " + recipientEmail);
 		addEmailAuditLog(responseModel, recipientEmail);
 
+	}
+
+	@Override
+	public void sendWelcomeEmailforDoctor(String recipientEmail) {
+		User user = userDao.userByEmail(recipientEmail);
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName(), "logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+		mailDto.setRecipientEmail(recipientEmail);
+		mailDto.setRecipientName(user.getFirstName());
+		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZOHO_DOCTOR_WELCOME_EMAIL_TEMPLATE_ID));
+		
+		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+		log.info("welcome email sent for email : " + recipientEmail);
+		addEmailAuditLog(responseModel, recipientEmail);
+	}
+
+	@Override
+	public void sendWelcomeEmailforClinicAdmin(String recipientEmail) {
+		User user = userDao.userByEmail(recipientEmail);
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName()));
+		mailDto.setRecipientEmail(recipientEmail);
+		mailDto.setRecipientName(user.getFirstName());
+		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZOHO_CLINIC_ADMIN_WELCOME_EMAIL_TEMPLATE_ID));
 	}
 
 	/**
