@@ -30,7 +30,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class CartController {
     private final CartService cartService;
-    private final ApiResponse responseBuilder;
+    private final ApiResponse<CartResponse> responseBuilder;
     private final SecurityContextUtils securityContextUtils;
 
     @GetMapping(ApiUrl.GET_CART_BY_USER)

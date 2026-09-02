@@ -1,11 +1,8 @@
 package com.kittyp.cart.service;
 
-import com.kittyp.cart.dto.AddToCartRequest;
-import com.kittyp.cart.dto.CartCheckoutRequest;
 import com.kittyp.cart.dto.CartItemRequest;
 import com.kittyp.cart.entity.Cart;
 import com.kittyp.cart.model.CartResponse;
-import com.kittyp.order.model.OrderModel;
 import com.kittyp.user.entity.User;
 
 public interface CartService {

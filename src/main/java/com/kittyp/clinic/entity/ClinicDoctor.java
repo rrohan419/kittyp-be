@@ -1,7 +1,6 @@
 package com.kittyp.clinic.entity;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 import org.hibernate.annotations.DynamicUpdate;
 
