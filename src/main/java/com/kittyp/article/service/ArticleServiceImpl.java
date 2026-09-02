@@ -41,7 +41,6 @@ import com.kittyp.article.model.ArticleCommentsModel;
 import com.kittyp.article.model.ArticleListModel;
 import com.kittyp.article.model.ArticleModel;
 import com.kittyp.article.model.AuthorModel;
-import com.kittyp.article.service.AuthorService;
 import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
