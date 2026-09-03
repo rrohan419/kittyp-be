@@ -393,7 +393,22 @@ public class UserServiceImpl implements UserService {
 
 	@Override
 	public PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize, String q) {
-		logger.info("Fetching users with pagination: page {}, size {}", pageNumber, pageSize);
+		logger.info("Fetching all users with pagination: page {}, size {}", pageNumber, pageSize);
+		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
+		String query = q == null ? "" : q.trim();
+		Page<User> userPage = userDao.findAllUsers(query, pageable);
+
+		List<UserDetailsModel> userModels = userPage.getContent().stream()
+				.map(this::toUserDetailsModel)
+				.collect(Collectors.toList());
+
+		logger.info("Total users fetched: {}", userModels.size());
+		return userPageToModel(new PageImpl<>(userModels, pageable, userPage.getTotalElements()));
+	}
+
+	@Override
+	public PaginationModel<UserDetailsModel> getPetOwnerUsers(Integer pageNumber, Integer pageSize, String q) {
+		logger.info("Fetching pet owners with pagination: page {}, size {}", pageNumber, pageSize);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
 		String query = q == null ? "" : q.trim();
 		Page<User> userPage = userDao.findPetOwnerUsers(query, pageable);
@@ -402,7 +417,7 @@ public class UserServiceImpl implements UserService {
 				.map(this::toUserDetailsModel)
 				.collect(Collectors.toList());
 
-		logger.info("Total users fetched: {}", userModels.size());
+		logger.info("Total pet owners fetched: {}", userModels.size());
 		return userPageToModel(new PageImpl<>(userModels, pageable, userPage.getTotalElements()));
 	}
 

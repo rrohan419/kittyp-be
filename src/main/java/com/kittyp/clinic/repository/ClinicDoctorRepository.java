@@ -21,5 +21,24 @@ public interface ClinicDoctorRepository extends JpaRepository<ClinicDoctor, Long
     @Query("select distinct cd.doctor.id from ClinicDoctor cd where cd.isActive = true")
     Set<Long> findActiveAffiliatedDoctorIds();
 
+    /**
+     * Doctors with an active affiliation on an organization clinic (not personal practice).
+     * Personal practice = clinic owner is an active affiliated doctor on that clinic.
+     */
+    @Query("""
+            select distinct cd.doctor.id from ClinicDoctor cd
+            where cd.isActive = true
+              and (
+                cd.clinic.owner is null
+                or not exists (
+                  select 1 from ClinicDoctor ownerAff
+                  where ownerAff.clinic = cd.clinic
+                    and ownerAff.isActive = true
+                    and ownerAff.doctor.user = cd.clinic.owner
+                )
+              )
+            """)
+    Set<Long> findActiveOrgAffiliatedDoctorIds();
+
     List<ClinicDoctor> findByDoctor_User_IdAndIsActiveTrue(Long userId);
 }

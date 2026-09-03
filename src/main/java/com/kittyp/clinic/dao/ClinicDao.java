@@ -20,4 +20,7 @@ public interface ClinicDao {
     List<Clinic> findAll();
 
     List<Clinic> findAllFetchOwner();
+
+    /** Org clinics for admin list (excludes personal practices). */
+    List<Clinic> findAllOrganizationFetchOwner();
 }

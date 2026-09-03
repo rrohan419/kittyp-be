@@ -195,7 +195,8 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public List<ClinicModel> listAllClinics() {
-        return clinicDao.findAllFetchOwner().stream()
+        // Admin clinics tab: organization clinics only (personal practices stay on Doctors).
+        return clinicDao.findAllOrganizationFetchOwner().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
                 .map(this::clinicModel)
