@@ -40,6 +40,7 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
               AND v.isActive = true
               AND (
                 (v.completedAt BETWEEN :from AND :to)
+                OR (v.checkingOutAt BETWEEN :from AND :to)
                 OR (v.startedAt BETWEEN :from AND :to)
                 OR (v.checkedInAt BETWEEN :from AND :to)
                 OR (v.createdAt BETWEEN :from AND :to)
@@ -58,6 +59,7 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
               AND v.isActive = true
               AND (
                 (v.completedAt BETWEEN :from AND :to)
+                OR (v.checkingOutAt BETWEEN :from AND :to)
                 OR (v.startedAt BETWEEN :from AND :to)
                 OR (v.checkedInAt BETWEEN :from AND :to)
                 OR (v.createdAt BETWEEN :from AND :to)

@@ -47,6 +47,7 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.PaginationSupport;
+import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
@@ -67,6 +68,7 @@ import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
+import com.kittyp.user.repository.UserRepository;
 import com.kittyp.user.service.PetAccessGuard;
 import com.kittyp.user.service.UserService;
 import com.kittyp.visit.dao.VisitDao;
@@ -128,6 +130,8 @@ public class VisitServiceImpl implements VisitService {
     private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
     private final DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
     private final JitsiMeetService jitsiMeetService;
+    private final VerificationCodeService verificationCodeService;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional
@@ -172,33 +176,40 @@ public class VisitServiceImpl implements VisitService {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic, email);
 
-        if (request.doctorUuid() == null || request.doctorUuid().isBlank()) {
-            throw new CustomException("Doctor is required to schedule an appointment", HttpStatus.BAD_REQUEST);
-        }
         if (request.slotStart() == null) {
             throw new CustomException("Appointment start time is required", HttpStatus.BAD_REQUEST);
         }
 
-        DoctorProfile doctor = requireClinicDoctor(clinic, request.doctorUuid());
-        requirePracticeReady(doctor);
-        boolean selfBook = isSelfBooking(email, doctor);
+        DoctorProfile doctor = null;
+        boolean selfBook = false;
+        if (request.doctorUuid() != null && !request.doctorUuid().isBlank()) {
+            doctor = requireClinicDoctor(clinic, request.doctorUuid());
+            requirePracticeReady(doctor);
+            selfBook = isSelfBooking(email, doctor);
+        }
 
         // Always snap to half-hour grid; self-book may still stack in the same window.
         LocalDateTime slotStart = snapToHalfHour(request.slotStart());
         requireNotInPast(clinic, slotStart);
         LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
-        requireWithinDoctorHours(doctor, slotStart);
-
-        if (!selfBook) {
-            List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
-                    doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
-            if (!conflicts.isEmpty()) {
-                throw new CustomException("This time is already booked. Please try another slot.",
-                        HttpStatus.CONFLICT);
+        if (doctor != null) {
+            requireWithinDoctorHours(doctor, slotStart);
+            if (!selfBook) {
+                List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
+                        doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
+                if (!conflicts.isEmpty()) {
+                    throw new CustomException("This time is already booked. Please try another slot.",
+                            HttpStatus.CONFLICT);
+                }
             }
         }
 
         // Reuse walk-in pet/owner resolution (existing petUuid or new owner+pet).
+        // New pet on an existing parent profile requires email OTP consent (walk-in does not).
+        if ((request.petUuid() == null || request.petUuid().isBlank())
+                && request.owner() != null && request.newPet() != null) {
+            requireScheduleNewPetConsent(clinic, request.owner(), request.newPet());
+        }
         WalkInCreateRequest petRequest = new WalkInCreateRequest(
                 request.petUuid(), request.owner(), request.newPet(), null, null, null);
         Pet pet = resolvePetForWalkIn(clinic, petRequest);
@@ -225,9 +236,11 @@ public class VisitServiceImpl implements VisitService {
                 .build();
         booking.setIsActive(true);
         booking = bookingRepository.save(booking);
-        jitsiMeetService.ensureVideoRoom(booking);
-        if (booking.getJitsiRoomId() != null) {
-            booking = bookingRepository.save(booking);
+        if (doctor != null) {
+            jitsiMeetService.ensureVideoRoom(booking);
+            if (booking.getJitsiRoomId() != null) {
+                booking = bookingRepository.save(booking);
+            }
         }
 
         parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
@@ -686,9 +699,12 @@ public class VisitServiceImpl implements VisitService {
             LocalDate day = date == null ? LocalDate.now() : date;
             LocalDateTime dayFrom = day.atStartOfDay();
             LocalDateTime dayTo = day.atTime(LocalTime.MAX);
-            visits = status == null
-                    ? visitDao.findByClinicAndDay(clinic.getId(), dayFrom, dayTo)
-                    : visitDao.findByClinicStatusAndDay(clinic.getId(), status, dayFrom, dayTo);
+            // Use schedule window (started/checkingOut/completed/created) so finished
+            // visits land on today's Checkout board even if opened earlier.
+            visits = visitDao.findByClinicScheduleBetween(clinic.getId(), dayFrom, dayTo);
+            if (status != null) {
+                visits = visits.stream().filter(v -> v.getStatus() == status).toList();
+            }
         }
 
         if (doctorUuid != null && !doctorUuid.isBlank()) {
@@ -892,7 +908,8 @@ public class VisitServiceImpl implements VisitService {
             throw new CustomException("Add an assessment / diagnosis before finishing treatment",
                     HttpStatus.BAD_REQUEST);
         }
-        applyStatusTransition(visit, VisitStatus.COMPLETED);
+        // Hand off to reception Checkout for billing — do not skip straight to COMPLETED.
+        applyStatusTransition(visit, VisitStatus.CHECKING_OUT);
         ensureHealthEvent(visit);
         if (visit.getClinicOwner() != null) {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(visit.getClinicOwner());
@@ -1375,6 +1392,32 @@ public class VisitServiceImpl implements VisitService {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
         }
         return pet;
+    }
+
+    /**
+     * Schedule-only: adding a new pet onto an existing clinic or KittyP parent requires email OTP consent.
+     * Walk-in deliberately skips this.
+     */
+    private void requireScheduleNewPetConsent(Clinic clinic, WalkInOwnerRequest ownerReq, WalkInPetRequest petReq) {
+        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(ownerReq.email());
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            return;
+        }
+        boolean existingClinicOwner = clinicPetOwnerRepository
+                .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
+                .isPresent();
+        boolean existingPlatformUser = userRepository.findByEmailIgnoreCase(ownerEmail).isPresent();
+        if (!existingClinicOwner && !existingPlatformUser) {
+            return;
+        }
+        String petName = petReq.name() == null ? "" : petReq.name().trim();
+        String verifiedKey = VerificationCodeService.clinicPetConsentVerifiedKey(clinic.getUuid(), ownerEmail, petName);
+        if (!verificationCodeService.isVerified(verifiedKey)) {
+            throw new CustomException(
+                    "Owner consent required: send and verify the email OTP before adding this pet",
+                    HttpStatus.BAD_REQUEST);
+        }
+        verificationCodeService.clearVerified(verifiedKey);
     }
 
     private void applyStatusTransition(Visit visit, VisitStatus target) {

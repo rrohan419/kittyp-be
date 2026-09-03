@@ -51,12 +51,12 @@ public final class VisitDtos {
             String doctorUuid) {
     }
 
-    /** Clinic front-desk schedule: creates a Booking with a future slot. */
+    /** Clinic front-desk schedule: creates a Booking with a future slot. Doctor optional (unassigned). */
     public record ScheduleBookingCreateRequest(
             String petUuid,
             @Valid WalkInOwnerRequest owner,
             @Valid WalkInPetRequest newPet,
-            @NotBlank String doctorUuid,
+            String doctorUuid,
             @NotNull LocalDateTime slotStart,
             LocalDateTime slotEnd,
             Integer durationMinutes,
