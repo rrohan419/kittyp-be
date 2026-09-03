@@ -57,16 +57,26 @@ public class DoctorProfileDaoImpl implements DoctorProfileDao {
     }
 
     private List<DoctorProfile> prioritize(List<DoctorProfile> profiles) {
-        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        Set<Long> orgAffiliatedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         return profiles.stream()
                 .sorted(Comparator
-                        .comparing((DoctorProfile p) -> !isClinicPriority(p, clinicLinkedIds))
+                        .comparing((DoctorProfile p) -> !isOrgClinicPriority(p, orgAffiliatedIds))
                         .thenComparing(DoctorProfile::getSubmittedAt,
                                 Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
-    private boolean isClinicPriority(DoctorProfile p, Set<Long> clinicLinkedIds) {
-        return p.getClinic() != null || clinicLinkedIds.contains(p.getId());
+    private boolean isOrgClinicPriority(DoctorProfile p, Set<Long> orgAffiliatedIds) {
+        if (orgAffiliatedIds.contains(p.getId())) {
+            return true;
+        }
+        if (p.getClinic() == null || p.getClinic().getOwner() == null || p.getUser() == null) {
+            return false;
+        }
+        // Personal practice: owner is this doctor — not org priority
+        if (java.util.Objects.equals(p.getClinic().getOwner().getId(), p.getUser().getId())) {
+            return false;
+        }
+        return true;
     }
 }

@@ -11,4 +11,8 @@ public class AdminDashboardResponse {
     private long totalOrders;
     private long usersCount;
     private long articleCount;
+    /** Doctors awaiting admin verification (documents submitted or under review). */
+    private long pendingDoctorsCount;
+    /** Total organization clinics (excludes personal doctor practices). */
+    private long clinicsCount;
 }

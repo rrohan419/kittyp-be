@@ -119,13 +119,23 @@ public class UserController {
         return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
-    @GetMapping("/admin/users")
+    @GetMapping(ApiUrl.ADMIN_USERS)
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
     public ResponseEntity<SuccessResponse<PaginationModel<UserDetailsModel>>> getAllUsers(
             @RequestParam(defaultValue = "1") Integer pageNumber,
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false, defaultValue = "") String q) {
         PaginationModel<UserDetailsModel> response = userService.getAllUsers(pageNumber, pageSize, q);
+        return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @GetMapping(ApiUrl.ADMIN_PARENTS)
+    @PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+    public ResponseEntity<SuccessResponse<PaginationModel<UserDetailsModel>>> getPetOwners(
+            @RequestParam(defaultValue = "1") Integer pageNumber,
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(required = false, defaultValue = "") String q) {
+        PaginationModel<UserDetailsModel> response = userService.getPetOwnerUsers(pageNumber, pageSize, q);
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

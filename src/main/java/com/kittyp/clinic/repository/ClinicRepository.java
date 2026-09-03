@@ -21,6 +21,33 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
     @Query("SELECT c FROM Clinic c LEFT JOIN FETCH c.owner")
     List<Clinic> findAllFetchOwner();
 
+    /**
+     * Organization clinics only: excludes personal practices (owner is an active affiliated doctor).
+     */
+    @Query("""
+            SELECT c FROM Clinic c LEFT JOIN FETCH c.owner
+            WHERE c.owner IS NULL
+               OR NOT EXISTS (
+                 SELECT 1 FROM ClinicDoctor cd
+                 WHERE cd.clinic = c
+                   AND cd.isActive = true
+                   AND cd.doctor.user = c.owner
+               )
+            """)
+    List<Clinic> findAllOrganizationFetchOwner();
+
+    @Query("""
+            SELECT COUNT(c) FROM Clinic c
+            WHERE c.owner IS NULL
+               OR NOT EXISTS (
+                 SELECT 1 FROM ClinicDoctor cd
+                 WHERE cd.clinic = c
+                   AND cd.isActive = true
+                   AND cd.doctor.user.id = c.owner.id
+               )
+            """)
+    long countOrganizationClinics();
+
     Clinic findByOwner_Id(Long ownerUserId);
 
     List<Clinic> findAllByOwner_Id(Long ownerUserId);
