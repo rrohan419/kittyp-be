@@ -56,6 +56,32 @@ public class ParentBookingEnrollmentService {
 	}
 
 	/**
+	 * Front-desk admit: enroll an existing platform (or already-known) pet at this clinic
+	 * without creating a duplicate pet row.
+	 */
+	@Transactional
+	public void admitPetToClinic(Clinic clinic, Pet pet) {
+		if (clinic == null || pet == null) {
+			return;
+		}
+		User owner = null;
+		if (pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null) {
+			owner = pet.getClinicOwner().getLinkedUser();
+		}
+		if (owner == null) {
+			owner = userRepository.findByPets_Uuid(pet.getUuid()).orElse(null);
+		}
+		if (owner == null && pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
+			owner = userRepository.findByUuidIgnoreCase(pet.getParentUserUuid()).orElse(null);
+		}
+		if (owner != null) {
+			enrollAfterParentBooking(clinic, null, pet, owner);
+			return;
+		}
+		ensureClinicEnrollmentWithPetOwner(clinic, pet);
+	}
+
+	/**
 	 * Staff walk-in / scheduled booking: share pet with personal doctor roster or clinic CRM.
 	 * Uses linked platform user when available; otherwise ensures clinic enrollment via clinic owner on the pet.
 	 */

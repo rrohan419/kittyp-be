@@ -64,6 +64,7 @@ import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
 import com.kittyp.clinic.dto.ClinicDtos.InvoiceSummaryModel;
+import com.kittyp.clinic.dto.ClinicDtos.OwnerEmailLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.OwnerSummaryModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
@@ -98,6 +99,7 @@ import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.util.SafePhotoUrl;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.PaginationSupport;
+import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
@@ -169,6 +171,8 @@ public class ClinicServiceImpl implements ClinicService {
     private final ClinicStaffInviteRepository clinicStaffInviteRepository;
     private final PasswordEncoder passwordEncoder;
     private final RoleDao roleDao;
+    private final ParentBookingEnrollmentService parentBookingEnrollmentService;
+    private final VerificationCodeService verificationCodeService;
 
     @Value("${app.frontend.base-url:http://localhost:8080}")
     private String frontendBaseUrl;
@@ -1490,6 +1494,148 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     @Transactional
+    public ClinicPetListModel admitPlatformPet(String clinicUuid, String petUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        if (petUuid == null || petUuid.isBlank()) {
+            throw new CustomException("Pet id is required", HttpStatus.BAD_REQUEST);
+        }
+        String key = petUuid.trim();
+        Pet pet = petsRepository.findByUuidIgnoreCase(key)
+                .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", key));
+        if (!Boolean.TRUE.equals(pet.getIsActive()) || Boolean.TRUE.equals(pet.getHiddenFromParent())) {
+            throw new CustomException("Pet is not available to admit", HttpStatus.BAD_REQUEST);
+        }
+        parentBookingEnrollmentService.admitPetToClinic(clinic, pet);
+        pet = petsRepository.findByUuidIgnoreCase(key).orElse(pet);
+        return toAppointmentPetModel(clinic, pet);
+    }
+
+    @Override
+    public OwnerEmailLookupModel lookupOwnerByEmail(String clinicUuid, String ownerEmail, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        String normalized = ClinicOwnerUserLinkService.normalizeEmail(ownerEmail);
+        if (normalized == null || normalized.isBlank()) {
+            return new OwnerEmailLookupModel(false, null, null, null);
+        }
+        ClinicPetOwner clinicOwner = clinicPetOwnerRepository
+                .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), normalized)
+                .orElse(null);
+        User platformUser = userRepository.findByEmailIgnoreCase(normalized).orElse(null);
+        if (platformUser != null && (Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled())) {
+            platformUser = null;
+        }
+        if (platformUser != null) {
+            boolean isPetParent = platformUser.getUserRoles() != null && platformUser.getUserRoles().stream()
+                    .anyMatch(ur -> ur.getRole() != null && ERole.ROLE_USER.equals(ur.getRole().getName()));
+            if (!isPetParent) {
+                platformUser = null;
+            }
+        }
+        if (clinicOwner == null && platformUser == null) {
+            return new OwnerEmailLookupModel(false, null, null, null);
+        }
+        String source;
+        if (clinicOwner != null && platformUser != null) {
+            source = "BOTH";
+        } else if (clinicOwner != null) {
+            source = "CLINIC";
+        } else {
+            source = "PLATFORM";
+        }
+        ClinicOwnerModel ownerModel = clinicOwner == null ? null : toOwnerModel(clinicOwner);
+        PlatformUserSearchModel platformModel = null;
+        if (platformUser != null) {
+            String name = Stream.of(platformUser.getFirstName(), platformUser.getLastName())
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.joining(" "));
+            if (name.isBlank()) {
+                name = platformUser.getEmail();
+            }
+            platformModel = new PlatformUserSearchModel(
+                    platformUser.getUuid(),
+                    name,
+                    platformUser.getEmail(),
+                    formatClinicPhone(platformUser.getPhoneNumber()),
+                    clinicOwner == null ? null : clinicOwner.getUuid(),
+                    clinicOwner != null);
+        }
+        return new OwnerEmailLookupModel(true, source, ownerModel, platformModel);
+    }
+
+    @Override
+    @Transactional
+    public void sendPetConsentOtp(String clinicUuid, String ownerUuid, String petName, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
+        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(owner.getEmail());
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            throw new CustomException("Owner has no email on file for consent OTP", HttpStatus.BAD_REQUEST);
+        }
+        String name = petName == null ? "" : petName.trim();
+        if (name.isBlank()) {
+            throw new CustomException("Pet name is required for consent", HttpStatus.BAD_REQUEST);
+        }
+        String otpKey = VerificationCodeService.clinicPetConsentOtpKey(clinic.getUuid(), ownerEmail, name);
+        String code = verificationCodeService.generateCode(otpKey);
+        log.info("Clinic pet-consent OTP generated clinic={} ownerEmail={} pet={}", clinic.getUuid(), ownerEmail, name);
+        zeptoMailService.sendClinicPetConsentOtpEmail(ownerEmail, clinicOwnerName(owner), clinic.getName(), name, code);
+    }
+
+    @Override
+    @Transactional
+    public void verifyPetConsentOtp(String clinicUuid, String ownerUuid, String petName, String code, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
+        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(owner.getEmail());
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            throw new CustomException("Owner has no email on file for consent OTP", HttpStatus.BAD_REQUEST);
+        }
+        String name = petName == null ? "" : petName.trim();
+        if (name.isBlank()) {
+            throw new CustomException("Pet name is required for consent", HttpStatus.BAD_REQUEST);
+        }
+        String otpKey = VerificationCodeService.clinicPetConsentOtpKey(clinic.getUuid(), ownerEmail, name);
+        boolean ok = verificationCodeService.verifyCode(otpKey, code, true);
+        if (!ok) {
+            throw new CustomException("Invalid or expired consent code", HttpStatus.BAD_REQUEST);
+        }
+        verificationCodeService.markVerified(
+                VerificationCodeService.clinicPetConsentVerifiedKey(clinic.getUuid(), ownerEmail, name));
+    }
+
+    /**
+     * Staff adding a pet to an existing owner (schedule / CRM) requires one-pet email consent.
+     * Walk-in does not use this path for OTP.
+     */
+    void requirePetConsentVerified(Clinic clinic, ClinicPetOwner owner, String petName) {
+        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(owner.getEmail());
+        String name = petName == null ? "" : petName.trim();
+        String verifiedKey = VerificationCodeService.clinicPetConsentVerifiedKey(clinic.getUuid(), ownerEmail, name);
+        if (!verificationCodeService.isVerified(verifiedKey)) {
+            throw new CustomException(
+                    "Owner consent required: send and verify the email OTP before adding this pet",
+                    HttpStatus.BAD_REQUEST);
+        }
+        verificationCodeService.clearVerified(verifiedKey);
+    }
+
+    @Override
+    public void requirePetConsentForEmail(String clinicUuid, String ownerEmail, String petName) {
+        String verifiedKey = VerificationCodeService.clinicPetConsentVerifiedKey(clinicUuid, ownerEmail, petName);
+        if (!verificationCodeService.isVerified(verifiedKey)) {
+            throw new CustomException(
+                    "Owner consent required: send and verify the email OTP before adding this pet",
+                    HttpStatus.BAD_REQUEST);
+        }
+        verificationCodeService.clearVerified(verifiedKey);
+    }
+
+    @Override
+    @Transactional
     public ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
@@ -1549,6 +1695,8 @@ public class ClinicServiceImpl implements ClinicService {
 
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
+
+        requirePetConsentVerified(clinic, owner, request.name());
 
         Pet pet = saveClinicPet(clinic, owner, request.name().trim(), blankToNull(request.species()),
                 blankToNull(request.breed()), blankToNull(request.gender()), request.dateOfBirth(),

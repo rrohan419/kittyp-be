@@ -128,4 +128,23 @@ public class VerificationCodeService {
     public static String profilePhoneVerifiedKey(String userUuid, String phone) {
         return "profile-phone-ok:" + userUuid + ":" + phone.trim();
     }
+
+    /** One-pet consent OTP: staff adding a pet on behalf of an existing owner (email channel). */
+    public static String clinicPetConsentOtpKey(String clinicUuid, String ownerEmail, String petName) {
+        return "clinic-pet-consent:" + clinicUuid.trim() + ":" + normalizeEmail(ownerEmail) + ":"
+                + normalizePetName(petName);
+    }
+
+    public static String clinicPetConsentVerifiedKey(String clinicUuid, String ownerEmail, String petName) {
+        return "clinic-pet-consent-ok:" + clinicUuid.trim() + ":" + normalizeEmail(ownerEmail) + ":"
+                + normalizePetName(petName);
+    }
+
+    private static String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase();
+    }
+
+    private static String normalizePetName(String petName) {
+        return petName == null ? "" : petName.trim().toLowerCase();
+    }
 }

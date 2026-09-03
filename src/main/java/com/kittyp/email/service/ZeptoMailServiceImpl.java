@@ -142,6 +142,35 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	public void sendClinicPetConsentOtpEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String code) {
+		String clinic = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName.trim();
+		String pet = petName == null || petName.isBlank() ? "pet" : petName.trim();
+		String name = ownerName == null || ownerName.isBlank() ? "Pet parent" : ownerName.trim();
+		log.info("Clinic pet-consent OTP to email={} clinic={} pet={}", recipientEmail, clinic, pet);
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			mailDto.setMergeInfo(Map.of(
+					"customer_name", name,
+					"otp", code,
+					"clinic_name", clinic,
+					"pet_name", pet));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			String templateKey = env.getProperty(TemplateConstant.ZEPTO_CLINIC_PET_CONSENT_OTP_EMAIL_TEMPLATE_ID);
+			if (templateKey == null || templateKey.isBlank()) {
+				templateKey = env.getProperty(TemplateConstant.ZEPTO_SIGNUP_OTP_EMAIL_TEMPLATE_ID);
+			}
+			mailDto.setTemplateKey(templateKey);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send clinic pet-consent OTP to {}: {} (OTP remains in cache)", recipientEmail,
+					e.getMessage());
+		}
+	}
+
+	@Override
 	public void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName,
 			String acceptUrl) {
 		log.info("Clinic doctor invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);

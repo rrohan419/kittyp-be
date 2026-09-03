@@ -39,8 +39,11 @@ import com.kittyp.clinic.dto.ClinicDtos.DoctorLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
 import com.kittyp.clinic.dto.ClinicDtos.EnsureOwnerFromUserRequest;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
+import com.kittyp.clinic.dto.ClinicDtos.OwnerEmailLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
+import com.kittyp.clinic.dto.ClinicDtos.PetConsentSendRequest;
+import com.kittyp.clinic.dto.ClinicDtos.PetConsentVerifyRequest;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicStatsModel;
@@ -276,6 +279,31 @@ public class ClinicController {
         return success(clinicService.ensureOwnerFromUser(uuid, request.userUuid(), email()));
     }
 
+    @GetMapping(ApiUrl.CLINIC_OWNER_LOOKUP)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<OwnerEmailLookupModel>> lookupOwnerByEmail(@PathVariable String uuid,
+            @RequestParam("q") String ownerEmail) {
+        return success(clinicService.lookupOwnerByEmail(uuid, ownerEmail, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNER_PET_CONSENT_SEND)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<MessageResponse>> sendPetConsent(@PathVariable String uuid,
+            @PathVariable String ownerUuid, @RequestBody @Valid PetConsentSendRequest request) {
+        clinicService.sendPetConsentOtp(uuid, ownerUuid, request.petName(), email());
+        return success(new MessageResponse("Consent code sent to owner email"));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNER_PET_CONSENT_VERIFY)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<MessageResponse>> verifyPetConsent(@PathVariable String uuid,
+            @PathVariable String ownerUuid, @RequestBody @Valid PetConsentVerifyRequest request) {
+        clinicService.verifyPetConsentOtp(uuid, ownerUuid, request.petName(), request.code(), email());
+        return success(new MessageResponse("Owner consent verified"));
+    }
+
     @PostMapping(ApiUrl.CLINIC_OWNERS)
     @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
             + KeyConstant.IS_ROLE_DOCTOR)
@@ -313,6 +341,14 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<ClinicPetMedicalProfileModel>> petProfile(@PathVariable String uuid,
             @PathVariable String petUuid) {
         return success(clinicService.petMedicalProfile(uuid, petUuid, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_PET_ADMIT)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ClinicPetListModel>> admitPet(@PathVariable String uuid,
+            @PathVariable String petUuid) {
+        return success(clinicService.admitPlatformPet(uuid, petUuid, email()));
     }
 
     @PatchMapping(ApiUrl.CLINIC_PET_DETAIL)

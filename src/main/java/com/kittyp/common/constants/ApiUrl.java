@@ -162,9 +162,13 @@ public class ApiUrl {
 	public static final String CLINIC_OWNER_PETS = CLINIC_OWNER_DETAIL + "/pets";
 	public static final String CLINIC_OWNER_HIDE = CLINIC_OWNER_DETAIL + "/hide";
 	public static final String CLINIC_OWNER_FROM_USER = CLINIC_OWNERS + "/from-user";
+	public static final String CLINIC_OWNER_LOOKUP = CLINIC_OWNERS + "/lookup";
+	public static final String CLINIC_OWNER_PET_CONSENT_SEND = CLINIC_OWNER_DETAIL + "/pets/consent/send";
+	public static final String CLINIC_OWNER_PET_CONSENT_VERIFY = CLINIC_OWNER_DETAIL + "/pets/consent/verify";
 	public static final String CLINIC_USERS_SEARCH = CLINIC_BY_UUID + "/users/search";
 	public static final String CLINIC_PETS = CLINIC_BY_UUID + "/pets";
 	public static final String CLINIC_PET_DETAIL = CLINIC_PETS + "/{petUuid}";
+	public static final String CLINIC_PET_ADMIT = CLINIC_PET_DETAIL + "/admit";
 	public static final String CLINIC_PET_HIDE = CLINIC_PET_DETAIL + "/hide";
 	public static final String CLINIC_PET_RECORDS = CLINIC_PET_DETAIL + "/records";
 	public static final String CLINIC_PET_VACCINES = CLINIC_PET_DETAIL + "/vaccines";

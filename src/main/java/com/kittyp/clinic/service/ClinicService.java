@@ -26,6 +26,7 @@ import com.kittyp.clinic.dto.ClinicDtos.DoctorLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
+import com.kittyp.clinic.dto.ClinicDtos.OwnerEmailLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
@@ -114,6 +115,22 @@ public interface ClinicService {
 
     /** Ensure a clinic client row exists for the given platform user and return it. */
     ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email);
+
+    /** Admit an existing KittyP (platform) pet into this clinic; idempotent. */
+    ClinicPetListModel admitPlatformPet(String clinicUuid, String petUuid, String email);
+
+    /** Lookup clinic owner and/or platform parent by email (New patient gate). */
+    OwnerEmailLookupModel lookupOwnerByEmail(String clinicUuid, String ownerEmail, String email);
+
+    void sendPetConsentOtp(String clinicUuid, String ownerUuid, String petName, String email);
+
+    void verifyPetConsentOtp(String clinicUuid, String ownerUuid, String petName, String code, String email);
+
+    /**
+     * Consume one-pet email consent for scheduled booking / CRM add-pet.
+     * Throws if OTP was not verified for this clinic + owner email + pet name.
+     */
+    void requirePetConsentForEmail(String clinicUuid, String ownerEmail, String petName);
 
     ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email);
 
