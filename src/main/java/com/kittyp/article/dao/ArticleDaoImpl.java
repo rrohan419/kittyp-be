@@ -16,7 +16,6 @@ import org.springframework.stereotype.Repository;
 import com.kittyp.article.entity.Article;
 import com.kittyp.article.enums.ArticleStatus;
 import com.kittyp.article.repositry.ArticleRepository;
-import com.kittyp.article.repositry.ArticlesLikesRepository;
 import com.kittyp.common.constants.ExceptionConstant;
 import com.kittyp.common.exception.CustomException;
 
@@ -30,7 +29,6 @@ import lombok.RequiredArgsConstructor;
 public class ArticleDaoImpl implements ArticleDao {
 
 	private final ArticleRepository articleRepository;
-	private final ArticlesLikesRepository articlesLikesRepository;
 	private final Environment env;
 
 	/**

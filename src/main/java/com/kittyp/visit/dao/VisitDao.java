@@ -22,6 +22,10 @@ public interface VisitDao {
 
     List<Visit> findByDoctorAndDay(Long doctorId, LocalDateTime from, LocalDateTime to);
 
+    List<Visit> findByClinicScheduleBetween(Long clinicId, LocalDateTime from, LocalDateTime to);
+
+    List<Visit> findByDoctorScheduleBetween(Long doctorId, LocalDateTime from, LocalDateTime to);
+
     List<Visit> findByPetAndClinic(String petUuid, Long clinicId);
 
     List<Visit> findCompletedByPetUuid(String petUuid);

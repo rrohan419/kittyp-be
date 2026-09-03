@@ -52,6 +52,16 @@ public class VisitDaoImpl implements VisitDao {
     }
 
     @Override
+    public List<Visit> findByClinicScheduleBetween(Long clinicId, LocalDateTime from, LocalDateTime to) {
+        return visitRepository.findByClinic_IdAndScheduleBetween(clinicId, from, to);
+    }
+
+    @Override
+    public List<Visit> findByDoctorScheduleBetween(Long doctorId, LocalDateTime from, LocalDateTime to) {
+        return visitRepository.findByDoctor_IdAndScheduleBetween(doctorId, from, to);
+    }
+
+    @Override
     public List<Visit> findByPetAndClinic(String petUuid, Long clinicId) {
         return visitRepository.findByPet_UuidAndClinic_IdOrderByCreatedAtDesc(petUuid, clinicId);
     }

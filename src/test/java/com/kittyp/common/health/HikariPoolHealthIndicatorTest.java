@@ -33,6 +33,12 @@ class HikariPoolHealthIndicatorTest {
 	}
 
 	@Test
+	void upAfterWaitersClear() {
+		assertEquals(Status.DOWN, HikariPoolHealthIndicator.fromPool(new FakePool(10, 0, 2, 10), 10).getStatus());
+		assertEquals(Status.UP, HikariPoolHealthIndicator.fromPool(new FakePool(0, 10, 0, 10), 10).getStatus());
+	}
+
+	@Test
 	void unknownWhenNotHikari() {
 		Health health = HikariPoolHealthIndicator.inspect(new AbstractDataSource() {
 			@Override
