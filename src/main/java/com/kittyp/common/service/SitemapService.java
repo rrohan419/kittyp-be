@@ -41,36 +41,27 @@ public class SitemapService {
     }
 
     private List<SitemapUrl> getStaticPages(String currentDate) {
+        String base = "https://www.kittyp.in";
         return List.of(
-            // Main Pages - High Priority
-            new SitemapUrl("https://kittyp.in/", currentDate, "daily", 1.0),
-            new SitemapUrl("https://kittyp.in/products", currentDate, "weekly", 0.9),
-            new SitemapUrl("https://kittyp.in/about", "2025-05-20", "monthly", 0.8),
-            new SitemapUrl("https://kittyp.in/why-eco-litter", "2025-05-15", "monthly", 0.8),
-            new SitemapUrl("https://kittyp.in/how-to-use", "2025-05-15", "monthly", 0.7),
-            
-            // Content Pages
-            new SitemapUrl("https://kittyp.in/articles", "2025-05-15", "weekly", 0.7),
-            new SitemapUrl("https://kittyp.in/contact", "2025-05-15", "monthly", 0.6),
-            
-            // User Account Pages
-            new SitemapUrl("https://kittyp.in/login", "2025-05-15", "monthly", 0.5),
-            new SitemapUrl("https://kittyp.in/signup", "2025-05-15", "monthly", 0.5),
-            new SitemapUrl("https://kittyp.in/forgot-password", "2025-05-15", "monthly", 0.4),
-            new SitemapUrl("https://kittyp.in/profile", "2025-05-15", "monthly", 0.4),
-            new SitemapUrl("https://kittyp.in/orders", "2025-05-15", "monthly", 0.4),
-            
-            // Shopping Pages
-            new SitemapUrl("https://kittyp.in/cart", "2025-05-15", "weekly", 0.6),
-            new SitemapUrl("https://kittyp.in/checkout", "2025-05-15", "weekly", 0.6),
-            
-            // Legal Pages - Lower Priority
-            new SitemapUrl("https://kittyp.in/privacy", "2025-05-15", "yearly", 0.3),
-            new SitemapUrl("https://kittyp.in/terms", "2025-05-15", "yearly", 0.3),
-            
-            // Utility Pages
-            new SitemapUrl("https://kittyp.in/sitemap", "2025-05-15", "monthly", 0.4),
-            new SitemapUrl("https://kittyp.in/sitemap.xml", currentDate, "weekly", 0.5)
+            // Main pages
+            new SitemapUrl(base + "/", currentDate, "daily", 1.0),
+            new SitemapUrl(base + "/about", currentDate, "monthly", 0.8),
+            new SitemapUrl(base + "/articles", currentDate, "weekly", 0.7),
+            new SitemapUrl(base + "/contact", currentDate, "monthly", 0.6),
+
+            // Get started
+            new SitemapUrl(base + "/login", currentDate, "monthly", 0.5),
+            new SitemapUrl(base + "/signup", currentDate, "monthly", 0.5),
+            new SitemapUrl(base + "/signup/parent", currentDate, "monthly", 0.5),
+            new SitemapUrl(base + "/signup/doctor", currentDate, "monthly", 0.5),
+            new SitemapUrl(base + "/signup/clinic-admin", currentDate, "monthly", 0.5),
+            new SitemapUrl(base + "/forgot-password", currentDate, "monthly", 0.4),
+
+            // Legal & utility
+            new SitemapUrl(base + "/privacy", currentDate, "yearly", 0.3),
+            new SitemapUrl(base + "/terms", currentDate, "yearly", 0.3),
+            new SitemapUrl(base + "/sitemap", currentDate, "monthly", 0.4),
+            new SitemapUrl(base + "/sitemap.xml", currentDate, "weekly", 0.5)
         );
     }
 
@@ -91,7 +82,7 @@ public class SitemapService {
                     : currentDate;
                 
                 productUrls.add(new SitemapUrl(
-                    "https://kittyp.in/product/" + product.getUuid(),
+                    "https://www.kittyp.in/product/" + product.getUuid(),
                     lastmod,
                     "weekly",
                     0.8
@@ -122,7 +113,7 @@ public class SitemapService {
                     : currentDate;
                 
                 articleUrls.add(new SitemapUrl(
-                    "https://kittyp.in/article/" + article.getSlug(),
+                    "https://www.kittyp.in/article/" + article.getSlug(),
                     lastmod,
                     "monthly",
                     0.7
