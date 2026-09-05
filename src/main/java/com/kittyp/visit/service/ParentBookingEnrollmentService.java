@@ -236,7 +236,7 @@ public class ParentBookingEnrollmentService {
 		if (owner == null) {
 			String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
 			if (phone == null || !phone.matches("\\d{10}")) {
-				phone = "0000000000";
+				phone = ClinicOwnerUserLinkService.PLACEHOLDER_PHONE;
 			}
 			String email = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
 			if (email == null || email.isBlank()) {

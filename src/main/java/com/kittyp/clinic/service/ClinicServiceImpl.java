@@ -1489,6 +1489,8 @@ public class ClinicServiceImpl implements ClinicService {
             owner = clinicPetOwnerRepository.save(owner);
         }
         // Soft-link only — do not force-attach pets here (parent may have hidden them).
+        // Still sync CRM phone from the linked parent account when available.
+        owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
         return toOwnerModel(owner);
     }
 
@@ -2162,7 +2164,7 @@ public class ClinicServiceImpl implements ClinicService {
                         p.getRegisteredAt() == null ? null : p.getRegisteredAt().atStartOfDay()))
                 .toList();
         return new ClinicOwnerModel(owner.getUuid(), clinicOwnerName(owner), owner.getFirstName(), owner.getLastName(),
-                owner.getEmail(), formatClinicPhone(owner.getPhone()), formatClinicPhone(owner.getAlternatePhone()),
+                owner.getEmail(), formatClinicPhone(preferredOwnerPhone(owner)), formatClinicPhone(owner.getAlternatePhone()),
                 owner.getAddress(), sanitizeOwnerNotes(owner.getNotes()), linked, linkedUuid, petModels.size(), lastVisit,
                 petModels);
     }
@@ -2175,7 +2177,7 @@ public class ClinicServiceImpl implements ClinicService {
         return new ClinicPetListModel(pet.getUuid(), pet.resolveGlobalPetId(), pet.getName(), pet.getType(),
                 pet.getBreed(), pet.getGender(), pet.getDateOfBirth(), pet.getWeight(), pet.getMicrochipNumber(),
                 pet.getProfilePicture(), pet.getPatientNumber(), owner.getUuid(), clinicOwnerName(owner),
-                formatClinicPhone(owner.getPhone()), owner.getEmail(), owner.getLinkedUser() != null,
+                formatClinicPhone(preferredOwnerPhone(owner)), owner.getEmail(), owner.getLinkedUser() != null,
                 pet.getRegisteredAt() == null ? null : pet.getRegisteredAt().atStartOfDay());
     }
 
@@ -2190,7 +2192,7 @@ public class ClinicServiceImpl implements ClinicService {
     private OwnerSummaryModel ownerSummary(ClinicPetOwner owner) {
         boolean linked = owner.getLinkedUser() != null;
         return new OwnerSummaryModel(owner.getUuid(), clinicOwnerName(owner), owner.getEmail(),
-                formatClinicPhone(owner.getPhone()), owner.getAddress(), linked,
+                formatClinicPhone(preferredOwnerPhone(owner)), owner.getAddress(), linked,
                 linked ? owner.getLinkedUser().getUuid() : null);
     }
 
@@ -2330,7 +2332,7 @@ public class ClinicServiceImpl implements ClinicService {
     private PatientModel toClinicPatientModel(Pet pet, ClinicPetOwner owner) {
         LocalDateTime lastVisit = pet.getRegisteredAt() == null ? null : pet.getRegisteredAt().atStartOfDay();
         return new PatientModel(pet.getUuid(), pet.getName(), clinicOwnerName(owner), owner.getEmail(), lastVisit,
-                owner.getUuid(), formatClinicPhone(owner.getPhone()), owner.getAddress(), pet.getType(),
+                owner.getUuid(), formatClinicPhone(preferredOwnerPhone(owner)), owner.getAddress(), pet.getType(),
                 pet.getBreed());
     }
 
@@ -2348,6 +2350,22 @@ public class ClinicServiceImpl implements ClinicService {
             return "+91 " + digits;
         }
         return phone;
+    }
+
+    /**
+     * Prefer linked parent's verified phone over a stale clinic CRM value.
+     */
+    private static String preferredOwnerPhone(ClinicPetOwner owner) {
+        if (owner == null) {
+            return null;
+        }
+        if (owner.getLinkedUser() != null) {
+            String linked = ClinicOwnerUserLinkService.normalizePhoneDigits(owner.getLinkedUser().getPhoneNumber());
+            if (linked != null && linked.matches("\\d{10}")) {
+                return linked;
+            }
+        }
+        return owner.getPhone();
     }
 
     private String blankToNull(String value) {
