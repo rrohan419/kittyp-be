@@ -1144,7 +1144,7 @@ public class VisitServiceImpl implements VisitService {
                         clinicOwner != null ? clinicOwner.getUuid() : platformOwner.getUuid(),
                         clinicOwner != null ? clinicOwnerDisplayName(clinicOwner) : userDisplayName(platformOwner),
                         clinicOwner != null ? clinicOwner.getEmail() : platformOwner.getEmail(),
-                        clinicOwner != null ? clinicOwner.getPhone() : platformOwner.getPhoneNumber(),
+                        clinicOwner != null ? displayClinicOwnerPhone(clinicOwner) : platformOwner.getPhoneNumber(),
                         visit.getClinic() != null ? visit.getClinic().getUuid() : null,
                         visit.getClinic() != null ? visit.getClinic().getName() : null,
                         1, when, assessment),
@@ -1873,7 +1873,7 @@ public class VisitServiceImpl implements VisitService {
                 visit.getPet().getType(),
                 ownerName,
                 owner == null ? null : owner.getEmail(),
-                owner == null ? null : owner.getPhone(),
+                owner == null ? null : displayClinicOwnerPhone(owner),
                 doctor == null ? null : doctor.getUuid(),
                 doctorName,
                 doctorSpecialization,
@@ -1953,6 +1953,23 @@ public class VisitServiceImpl implements VisitService {
             end = tmp;
         }
         return new LocalDate[] { start, end };
+    }
+
+    /**
+     * Prefer the linked parent's verified phone over a stale clinic CRM value
+     * (e.g. placeholder {@code 0000000000}).
+     */
+    private static String displayClinicOwnerPhone(ClinicPetOwner owner) {
+        if (owner == null) {
+            return null;
+        }
+        if (owner.getLinkedUser() != null) {
+            String linked = ClinicOwnerUserLinkService.normalizePhoneDigits(owner.getLinkedUser().getPhoneNumber());
+            if (linked != null && linked.matches("\\d{10}")) {
+                return linked;
+            }
+        }
+        return owner.getPhone();
     }
 
     private static String blankToNull(String value) {
