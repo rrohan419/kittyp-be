@@ -73,14 +73,18 @@ public class OutboundMessageService {
             User auditUser,
             Pet auditPet) {
         String to = whatsAppService.toE164Digits(ownerPhone);
-        String mediaId = whatsAppService.uploadDocumentPdf(sender, pdfBytes, filename);
-        whatsAppService.sendDocumentTemplate(
-                sender, to, invoiceTemplate, invoiceTemplateLang, mediaId, filename, bodyParams);
+        // TEMP (testing hello_world): no document header / body variables.
+        // Restore PDF + params path before production invoice templates.
+        // String mediaId = whatsAppService.uploadDocumentPdf(sender, pdfBytes, filename);
+        // whatsAppService.sendDocumentTemplate(
+        //         sender, to, invoiceTemplate, invoiceTemplateLang, mediaId, filename, bodyParams);
+        whatsAppService.sendTextTemplate(sender, to, invoiceTemplate, invoiceTemplateLang, List.of());
         audit(auditUser, auditPet, NotificationType.INVOICE_SENT, NotificationChannel.WHATSAPP, Map.of(
                 "to", to,
                 "template", invoiceTemplate,
-                "filename", filename,
-                "phoneNumberId", sender != null ? sender.phoneNumberId() : ""));
+                "filename", filename == null ? "" : filename,
+                "phoneNumberId", sender != null ? sender.phoneNumberId() : "",
+                "plainTemplateTest", "true"));
     }
 
     public void sendVaccineReminder(

@@ -83,8 +83,12 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             }
             return id;
         } catch (RestClientResponseException e) {
-            log.error("WhatsApp media upload failed: status={}", e.getStatusCode().value());
-            throw new CustomException("WhatsApp media upload failed", HttpStatus.BAD_GATEWAY, e);
+            String detail = metaErrorDetail(e);
+            log.error("WhatsApp media upload failed: status={} detail={}", e.getStatusCode().value(), detail);
+            throw new CustomException(
+                    "WhatsApp media upload failed: " + detail,
+                    HttpStatus.BAD_GATEWAY,
+                    e);
         } catch (CustomException e) {
             throw e;
         } catch (Exception e) {
@@ -195,10 +199,16 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             log.info("WhatsApp template message accepted for {}",
                     WhatsAppPhones.redact(String.valueOf(payload.get("to"))));
         } catch (RestClientResponseException e) {
-            log.error("WhatsApp send failed: status={} to={}",
+            String detail = metaErrorDetail(e);
+            log.error("WhatsApp send failed: status={} phoneNumberId={} to={} detail={}",
                     e.getStatusCode().value(),
-                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))));
-            throw new CustomException("WhatsApp send failed: " + e.getStatusCode().value(), HttpStatus.BAD_GATEWAY, e);
+                    creds.phoneNumberId(),
+                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))),
+                    detail);
+            throw new CustomException(
+                    "WhatsApp send failed: " + detail,
+                    HttpStatus.BAD_GATEWAY,
+                    e);
         } catch (Exception e) {
             throw new CustomException("WhatsApp send failed", HttpStatus.BAD_GATEWAY, e);
         }
@@ -218,5 +228,33 @@ public class WhatsAppCloudApiService implements WhatsAppService {
                     HttpStatus.SERVICE_UNAVAILABLE);
         }
         return sender;
+    }
+
+    /** Prefer Meta's error.message so operators see the real Graph reason, not only HTTP status. */
+    private String metaErrorDetail(RestClientResponseException e) {
+        String body = e.getResponseBodyAsString();
+        try {
+            JsonNode err = objectMapper.readTree(body == null ? "{}" : body).path("error");
+            String message = err.path("message").asText(null);
+            int code = err.path("code").asInt(0);
+            int subcode = err.path("error_subcode").asInt(0);
+            if (StringUtils.hasText(message)) {
+                StringBuilder sb = new StringBuilder(message);
+                if (code > 0) {
+                    sb.append(" (code ").append(code);
+                    if (subcode > 0) {
+                        sb.append("/").append(subcode);
+                    }
+                    sb.append(')');
+                }
+                return sb.length() > 280 ? sb.substring(0, 280) + "…" : sb.toString();
+            }
+        } catch (Exception ignored) {
+            // fall through
+        }
+        if (StringUtils.hasText(body) && body.length() < 200) {
+            return "HTTP " + e.getStatusCode().value() + " " + body;
+        }
+        return "HTTP " + e.getStatusCode().value();
     }
 }
