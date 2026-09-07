@@ -285,6 +285,12 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
+    public void requireActivatedClinic(String clinicUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireActivated(clinic);
+    }
+
+    @Override
     public ClinicModel switchClinic(String clinicUuid, String email) {
         return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
     }
@@ -2494,16 +2500,17 @@ public class ClinicServiceImpl implements ClinicService {
         });
     }
 
+    /**
+     * Owner or active clinic staff row (ROLE_CLINIC_ADMIN or ROLE_CLINIC_STAFF).
+     * Affiliated-only doctors are not managers. Admin must not be weaker than staff:
+     * both manage clients/pets when they have an active staff membership or ownership.
+     */
     private void requireClinicManager(Clinic clinic, User user) {
         boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(user.getId());
         if (owner) {
             return;
         }
-        boolean clinicAdmin = user.getUserRoles().stream()
-                .anyMatch(userRole -> CLINIC_ADMIN_ROLE.equals(userRole.getRole().getName()));
-        boolean doctorHere = clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(),
-                user.getId());
-        if (clinicAdmin && doctorHere) {
+        if (clinicStaffDao.isActiveMember(clinic.getId(), user.getId())) {
             return;
         }
         throw new CustomException("You do not have permission to manage this clinic",
