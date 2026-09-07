@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.modelmapper.ModelMapper;
@@ -12,6 +14,10 @@ import org.springframework.core.env.Environment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.common.util.Mapper;
+import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
+import com.kittyp.order.dao.OrderDao;
+import com.kittyp.order.emus.CurrencyType;
+import com.kittyp.order.entity.Order;
 import com.kittyp.payment.entity.WebhookEvent;
 import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.model.RazorpayResponseModel.Payload;
@@ -22,15 +28,18 @@ import com.kittyp.payment.repository.WebhookEventRepository;
 class WebhookServiceImplCaptureTest {
 
 	private WebhookEventRepository webhookEventRepository;
+	private OrderDao orderDao;
 	private CaptureProbe captureProbe;
 	private WebhookServiceImpl service;
 
 	@BeforeEach
 	void setUp() {
 		webhookEventRepository = mock(WebhookEventRepository.class);
+		orderDao = mock(OrderDao.class);
 		captureProbe = new CaptureProbe();
 		Mapper mapper = new Mapper(new ModelMapper(), new ObjectMapper(), mock(Environment.class));
-		service = new WebhookServiceImpl(mapper, webhookEventRepository, captureProbe);
+		service = new WebhookServiceImpl(mapper, webhookEventRepository, captureProbe, orderDao,
+				mock(ConsultationInvoiceRepository.class), null);
 	}
 
 	@Test
@@ -39,8 +48,11 @@ class WebhookServiceImplCaptureTest {
 				.thenReturn(java.util.Optional.empty());
 		when(webhookEventRepository.save(org.mockito.ArgumentMatchers.any(WebhookEvent.class)))
 				.thenAnswer(inv -> inv.getArgument(0));
+		Order order = Order.builder().orderNumber("KP-1").totalAmount(new BigDecimal("100.00"))
+				.currency(CurrencyType.INR).build();
+		when(orderDao.orderByAggregatorOrderNumber("order_1")).thenReturn(order);
 
-		service.razorpayWebhook(capturedEvent("payment.captured"));
+		service.razorpayWebhook(capturedEvent("payment.captured", 10000));
 
 		assertEquals("order_1", captureProbe.orderId);
 		assertEquals("pay_1", captureProbe.paymentId);
@@ -51,7 +63,7 @@ class WebhookServiceImplCaptureTest {
 		when(webhookEventRepository.findByPaymentIdAndEventType("pay_1", "payment.captured"))
 				.thenReturn(java.util.Optional.of(new WebhookEvent()));
 
-		service.razorpayWebhook(capturedEvent("payment.captured"));
+		service.razorpayWebhook(capturedEvent("payment.captured", 10000));
 
 		assertNull(captureProbe.orderId);
 	}
@@ -63,16 +75,18 @@ class WebhookServiceImplCaptureTest {
 		when(webhookEventRepository.save(org.mockito.ArgumentMatchers.any(WebhookEvent.class)))
 				.thenAnswer(inv -> inv.getArgument(0));
 
-		service.razorpayWebhook(capturedEvent("payment.authorized"));
+		service.razorpayWebhook(capturedEvent("payment.authorized", 10000));
 
 		assertNull(captureProbe.orderId);
 	}
 
-	private static RazorpayResponseModel capturedEvent(String event) {
+	private static RazorpayResponseModel capturedEvent(String event, int amountPaise) {
 		PaymentEntity entity = new PaymentEntity();
 		entity.setId("pay_1");
 		entity.setOrder_id("order_1");
 		entity.setStatus("captured");
+		entity.setAmount(amountPaise);
+		entity.setCurrency("INR");
 		PaymentWrapper wrapper = new PaymentWrapper();
 		wrapper.setEntity(entity);
 		Payload payload = new Payload();

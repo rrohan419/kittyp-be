@@ -73,7 +73,7 @@ public class ClinicInvoiceController {
     @PreAuthorize(CLINIC_BILLING)
     public ResponseEntity<SuccessResponse<CreateInvoiceResultDto>> create(
             @PathVariable String uuid, @Valid @RequestBody CreateConsultationInvoiceDto request) {
-        Clinic clinic = requireAccessibleClinic(uuid);
+        Clinic clinic = requireBillingClinic(uuid);
         CreateInvoiceResultDto result = treatmentInvoiceService.createForClinicAndOptionallySend(
                 clinic, currentUser(), request);
         return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.CREATED);
@@ -84,7 +84,7 @@ public class ClinicInvoiceController {
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> markPaid(
             @PathVariable String uuid, @PathVariable String invoiceUuid,
             @Valid @RequestBody MarkInvoicePaidDto request) {
-        Clinic clinic = requireAccessibleClinic(uuid);
+        Clinic clinic = requireBillingClinic(uuid);
         ConsultationInvoice invoice = treatmentInvoiceService.requireClinicInvoice(clinic, invoiceUuid);
         invoice = treatmentInvoiceService.markPaid(invoice, request.getPaymentMode(), request.getTransactionId());
         invoice = treatmentInvoiceService.refreshPdfQuietly(invoice);
@@ -167,6 +167,16 @@ public class ClinicInvoiceController {
     private Clinic requireAccessibleClinic(String clinicUuid) {
         // Ensures caller is affiliated / staff for this clinic
         clinicService.get(clinicUuid, email());
+        Clinic clinic = clinicRepository.findByUuid(clinicUuid);
+        if (clinic == null) {
+            throw new ResourceNotFoundException("Clinic", "uuid", clinicUuid);
+        }
+        return clinic;
+    }
+
+    /** Mutating invoice/pay: affiliation + VERIFIED (personal practice exempt). */
+    private Clinic requireBillingClinic(String clinicUuid) {
+        clinicService.requireActivatedClinic(clinicUuid, email());
         Clinic clinic = clinicRepository.findByUuid(clinicUuid);
         if (clinic == null) {
             throw new ResourceNotFoundException("Clinic", "uuid", clinicUuid);

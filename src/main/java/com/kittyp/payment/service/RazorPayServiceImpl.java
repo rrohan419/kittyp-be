@@ -199,10 +199,13 @@ public class RazorPayServiceImpl implements RazorPayService {
 	private void requireInvoicePayAccess(ConsultationInvoice invoice, User caller) {
 		if (invoice.getDoctor() != null && invoice.getDoctor().getId() != null
 				&& invoice.getDoctor().getId().equals(caller.getId())) {
+			if (invoice.getClinic() != null && StringUtils.hasText(invoice.getClinic().getUuid())) {
+				clinicService.requireActivatedClinic(invoice.getClinic().getUuid(), caller.getEmail());
+			}
 			return;
 		}
 		if (invoice.getClinic() != null && StringUtils.hasText(invoice.getClinic().getUuid())) {
-			clinicService.get(invoice.getClinic().getUuid(), caller.getEmail());
+			clinicService.requireActivatedClinic(invoice.getClinic().getUuid(), caller.getEmail());
 			return;
 		}
 		throw new CustomException("Not authorized to collect payment for this invoice", HttpStatus.FORBIDDEN);

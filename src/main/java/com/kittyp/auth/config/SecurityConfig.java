@@ -72,7 +72,11 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.POST, "/api/v1/clinic/staff-invite/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/upload/signup-documents").permitAll()
 						.requestMatchers("/api/v1/webhook/**").permitAll()
+						// Railway healthcheck hits the public app port; status-only body, no details.
 						.requestMatchers("/health", "/actuator/health").permitAll()
+						// Defense-in-depth: SpringDoc stays off via properties; deny paths if re-enabled.
+						.requestMatchers("/swagger-ui", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
+						.denyAll()
 						.anyRequest().authenticated())
 				.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

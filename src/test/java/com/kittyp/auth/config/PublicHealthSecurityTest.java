@@ -70,6 +70,18 @@ class PublicHealthSecurityTest {
 				.andExpect(status().isUnauthorized());
 	}
 
+	@Test
+	void swaggerUiDenied() throws Exception {
+		mockMvc.perform(get("/swagger-ui/index.html"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void apiDocsDenied() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isUnauthorized());
+	}
+
 	@Configuration
 	@EnableWebMvc
 	@EnableWebSecurity
@@ -93,6 +105,8 @@ class PublicHealthSecurityTest {
 					.exceptionHandling(ex -> ex.authenticationEntryPoint(authEntryPointJwt))
 					.authorizeHttpRequests(auth -> auth
 							.requestMatchers("/health", "/actuator/health").permitAll()
+							.requestMatchers("/swagger-ui", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
+							.denyAll()
 							.anyRequest().authenticated())
 					.build();
 		}
@@ -107,6 +121,11 @@ class PublicHealthSecurityTest {
 			return new InfoStubController();
 		}
 
+		@Bean
+		SwaggerStubController swaggerStubController() {
+			return new SwaggerStubController();
+		}
+
 		@Override
 		public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
 			converters.add(new MappingJackson2HttpMessageConverter(new ObjectMapper()));
@@ -118,6 +137,19 @@ class PublicHealthSecurityTest {
 		@GetMapping("/actuator/info")
 		public Map<String, String> info() {
 			return Map.of("app", "kittyp");
+		}
+	}
+
+	@RestController
+	static class SwaggerStubController {
+		@GetMapping("/swagger-ui/index.html")
+		public Map<String, String> swagger() {
+			return Map.of("ok", "true");
+		}
+
+		@GetMapping("/v3/api-docs")
+		public Map<String, String> docs() {
+			return Map.of("openapi", "3.0");
 		}
 	}
 }

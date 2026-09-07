@@ -683,7 +683,9 @@ public class VisitServiceImpl implements VisitService {
                 visits = visits.stream().filter(v -> v.getStatus() == status).toList();
             }
         } else {
-            LocalDate day = date == null ? LocalDate.now() : date;
+            LocalDate day = date == null
+                    ? DoctorHours.nowLocal(clinic.getTimezone()).toLocalDate()
+                    : date;
             LocalDateTime dayFrom = day.atStartOfDay();
             LocalDateTime dayTo = day.atTime(LocalTime.MAX);
             visits = status == null
@@ -781,7 +783,7 @@ public class VisitServiceImpl implements VisitService {
     @Override
     @Transactional(readOnly = true)
     public List<VisitModel> listMyDoctorVisits(LocalDate date, String clinicUuid, String email) {
-        LocalDate day = date == null ? LocalDate.now() : date;
+        LocalDate day = date == null ? doctorClinicDay(clinicUuid, email) : date;
         return listMyDoctorVisitsRange(day, day, clinicUuid, email);
     }
 
@@ -789,7 +791,7 @@ public class VisitServiceImpl implements VisitService {
     @Transactional(readOnly = true)
     public List<VisitModel> listMyDoctorVisitsRange(LocalDate from, LocalDate to, String clinicUuid, String email) {
         DoctorProfile profile = requireDoctorProfile(email);
-        LocalDate start = from == null ? LocalDate.now() : from;
+        LocalDate start = from == null ? doctorClinicDay(clinicUuid, email) : from;
         LocalDate end = to == null ? start : to;
         if (end.isBefore(start)) {
             LocalDate tmp = start;
@@ -803,6 +805,24 @@ public class VisitServiceImpl implements VisitService {
                         || (v.getClinic() != null && clinicUuid.equals(v.getClinic().getUuid())))
                 .map(v -> toModel(v, true))
                 .toList();
+    }
+
+    /** Civil "today" in clinic TZ (Asia/Kolkata default), not JVM default zone. */
+    private LocalDate doctorClinicDay(String clinicUuid, String email) {
+        String timezone = null;
+        if (clinicUuid != null && !clinicUuid.isBlank()) {
+            Clinic clinic = clinicDao.findByUuid(clinicUuid);
+            if (clinic != null) {
+                timezone = clinic.getTimezone();
+            }
+        }
+        if (timezone == null || timezone.isBlank()) {
+            DoctorProfile profile = requireDoctorProfile(email);
+            if (profile.getClinic() != null) {
+                timezone = profile.getClinic().getTimezone();
+            }
+        }
+        return DoctorHours.nowLocal(timezone).toLocalDate();
     }
 
     @Override

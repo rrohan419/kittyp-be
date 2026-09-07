@@ -24,7 +24,7 @@ class ClinicStatusTest {
 	@Test
 	void activationMessageStable() {
 		assertEquals(
-				"This clinic must be verified by admin before appointments, bookings, or adding doctors.",
+				"This clinic must be verified by admin before appointments, bookings, invoices, payments, or adding doctors.",
 				ClinicStatus.NOT_ACTIVATED_MESSAGE);
 	}
 }

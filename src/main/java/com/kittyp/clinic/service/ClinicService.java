@@ -60,6 +60,12 @@ public interface ClinicService {
     /** Owner or staff/admin of this clinic (not affiliated-only doctors). */
     void requireClinicManager(String clinicUuid, String email);
 
+    /**
+     * Clinic must be VERIFIED before mutating billing (invoice create/pay/collect).
+     * Personal owner-doctor practices are exempt (same rule as invites/appointments).
+     */
+    void requireActivatedClinic(String clinicUuid, String email);
+
     List<DoctorModel> doctors(String clinicUuid, String email);
 
     ClinicDoctorDetailModel doctorDetail(String clinicUuid, String doctorUuid, String email);

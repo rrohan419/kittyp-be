@@ -7,7 +7,7 @@ public enum ClinicStatus {
     SHUTDOWN;
 
     public static final String NOT_ACTIVATED_MESSAGE =
-            "This clinic must be verified by admin before appointments, bookings, or adding doctors.";
+            "This clinic must be verified by admin before appointments, bookings, invoices, payments, or adding doctors.";
 
     /** Bookable / can invite doctors. Shutdown and pending/rejected are not. */
     public boolean isActivated() {
