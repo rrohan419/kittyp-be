@@ -72,8 +72,7 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.POST, "/api/v1/clinic/staff-invite/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/upload/signup-documents").permitAll()
 						.requestMatchers("/api/v1/webhook/**").permitAll()
-						.requestMatchers("/health", "/actuator/health", "/actuator/dashboard").permitAll()
-						.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+						.requestMatchers("/health", "/actuator/health").permitAll()
 						.anyRequest().authenticated())
 				.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

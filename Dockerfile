@@ -18,7 +18,7 @@ WORKDIR /app
 COPY --from=builder /app/target/kittyp-0.0.1-SNAPSHOT.jar kittyp.jar
 
 # Set the Spring profile and port
-ENV SPRING_PROFILES_ACTIVE=dev
+ENV SPRING_PROFILES_ACTIVE=prod
 ENV PORT=8001
 
 # Expose the port (informational for Docker, not binding)

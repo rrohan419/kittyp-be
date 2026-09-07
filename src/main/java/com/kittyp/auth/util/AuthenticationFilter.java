@@ -70,11 +70,8 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		String path = request.getRequestURI();
 		return path.startsWith("/api/v1/auth/")
 				|| path.startsWith("/api/v1/public/")
-				|| path.startsWith("/swagger-ui/")
-				|| path.startsWith("/v3/api-docs/")
 				|| path.equals("/health")
 				|| path.equals("/actuator/health")
-				|| path.equals("/actuator/dashboard")
 				|| path.startsWith("/api/v1/webhook/");
 	}
 }

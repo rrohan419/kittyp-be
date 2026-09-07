@@ -42,6 +42,16 @@ public class RazorpayGatewayImpl implements RazorpayGateway {
 		}
 	}
 
+	@Override
+	public JSONObject fetchPayment(String paymentId) {
+		try {
+			com.razorpay.Payment payment = client().payments.fetch(paymentId);
+			return payment.toJson();
+		} catch (RazorpayException e) {
+			throw new CustomException("Failed to fetch Razorpay payment", HttpStatus.BAD_REQUEST, e);
+		}
+	}
+
 	private RazorpayClient client() {
 		try {
 			return new RazorpayClient(env.getProperty(RazorPayConstant.KEY_ID),
