@@ -333,7 +333,17 @@ public class TreatmentInvoiceService {
 
     /** Doctor send: clinic WhatsApp for affiliated-clinic invoices, else doctor credentials. */
     public ConsultationInvoice sendInvoiceWhatsApp(ConsultationInvoice invoice, String overridePhone) {
-        return sendInvoiceWhatsApp(invoice, overridePhone, senderFor(invoice, invoice.getDoctor()));
+        return sendInvoiceWhatsApp(invoice, overridePhone, invoice.getDoctor());
+    }
+
+    /**
+     * Prefer the acting doctor (authenticated user) for credential lookup so Lazy/null
+     * invoice.doctor never drops personal WhatsApp settings.
+     */
+    public ConsultationInvoice sendInvoiceWhatsApp(
+            ConsultationInvoice invoice, String overridePhone, User actingDoctor) {
+        User doctor = actingDoctor != null ? actingDoctor : invoice.getDoctor();
+        return sendInvoiceWhatsApp(invoice, overridePhone, senderFor(invoice, doctor));
     }
 
     public List<ConsultationInvoice> listForDoctor(User doctor, String clinicUuid) {
@@ -410,6 +420,49 @@ public class TreatmentInvoiceService {
         invoiceRepository.findAllByOwner_IdOrderByCreatedAtDesc(user.getId()).stream()
                 .filter(inv -> invoiceBelongsToPet(inv, petUuid))
                 .forEach(inv -> merged.putIfAbsent(inv.getUuid(), inv));
+        return merged.values().stream().map(this::toOwnerModel).toList();
+    }
+
+    /** True when caller owns the invoice pet (or is recorded owner). */
+    @Transactional(readOnly = true)
+    public boolean isOwnerPayer(User caller, ConsultationInvoice invoice) {
+        if (caller == null || invoice == null) {
+            return false;
+        }
+        if (invoice.getOwner() != null && invoice.getOwner().getId() != null
+                && invoice.getOwner().getId().equals(caller.getId())) {
+            return true;
+        }
+        String petUuid = invoice.getPetUuid();
+        if (petUuid == null || petUuid.isBlank()) {
+            if (invoice.getVisitUuid() != null && !invoice.getVisitUuid().isBlank()) {
+                petUuid = visitDao.findByUuid(invoice.getVisitUuid())
+                        .map(Visit::getPet)
+                        .map(Pet::getUuid)
+                        .orElse(null);
+            }
+        }
+        if (petUuid == null || petUuid.isBlank()) {
+            return false;
+        }
+        return petAccessGuard.isOwner(caller, petUuid);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OwnerInvoiceModel> listMyParentInvoices(String email) {
+        User user = requireUser(email);
+        LinkedHashMap<String, ConsultationInvoice> merged = new LinkedHashMap<>();
+        invoiceRepository.findAllByOwner_IdOrderByCreatedAtDesc(user.getId())
+                .forEach(inv -> merged.put(inv.getUuid(), inv));
+        if (user.getPets() != null) {
+            for (Pet pet : user.getPets()) {
+                if (pet == null || pet.getUuid() == null) {
+                    continue;
+                }
+                invoiceRepository.findAllByPetUuidOrderByCreatedAtDesc(pet.getUuid())
+                        .forEach(inv -> merged.putIfAbsent(inv.getUuid(), inv));
+            }
+        }
         return merged.values().stream().map(this::toOwnerModel).toList();
     }
 
@@ -582,13 +635,25 @@ public class TreatmentInvoiceService {
 
     public WhatsAppSenderCredentials doctorSender(User doctor) {
         if (doctor == null) {
+            log.warn("WhatsApp doctorSender: doctor user is null");
             return WhatsAppSenderCredentials.of(null, null);
         }
         DoctorProfile profile = doctorProfileRepository.findByUser_Id(doctor.getId());
         if (profile == null) {
+            log.warn("WhatsApp doctorSender: no DoctorProfile for userId={}", doctor.getId());
             return WhatsAppSenderCredentials.of(null, null);
         }
-        return WhatsAppSenderCredentials.of(profile.getWhatsappToken(), profile.getWhatsappPhoneNumberId());
+        String token = profile.getWhatsappToken();
+        String phoneId = profile.getWhatsappPhoneNumberId();
+        WhatsAppSenderCredentials creds = WhatsAppSenderCredentials.of(token, phoneId);
+        if (!creds.isConfigured()) {
+            log.warn(
+                    "WhatsApp doctorSender: incomplete credentials userId={} hasPhoneId={} hasToken={}",
+                    doctor.getId(),
+                    phoneId != null && !phoneId.isBlank(),
+                    token != null && !token.isBlank());
+        }
+        return creds;
     }
 
     public WhatsAppSenderCredentials clinicSender(Clinic clinic) {

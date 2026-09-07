@@ -204,6 +204,10 @@ public class RazorPayServiceImpl implements RazorPayService {
 			}
 			return;
 		}
+		// Pet parent self-pay before clinic membership check (parents are not clinic staff).
+		if (treatmentInvoiceService.isOwnerPayer(caller, invoice)) {
+			return;
+		}
 		if (invoice.getClinic() != null && StringUtils.hasText(invoice.getClinic().getUuid())) {
 			clinicService.requireActivatedClinic(invoice.getClinic().getUuid(), caller.getEmail());
 			return;

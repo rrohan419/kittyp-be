@@ -8,6 +8,7 @@ import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
+import com.kittyp.visit.dto.VisitDtos.ParentBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
@@ -31,6 +32,9 @@ public interface VisitService {
 
     /** Parent self-serve booking for an owned pet at a discoverable clinic. */
     BookingModel createParentBooking(ParentBookingCreateRequest request, String email);
+
+    /** Parent cancel or reschedule an upcoming booking they own. */
+    BookingModel updateMyParentBooking(String bookingUuid, ParentBookingPatchRequest request, String email);
 
     /** Free half-hour slots for a clinic doctor on a given date (availability minus busy). */
     List<LocalDateTime> listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date, String email);

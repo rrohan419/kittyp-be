@@ -34,7 +34,7 @@ public class OutboundMessageService {
     private final NotificationLogRepository notificationLogRepository;
     private final ObjectMapper objectMapper;
 
-    @Value("${whatsapp.invoice-template:invoice_receipt}")
+    @Value("${whatsapp.invoice-template:invoice}")
     private String invoiceTemplate;
 
     @Value("${whatsapp.invoice-template-lang:en}")
@@ -56,10 +56,17 @@ public class OutboundMessageService {
     private String defaultLang;
 
     public void requireSenderReady(WhatsAppSenderCredentials sender, String ownerLabel) {
-        if (!whatsAppService.isConfigured(sender)) {
+        // Check stored credentials first — Settings "connected" and this must agree.
+        if (sender == null || !sender.isConfigured()) {
             throw new CustomException(
                     "WhatsApp is not configured for this " + ownerLabel
                             + ". Add Meta Phone Number ID and token in settings.",
+                    HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        // Feature flag / provider may still refuse (e.g. whatsapp.enabled=false).
+        if (!whatsAppService.isConfigured(sender)) {
+            throw new CustomException(
+                    "WhatsApp sending is disabled on this server. Set whatsapp.enabled=true (or WHATSAPP_ENABLED=true).",
                     HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
@@ -73,18 +80,15 @@ public class OutboundMessageService {
             User auditUser,
             Pet auditPet) {
         String to = whatsAppService.toE164Digits(ownerPhone);
-        // TEMP (testing hello_world): no document header / body variables.
-        // Restore PDF + params path before production invoice templates.
-        // String mediaId = whatsAppService.uploadDocumentPdf(sender, pdfBytes, filename);
-        // whatsAppService.sendDocumentTemplate(
-        //         sender, to, invoiceTemplate, invoiceTemplateLang, mediaId, filename, bodyParams);
-        whatsAppService.sendTextTemplate(sender, to, invoiceTemplate, invoiceTemplateLang, List.of());
+        String mediaId = whatsAppService.uploadDocumentPdf(sender, pdfBytes, filename);
+        whatsAppService.sendDocumentTemplate(
+                sender, to, invoiceTemplate, invoiceTemplateLang, mediaId, filename, bodyParams);
         audit(auditUser, auditPet, NotificationType.INVOICE_SENT, NotificationChannel.WHATSAPP, Map.of(
                 "to", to,
                 "template", invoiceTemplate,
                 "filename", filename == null ? "" : filename,
                 "phoneNumberId", sender != null ? sender.phoneNumberId() : "",
-                "plainTemplateTest", "true"));
+                "mediaId", mediaId == null ? "" : mediaId));
     }
 
     public void sendVaccineReminder(

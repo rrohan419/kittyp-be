@@ -83,6 +83,13 @@ public final class VisitDtos {
             BookingMode mode) {
     }
 
+    /** Parent self-serve cancel / reschedule. Null fields stay unchanged. */
+    public record ParentBookingPatchRequest(
+            LocalDateTime slotStart,
+            String notes,
+            BookingStatus status) {
+    }
+
     public record VisitPatchRequest(
             VisitStatus status,
             String doctorUuid,

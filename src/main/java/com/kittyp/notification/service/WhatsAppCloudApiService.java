@@ -145,7 +145,7 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         payload.put("type", "template");
         payload.put("template", template);
 
-        postMessage(creds, payload);
+        postMessage(creds, payload, templateName, languageCode);
     }
 
     @Override
@@ -185,10 +185,15 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         payload.put("type", "template");
         payload.put("template", template);
 
-        postMessage(creds, payload);
+        postMessage(creds, payload, templateName, languageCode);
     }
 
-    private void postMessage(WhatsAppSenderCredentials creds, Map<String, Object> payload) {
+    private void postMessage(
+            WhatsAppSenderCredentials creds,
+            Map<String, Object> payload,
+            String templateName,
+            String languageCode) {
+        String lang = languageCode == null || languageCode.isBlank() ? "en" : languageCode;
         try {
             client(creds).post()
                     .uri("/{phoneNumberId}/messages", creds.phoneNumberId())
@@ -196,17 +201,22 @@ public class WhatsAppCloudApiService implements WhatsAppService {
                     .body(payload)
                     .retrieve()
                     .toBodilessEntity();
-            log.info("WhatsApp template message accepted for {}",
-                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))));
+            log.info("WhatsApp template message accepted for {} template={}/{}",
+                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))),
+                    templateName,
+                    lang);
         } catch (RestClientResponseException e) {
             String detail = metaErrorDetail(e);
-            log.error("WhatsApp send failed: status={} phoneNumberId={} to={} detail={}",
+            log.error("WhatsApp send failed: status={} phoneNumberId={} to={} template={}/{} detail={}",
                     e.getStatusCode().value(),
                     creds.phoneNumberId(),
                     WhatsAppPhones.redact(String.valueOf(payload.get("to"))),
+                    templateName,
+                    lang,
                     detail);
             throw new CustomException(
-                    "WhatsApp send failed: " + detail,
+                    "WhatsApp send failed: " + detail
+                            + " [template=" + templateName + ", lang=" + lang + "]",
                     HttpStatus.BAD_GATEWAY,
                     e);
         } catch (Exception e) {

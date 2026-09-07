@@ -14,4 +14,7 @@ public class SignupOtpSendRequest {
 
     private String email;
     private String phone;
+
+    /** Optional audience hint for email greeting: DOCTOR, CLINIC, PARENT. */
+    private String role;
 }

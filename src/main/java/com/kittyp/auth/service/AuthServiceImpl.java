@@ -226,7 +226,10 @@ public class AuthServiceImpl implements AuthService {
 				throw new ResourceAlreadyExistsException("User", "email", email);
 			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
-			zeptoMailService.sendSignupOtpEmail(email, code, "EMAIL", null);
+			String purpose = request.getRole() == null || request.getRole().isBlank()
+					? "EMAIL"
+					: request.getRole().trim().toUpperCase();
+			zeptoMailService.sendSignupOtpEmail(email, code, purpose, null);
 			return new MessageResponse("OTP sent to email");
 		}
 		if ("PHONE".equals(channel)) {

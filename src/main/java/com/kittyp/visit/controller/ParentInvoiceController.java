@@ -1,5 +1,6 @@
 package com.kittyp.visit.controller;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
@@ -30,6 +31,15 @@ public class ParentInvoiceController {
 
     private final TreatmentInvoiceService treatmentInvoiceService;
     private final ApiResponse<?> responseBuilder;
+
+    @GetMapping(ApiUrl.USER_INVOICES_MINE)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<List<OwnerInvoiceModel>>> myInvoices() {
+        return responseBuilder.buildSuccessResponse(
+                treatmentInvoiceService.listMyParentInvoices(email()),
+                ResponseMessage.SUCCESS,
+                HttpStatus.OK);
+    }
 
     @GetMapping(ApiUrl.PET_INVOICES)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)

@@ -125,9 +125,18 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		log.info("Signup OTP [{}] requested for email={} phoneHint={}", purpose, recipientEmail, phoneHint);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
-			String name = "PHONE".equalsIgnoreCase(purpose) && phoneHint != null
-					? "Phone verify (" + phoneHint + ")"
-					: "Doctor Applicant";
+			String name;
+			if ("PHONE".equalsIgnoreCase(purpose) && phoneHint != null) {
+				name = "Phone verify (" + phoneHint + ")";
+			} else if ("CLINIC".equalsIgnoreCase(purpose) || "CLINIC_ADMIN".equalsIgnoreCase(purpose)) {
+				name = "Clinic Admin";
+			} else if ("PARENT".equalsIgnoreCase(purpose) || "USER".equalsIgnoreCase(purpose)) {
+				name = "Pet Parent";
+			} else if ("DOCTOR".equalsIgnoreCase(purpose)) {
+				name = "Doctor Applicant";
+			} else {
+				name = "there";
+			}
 			mailDto.setMergeInfo(Map.of(
 					"Customer_Name", name,
 					"RESET_CODE", code,

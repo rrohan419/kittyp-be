@@ -213,8 +213,10 @@ public class ApiUrl {
 	public static final String USER_VISIT_RATING = USER_VISIT_BY_UUID + "/rating";
 	public static final String USER_BOOKINGS_MINE = "/user/bookings/mine";
 	public static final String USER_BOOKINGS = "/user/bookings";
+	public static final String USER_BOOKING_BY_UUID = USER_BOOKINGS + "/{bookingUuid}";
 	public static final String USER_BOOKING_VIDEO = USER_BOOKINGS + "/{bookingUuid}/video";
 	public static final String USER_DOCTOR_SLOTS = "/user/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
+	public static final String USER_INVOICES_MINE = "/user/invoices/mine";
 	public static final String USER_REMINDERS = "/user/reminders";
 	public static final String USER_REMINDER_BY_UUID = USER_REMINDERS + "/{reminderUuid}";
 

@@ -72,6 +72,7 @@ import com.kittyp.user.service.UserService;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
+import com.kittyp.visit.dto.VisitDtos.ParentBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartModel;
@@ -422,6 +423,77 @@ public class VisitServiceImpl implements VisitService {
     }
 
     @Override
+    @Transactional
+    public BookingModel updateMyParentBooking(String bookingUuid, ParentBookingPatchRequest request, String email) {
+        if (request == null) {
+            throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
+        }
+        User user = userDao.userByEmail(email);
+        Booking booking = bookingRepository.findByUuid(bookingUuid)
+                .filter(b -> Boolean.TRUE.equals(b.getIsActive()))
+                .orElseThrow(() -> new ResourceNotFoundException("booking", "uuid", bookingUuid));
+
+        if (booking.getPet() == null || booking.getPet().getUuid() == null) {
+            throw new AccessDeniedException("You can only manage your own appointments");
+        }
+        requireParentOwnsPet(user, booking.getPet().getUuid());
+
+        BookingStatus current = booking.getStatus();
+        if (current != BookingStatus.PENDING && current != BookingStatus.CONFIRMED) {
+            throw new CustomException("This appointment can no longer be edited", HttpStatus.BAD_REQUEST);
+        }
+
+        boolean hasSlot = request.slotStart() != null;
+        boolean hasNotes = request.notes() != null;
+        boolean hasStatus = request.status() != null;
+        if (!hasSlot && !hasNotes && !hasStatus) {
+            throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
+        }
+
+        if (hasStatus) {
+            if (request.status() != BookingStatus.CANCELLED) {
+                throw new CustomException("Parents can only cancel upcoming appointments", HttpStatus.BAD_REQUEST);
+            }
+            booking.setStatus(BookingStatus.CANCELLED);
+            return toBookingModel(bookingRepository.save(booking));
+        }
+
+        Clinic clinic = booking.getClinic();
+        if (clinic == null) {
+            throw new CustomException("Booking has no clinic", HttpStatus.BAD_REQUEST);
+        }
+        requireOperational(clinic, email);
+        DoctorProfile doctor = booking.getDoctor();
+        if (doctor == null) {
+            throw new CustomException("Doctor is required to reschedule", HttpStatus.BAD_REQUEST);
+        }
+
+        if (hasSlot) {
+            LocalDateTime slotStart = snapToHalfHour(request.slotStart());
+            requireNotInPast(clinic, slotStart);
+            LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
+            requireWithinDoctorHours(doctor, slotStart);
+            List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
+                    doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
+            conflicts = conflicts.stream().filter(b -> !bookingUuid.equals(b.getUuid())).toList();
+            if (!conflicts.isEmpty()) {
+                throw new CustomException("This time is already booked. Please try another slot.", HttpStatus.CONFLICT);
+            }
+            booking.setSlotStart(slotStart);
+            booking.setSlotEnd(slotEnd);
+        }
+        if (hasNotes) {
+            booking.setNotes(blankToNull(request.notes()));
+        }
+        booking = bookingRepository.save(booking);
+        jitsiMeetService.ensureVideoRoom(booking);
+        if (booking.getJitsiRoomId() != null) {
+            booking = bookingRepository.save(booking);
+        }
+        return toBookingModel(booking);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<LocalDateTime> listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date,
             String email) {
@@ -639,6 +711,8 @@ public class VisitServiceImpl implements VisitService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        // Keep board time as the scheduled slot; record actual check-in separately.
+        LocalDateTime scheduledAt = booking.getSlotStart() != null ? booking.getSlotStart() : now;
         Visit visit = Visit.builder()
                 .uuid(UUID.randomUUID().toString())
                 .clinic(booking.getClinic())
@@ -651,7 +725,7 @@ public class VisitServiceImpl implements VisitService {
                 .urgency(VisitUrgency.ROUTINE)
                 .reasonForVisit(blankToNull(booking.getNotes()))
                 .checkedInAt(now)
-                .startedAt(now)
+                .startedAt(scheduledAt)
                 .build();
         visit.setIsActive(true);
         visit = visitDao.save(visit);

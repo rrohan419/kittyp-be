@@ -20,6 +20,7 @@ public class LoggingWhatsAppService implements WhatsAppService {
 
     @Override
     public boolean isConfigured(WhatsAppSenderCredentials sender) {
+        // Credentials may be saved in Settings, but Cloud API is off — report not ready to send.
         return false;
     }
 
@@ -61,7 +62,7 @@ public class LoggingWhatsAppService implements WhatsAppService {
 
     private CustomException notConfigured() {
         return new CustomException(
-                "WhatsApp is not configured. Set WHATSAPP_ENABLED=true and Meta credentials in Doctor/Clinic settings.",
+                "WhatsApp sending is disabled on this server. Set whatsapp.enabled=true (or WHATSAPP_ENABLED=true).",
                 HttpStatus.SERVICE_UNAVAILABLE);
     }
 }

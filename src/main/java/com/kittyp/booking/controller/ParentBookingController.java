@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,6 +26,7 @@ import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
+import com.kittyp.visit.dto.VisitDtos.ParentBookingPatchRequest;
 import com.kittyp.visit.service.VisitService;
 
 import jakarta.validation.Valid;
@@ -53,6 +55,16 @@ public class ParentBookingController {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         BookingModel model = visitService.createParentBooking(request, email);
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.CREATED);
+    }
+
+    @PatchMapping(ApiUrl.USER_BOOKING_BY_UUID)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<BookingModel>> update(
+            @PathVariable String bookingUuid,
+            @RequestBody ParentBookingPatchRequest request) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        BookingModel model = visitService.updateMyParentBooking(bookingUuid, request, email);
+        return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.USER_BOOKING_VIDEO)
