@@ -26,4 +26,33 @@ public final class WhatsAppSettingsSupport {
         map.put("businessAccountId", businessAccountId != null ? businessAccountId : "");
         return map;
     }
+
+    public static Map<String, Object> publicViewWithTemplates(
+            String phoneNumberId,
+            String businessAccountId,
+            String token,
+            Map<String, Object> templateInfo) {
+        Map<String, Object> map = publicView(phoneNumberId, businessAccountId, token);
+        if (templateInfo != null) {
+            map.putAll(templateInfo);
+        }
+        return map;
+    }
+
+    public static Map<String, Object> publicViewFull(
+            String phoneNumberId,
+            String businessAccountId,
+            String token,
+            String connectionStatus,
+            String invoiceTemplateStatus,
+            Map<String, Object> templateInfo) {
+        Map<String, Object> map = publicViewWithTemplates(phoneNumberId, businessAccountId, token, templateInfo);
+        map.put("connectionStatus", connectionStatus != null ? connectionStatus : WhatsAppConnectionStatuses.DISCONNECTED);
+        map.put("invoiceTemplateStatus",
+                invoiceTemplateStatus != null ? invoiceTemplateStatus : WhatsAppConnectionStatuses.TEMPLATE_MISSING);
+        boolean ready = isConfigured(phoneNumberId, businessAccountId, token)
+                && WhatsAppConnectionStatuses.isInvoiceTemplateApproved(invoiceTemplateStatus);
+        map.put("whatsappReadyToSend", ready);
+        return map;
+    }
 }

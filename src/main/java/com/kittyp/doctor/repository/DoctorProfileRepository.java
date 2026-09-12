@@ -34,4 +34,6 @@ public interface DoctorProfileRepository extends JpaRepository<DoctorProfile, Lo
     List<DoctorProfile> findByStatusOrderBySubmittedAtDesc(DoctorStatus status);
 
     long countByStatusIn(Collection<DoctorStatus> statuses);
+
+    List<DoctorProfile> findByWhatsappBusinessAccountId(String whatsappBusinessAccountId);
 }

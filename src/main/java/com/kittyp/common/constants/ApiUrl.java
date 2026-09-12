@@ -113,6 +113,7 @@ public class ApiUrl {
 	// public controller
 	public static final String PUBLIC_BASE_URL = "/public";
 	public static final String SITEMAP = PUBLIC_BASE_URL + "/sitemap.xml";
+	public static final String PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG = PUBLIC_BASE_URL + "/whatsapp/embedded-signup-config";
 
 	// pet controller
 	public static final String PET_BASE_URL = "/pet";
@@ -193,7 +194,12 @@ public class ApiUrl {
 	public static final String CLINIC_INVOICE_SEND_WHATSAPP = CLINIC_INVOICE_BY_UUID + "/send-whatsapp";
 	public static final String CLINIC_INVOICE_MARK_PAID = CLINIC_INVOICE_BY_UUID + "/mark-paid";
 	public static final String CLINIC_WHATSAPP_SETTINGS = CLINIC_BY_UUID + "/whatsapp-settings";
+	public static final String CLINIC_WHATSAPP_SETUP_TEMPLATES = CLINIC_WHATSAPP_SETTINGS + "/setup-templates";
+	public static final String CLINIC_WHATSAPP_CONNECT_EMBEDDED = CLINIC_BY_UUID + "/whatsapp/connect/embedded";
 	public static final String DOCTOR_WHATSAPP_SETTINGS = "/doctor/whatsapp-settings";
+	public static final String DOCTOR_WHATSAPP_SETUP_TEMPLATES = DOCTOR_WHATSAPP_SETTINGS + "/setup-templates";
+	public static final String DOCTOR_WHATSAPP_CONNECT_EMBEDDED = DOCTOR_BASE_URL + "/whatsapp/connect/embedded";
+	public static final String WEBHOOK_WHATSAPP = "/webhook/whatsapp";
 
 	public static final String DOCTOR_VISITS = DOCTOR_BASE_URL + "/visits";
 	public static final String DOCTOR_VISITS_MINE = DOCTOR_VISITS + "/mine";

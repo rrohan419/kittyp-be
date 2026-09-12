@@ -588,14 +588,23 @@ public class TreatmentInvoiceService {
         if (profile == null) {
             return WhatsAppSenderCredentials.of(null, null);
         }
-        return WhatsAppSenderCredentials.of(profile.getWhatsappToken(), profile.getWhatsappPhoneNumberId());
+        return WhatsAppSenderCredentials.of(
+                profile.getWhatsappToken(),
+                profile.getWhatsappPhoneNumberId(),
+                profile.getWhatsappInvoiceTemplateStatus());
     }
 
     public WhatsAppSenderCredentials clinicSender(Clinic clinic) {
         if (clinic == null) {
             return WhatsAppSenderCredentials.of(null, null);
         }
-        return WhatsAppSenderCredentials.of(clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
+        // Reload so WhatsApp token/phone id are current (invoice association can be stale).
+        Clinic managed = clinic.getUuid() != null ? clinicRepository.findByUuid(clinic.getUuid()) : null;
+        Clinic source = managed != null ? managed : clinic;
+        return WhatsAppSenderCredentials.of(
+                source.getWhatsappToken(),
+                source.getWhatsappPhoneNumberId(),
+                source.getWhatsappInvoiceTemplateStatus());
     }
 
     private String senderOwnerLabel(ConsultationInvoice invoice) {

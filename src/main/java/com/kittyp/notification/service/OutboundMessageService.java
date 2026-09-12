@@ -56,12 +56,31 @@ public class OutboundMessageService {
     private String defaultLang;
 
     public void requireSenderReady(WhatsAppSenderCredentials sender, String ownerLabel) {
-        if (!whatsAppService.isConfigured(sender)) {
+        // Check tenant credentials first — do not confuse "feature off" with "missing Meta IDs".
+        if (sender == null || !sender.isConfigured()) {
             throw new CustomException(
                     "WhatsApp is not configured for this " + ownerLabel
                             + ". Add Meta Phone Number ID and token in settings.",
                     HttpStatus.SERVICE_UNAVAILABLE);
         }
+        if (!whatsAppService.isDeliveryEnabled()) {
+            throw new CustomException(
+                    "WhatsApp sending is disabled on the server. Set WHATSAPP_ENABLED=true to deliver messages.",
+                    HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    /**
+     * Invoice PDF sends require the {@code invoice_receipt} template to be APPROVED by Meta.
+     */
+    public void requireInvoiceTemplateApproved(WhatsAppSenderCredentials sender) {
+        String status = sender == null ? null : sender.invoiceTemplateStatus();
+        if (WhatsAppConnectionStatuses.isInvoiceTemplateApproved(status)) {
+            return;
+        }
+        throw new CustomException(
+                "WhatsApp invoice template not approved yet",
+                HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     public void sendInvoicePdfWhatsApp(
@@ -72,6 +91,7 @@ public class OutboundMessageService {
             List<String> bodyParams,
             User auditUser,
             Pet auditPet) {
+        requireInvoiceTemplateApproved(sender);
         String to = whatsAppService.toE164Digits(ownerPhone);
         String mediaId = whatsAppService.uploadDocumentPdf(sender, pdfBytes, filename);
         whatsAppService.sendDocumentTemplate(
@@ -119,7 +139,7 @@ public class OutboundMessageService {
             List<String> bodyParams,
             User auditUser,
             Pet auditPet) {
-        if (!whatsAppService.isConfigured(sender)) {
+        if (!whatsAppService.isDeliveryEnabled() || sender == null || !sender.isConfigured()) {
             return;
         }
         try {

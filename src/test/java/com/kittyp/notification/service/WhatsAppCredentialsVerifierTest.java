@@ -52,6 +52,9 @@ class WhatsAppCredentialsVerifierTest {
         server.enqueue(new MockResponse()
                 .setBody("{\"id\":\"waba1\"}")
                 .addHeader("Content-Type", "application/json"));
+        server.enqueue(new MockResponse()
+                .setBody("{\"data\":[{\"id\":\"ph1\"}]}")
+                .addHeader("Content-Type", "application/json"));
 
         assertDoesNotThrow(() -> verifier.verifyOrThrow("tok", "ph1", "waba1"));
 
@@ -60,6 +63,26 @@ class WhatsAppCredentialsVerifierTest {
         assertEquals("Bearer tok", phoneReq.getHeader("Authorization"));
         RecordedRequest wabaReq = server.takeRequest();
         assertTrue(wabaReq.getPath().contains("/waba1"));
+        RecordedRequest phonesReq = server.takeRequest();
+        assertTrue(phonesReq.getPath().contains("/waba1/phone_numbers"));
+    }
+
+    @Test
+    void rejectsPhoneNotListedOnWaba() {
+        server.enqueue(new MockResponse()
+                .setBody("{\"id\":\"ph1\",\"status\":\"CONNECTED\"}")
+                .addHeader("Content-Type", "application/json"));
+        server.enqueue(new MockResponse()
+                .setBody("{\"id\":\"waba1\"}")
+                .addHeader("Content-Type", "application/json"));
+        server.enqueue(new MockResponse()
+                .setBody("{\"data\":[{\"id\":\"other\"}]}")
+                .addHeader("Content-Type", "application/json"));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> verifier.verifyOrThrow("tok", "ph1", "waba1"));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getHttpStatus());
+        assertTrue(ex.getMessage().toLowerCase().contains("does not belong"));
     }
 
     @Test

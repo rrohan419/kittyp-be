@@ -2,6 +2,7 @@ package com.kittyp.notification.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -39,7 +40,8 @@ class OutboundMessageServiceTest {
     @InjectMocks
     private OutboundMessageService outboundMessageService;
 
-    private final WhatsAppSenderCredentials sender = WhatsAppSenderCredentials.of("tok", "phone-1");
+    private final WhatsAppSenderCredentials sender =
+            WhatsAppSenderCredentials.of("tok", "phone-1", WhatsAppConnectionStatuses.TEMPLATE_APPROVED);
 
     @BeforeEach
     void setUp() {
@@ -53,11 +55,39 @@ class OutboundMessageServiceTest {
     }
 
     @Test
-    void requireSenderReadyFailsWhenNotConfigured() {
-        when(whatsAppService.isConfigured(sender)).thenReturn(false);
+    void requireSenderReadyFailsWhenCredentialsMissing() {
         CustomException ex = assertThrows(CustomException.class,
-                () -> outboundMessageService.requireSenderReady(sender, "doctor"));
+                () -> outboundMessageService.requireSenderReady(
+                        WhatsAppSenderCredentials.of(null, null), "doctor"));
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getHttpStatus());
+        assertTrue(ex.getMessage().contains("Add Meta Phone Number ID"));
+    }
+
+    @Test
+    void requireSenderReadyFailsWhenDeliveryDisabled() {
+        when(whatsAppService.isDeliveryEnabled()).thenReturn(false);
+        CustomException ex = assertThrows(CustomException.class,
+                () -> outboundMessageService.requireSenderReady(sender, "clinic"));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getHttpStatus());
+        assertTrue(ex.getMessage().contains("WHATSAPP_ENABLED"));
+    }
+
+    @Test
+    void requireSenderReadyPassesWhenCredentialsAndDeliveryOk() {
+        when(whatsAppService.isDeliveryEnabled()).thenReturn(true);
+        outboundMessageService.requireSenderReady(sender, "clinic");
+    }
+
+    @Test
+    void sendInvoiceBlockedWhenTemplateNotApproved() {
+        WhatsAppSenderCredentials pending =
+                WhatsAppSenderCredentials.of("tok", "phone-1", WhatsAppConnectionStatuses.TEMPLATE_PENDING);
+        CustomException ex = assertThrows(CustomException.class,
+                () -> outboundMessageService.sendInvoicePdfWhatsApp(
+                        pending, "9876543210", new byte[] {1}, "a.pdf", List.of("a"), null, null));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getHttpStatus());
+        assertTrue(ex.getMessage().toLowerCase().contains("not approved"));
+        verify(whatsAppService, never()).uploadDocumentPdf(any(), any(), anyString());
     }
 
     @Test

@@ -16,4 +16,6 @@ public interface DoctorProfileDao {
     List<DoctorProfile> findAllOrdered();
 
     List<DoctorProfile> findByStatus(DoctorStatus status);
+
+    List<DoctorProfile> findByWhatsappBusinessAccountId(String whatsappBusinessAccountId);
 }

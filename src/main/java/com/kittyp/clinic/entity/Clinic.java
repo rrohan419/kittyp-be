@@ -90,4 +90,18 @@ public class Clinic extends BaseEntity implements HasPublicId {
     @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "whatsapp_token", columnDefinition = "TEXT")
     private String whatsappToken;
+
+    /** DISCONNECTED | CONNECTED | ERROR */
+    @Column(name = "whatsapp_connection_status", length = 32)
+    private String whatsappConnectionStatus;
+
+    @Column(name = "whatsapp_connected_at")
+    private java.time.LocalDateTime whatsappConnectedAt;
+
+    @Column(name = "whatsapp_last_verified_at")
+    private java.time.LocalDateTime whatsappLastVerifiedAt;
+
+    /** MISSING | PENDING | APPROVED | REJECTED | ERROR */
+    @Column(name = "whatsapp_invoice_template_status", length = 32)
+    private String whatsappInvoiceTemplateStatus;
 }

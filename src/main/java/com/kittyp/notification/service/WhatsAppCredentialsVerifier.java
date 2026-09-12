@@ -76,6 +76,39 @@ public class WhatsAppCredentialsVerifier {
 
         log.info("WhatsApp credentials verified for phoneNumberId={} status={}", phoneId,
                 status.isEmpty() ? "unknown" : status);
+
+        requirePhoneBelongsToWaba(bearer, wabaId, phoneId);
+    }
+
+    /**
+     * Ensures the Phone Number ID is listed under the given WABA (prevents mixed credentials).
+     */
+    public void requirePhoneBelongsToWaba(String token, String businessAccountId, String phoneNumberId) {
+        if (!StringUtils.hasText(token) || !StringUtils.hasText(businessAccountId) || !StringUtils.hasText(phoneNumberId)) {
+            throw new CustomException("WhatsApp WABA, phone number, and token are required", HttpStatus.BAD_REQUEST);
+        }
+        String wabaId = businessAccountId.trim();
+        String phoneId = phoneNumberId.trim();
+        String bearer = token.trim();
+        JsonNode list = getJson(bearer, "/" + wabaId + "/phone_numbers?fields=id");
+        JsonNode data = list.path("data");
+        if (!data.isArray() || data.isEmpty()) {
+            throw new CustomException(
+                    "No phone numbers found on this WhatsApp Business Account. Check the WABA ID and token.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        for (JsonNode row : data) {
+            if (phoneId.equals(row.path("id").asText())) {
+                return;
+            }
+        }
+        throw new CustomException(
+                "Phone Number ID does not belong to this WhatsApp Business Account. Re-check both IDs.",
+                HttpStatus.BAD_REQUEST);
+    }
+
+    public JsonNode getJsonPublic(String token, String pathAndQuery) {
+        return getJson(token, pathAndQuery);
     }
 
     private JsonNode getJson(String token, String pathAndQuery) {

@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,7 +25,10 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.dto.DoctorVerificationModel;
 import com.kittyp.doctor.entity.DoctorProfile;
+import com.kittyp.notification.service.WhatsAppConnectionService;
+import com.kittyp.notification.service.WhatsAppConnectionStatuses;
 import com.kittyp.notification.service.WhatsAppCredentialsVerifier;
+import com.kittyp.notification.service.WhatsAppEmbeddedSignupService;
 import com.kittyp.notification.service.WhatsAppSettingsSupport;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
@@ -44,6 +48,8 @@ public class DoctorProfileController {
     private final UserDao userDao;
     private final ApiResponse<?> responseBuilder;
     private final WhatsAppCredentialsVerifier whatsAppCredentialsVerifier;
+    private final WhatsAppConnectionService whatsAppConnectionService;
+    private final WhatsAppEmbeddedSignupService whatsAppEmbeddedSignupService;
 
     @GetMapping(ApiUrl.DOCTOR_ME)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
@@ -103,11 +109,37 @@ public class DoctorProfileController {
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<Map<String, Object>>> getWhatsAppSettings() {
         DoctorProfile profile = requireMyProfile();
+        if (!WhatsAppSettingsSupport.isConfigured(
+                profile.getWhatsappPhoneNumberId(),
+                profile.getWhatsappBusinessAccountId(),
+                profile.getWhatsappToken())) {
+            return responseBuilder.buildSuccessResponse(
+                    WhatsAppSettingsSupport.publicViewFull(
+                            profile.getWhatsappPhoneNumberId(),
+                            profile.getWhatsappBusinessAccountId(),
+                            profile.getWhatsappToken(),
+                            WhatsAppConnectionStatuses.DISCONNECTED,
+                            profile.getWhatsappInvoiceTemplateStatus(),
+                            null),
+                    ResponseMessage.SUCCESS,
+                    HttpStatus.OK);
+        }
         return responseBuilder.buildSuccessResponse(
-                WhatsAppSettingsSupport.publicView(
-                        profile.getWhatsappPhoneNumberId(),
-                        profile.getWhatsappBusinessAccountId(),
-                        profile.getWhatsappToken()),
+                whatsAppConnectionService.refreshDoctorTemplates(profile, false),
+                ResponseMessage.SUCCESS,
+                HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.DOCTOR_WHATSAPP_CONNECT_EMBEDDED)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> connectWhatsAppEmbedded(
+            @Valid @RequestBody EmbeddedConnectRequest request) {
+        DoctorProfile profile = requireMyProfile();
+        WhatsAppEmbeddedSignupService.EmbeddedConnectResult result = whatsAppEmbeddedSignupService.complete(
+                request.getCode(), request.getWabaId(), request.getPhoneNumberId());
+        return responseBuilder.buildSuccessResponse(
+                whatsAppConnectionService.connectDoctor(
+                        profile, result.accessToken(), result.phoneNumberId(), result.wabaId(), true),
                 ResponseMessage.SUCCESS,
                 HttpStatus.OK);
     }
@@ -128,15 +160,25 @@ public class DoctorProfileController {
             throw new CustomException("token is required for first-time WhatsApp setup", HttpStatus.BAD_REQUEST);
         }
         whatsAppCredentialsVerifier.verifyOrThrow(tokenToStore, phoneNumberId, businessAccountId);
-        profile.setWhatsappPhoneNumberId(phoneNumberId);
-        profile.setWhatsappBusinessAccountId(businessAccountId);
-        profile.setWhatsappToken(tokenToStore);
-        doctorProfileDao.save(profile);
         return responseBuilder.buildSuccessResponse(
-                WhatsAppSettingsSupport.publicView(
-                        profile.getWhatsappPhoneNumberId(),
-                        profile.getWhatsappBusinessAccountId(),
-                        profile.getWhatsappToken()),
+                whatsAppConnectionService.connectDoctor(
+                        profile, tokenToStore, phoneNumberId, businessAccountId, true),
+                ResponseMessage.SUCCESS,
+                HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.DOCTOR_WHATSAPP_SETUP_TEMPLATES)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> setupWhatsAppTemplates() {
+        DoctorProfile profile = requireMyProfile();
+        if (!WhatsAppSettingsSupport.isConfigured(
+                profile.getWhatsappPhoneNumberId(),
+                profile.getWhatsappBusinessAccountId(),
+                profile.getWhatsappToken())) {
+            throw new CustomException("Connect WhatsApp credentials first", HttpStatus.BAD_REQUEST);
+        }
+        return responseBuilder.buildSuccessResponse(
+                whatsAppConnectionService.refreshDoctorTemplates(profile, true),
                 ResponseMessage.SUCCESS,
                 HttpStatus.OK);
     }
@@ -153,6 +195,17 @@ public class DoctorProfileController {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    @Data
+    public static class EmbeddedConnectRequest {
+        @NotBlank
+        @jakarta.validation.constraints.Size(max = 4096)
+        private String code;
+        @jakarta.validation.constraints.Size(max = 64)
+        private String wabaId;
+        @jakarta.validation.constraints.Size(max = 64)
+        private String phoneNumberId;
     }
 
     @Data

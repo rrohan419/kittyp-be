@@ -83,8 +83,9 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             }
             return id;
         } catch (RestClientResponseException e) {
-            log.error("WhatsApp media upload failed: status={}", e.getStatusCode().value());
-            throw new CustomException("WhatsApp media upload failed", HttpStatus.BAD_GATEWAY, e);
+            log.error("WhatsApp media upload failed: status={} body={}",
+                    e.getStatusCode().value(), e.getResponseBodyAsString());
+            throw metaFailure("WhatsApp media upload failed", e);
         } catch (CustomException e) {
             throw e;
         } catch (Exception e) {
@@ -117,10 +118,10 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         components.add(headerComponent);
         if (bodyParams != null && !bodyParams.isEmpty()) {
             List<Map<String, Object>> params = new ArrayList<>();
-            for (String p : bodyParams) {
+            for (String param : bodyParams) {
                 Map<String, Object> tp = new LinkedHashMap<>();
                 tp.put("type", "text");
-                tp.put("text", WhatsAppPhones.sanitizeTemplateText(p));
+                tp.put("text", WhatsAppPhones.sanitizeTemplateText(param));
                 params.add(tp);
             }
             Map<String, Object> bodyComponent = new LinkedHashMap<>();
@@ -195,10 +196,11 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             log.info("WhatsApp template message accepted for {}",
                     WhatsAppPhones.redact(String.valueOf(payload.get("to"))));
         } catch (RestClientResponseException e) {
-            log.error("WhatsApp send failed: status={} to={}",
+            log.error("WhatsApp send failed: status={} to={} body={}",
                     e.getStatusCode().value(),
-                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))));
-            throw new CustomException("WhatsApp send failed: " + e.getStatusCode().value(), HttpStatus.BAD_GATEWAY, e);
+                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))),
+                    e.getResponseBodyAsString());
+            throw metaFailure("WhatsApp send failed", e);
         } catch (Exception e) {
             throw new CustomException("WhatsApp send failed", HttpStatus.BAD_GATEWAY, e);
         }
@@ -218,5 +220,53 @@ public class WhatsAppCloudApiService implements WhatsAppService {
                     HttpStatus.SERVICE_UNAVAILABLE);
         }
         return sender;
+    }
+
+    private CustomException metaFailure(String prefix, RestClientResponseException e) {
+        int status = e.getStatusCode().value();
+        String detail = extractMetaError(e.getResponseBodyAsString());
+        String hint = metaHint(status, detail);
+        String message = prefix + " (Meta HTTP " + status + ")"
+                + (detail != null ? ": " + detail : "")
+                + (hint != null ? " — " + hint : "");
+        return new CustomException(message, HttpStatus.BAD_GATEWAY, e);
+    }
+
+    private String extractMetaError(String responseBody) {
+        try {
+            JsonNode err = objectMapper.readTree(responseBody == null ? "{}" : responseBody).path("error");
+            String message = err.path("message").asText(null);
+            String code = err.path("code").asText(null);
+            String subcode = err.path("error_subcode").asText(null);
+            if (!StringUtils.hasText(message)) {
+                return null;
+            }
+            StringBuilder sb = new StringBuilder(message);
+            if (StringUtils.hasText(code)) {
+                sb.append(" [code=").append(code);
+                if (StringUtils.hasText(subcode)) {
+                    sb.append(", subcode=").append(subcode);
+                }
+                sb.append(']');
+            }
+            String out = sb.toString();
+            return out.length() > 280 ? out.substring(0, 280) + "…" : out;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String metaHint(int httpStatus, String detail) {
+        String lower = detail == null ? "" : detail.toLowerCase();
+        if (httpStatus == 404 || lower.contains("does not exist") || lower.contains("object with id")) {
+            return "Check Phone Number ID (not the display phone or WABA ID) in Clinic WhatsApp settings";
+        }
+        if (lower.contains("template") || lower.contains("translation")) {
+            return "Create and approve template 'invoice_receipt' (DOCUMENT header, language en) in Meta WhatsApp Manager";
+        }
+        if (httpStatus == 401 || httpStatus == 403 || lower.contains("access token") || lower.contains("permission")) {
+            return "Token needs whatsapp_business_messaging on this WABA; regenerate a permanent token if needed";
+        }
+        return null;
     }
 }
