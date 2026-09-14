@@ -71,6 +71,7 @@ import com.kittyp.user.service.PetAccessGuard;
 import com.kittyp.user.service.UserService;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
+import com.kittyp.visit.dto.VisitDtos.DoctorDaySlotsModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
@@ -495,7 +496,7 @@ public class VisitServiceImpl implements VisitService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<LocalDateTime> listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date,
+    public DoctorDaySlotsModel listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date,
             String email) {
         // Authenticated caller only — no clinic staff check for discovery slots.
         userDao.userByEmail(email);
@@ -520,7 +521,7 @@ public class VisitServiceImpl implements VisitService {
                 availability == null ? null : availability.getExceptionsJson(),
                 day);
         if (windows.isEmpty()) {
-            return List.of();
+            return new DoctorDaySlotsModel(List.of(), true, null);
         }
 
         LocalDateTime rangeFrom = day.atStartOfDay();
@@ -530,7 +531,10 @@ public class VisitServiceImpl implements VisitService {
                 .map(b -> new DoctorHours.BusyRange(b.getSlotStart(), b.getSlotEnd()))
                 .toList();
 
-        return DoctorHours.freeSlotStarts(day, windows, duration, nowClinic, busy);
+        List<String> slots = DoctorHours.freeSlotStarts(day, windows, duration, nowClinic, busy).stream()
+                .map(Object::toString)
+                .toList();
+        return new DoctorDaySlotsModel(slots, false, DoctorHours.hoursLabel(windows));
     }
 
     private void requireWithinDoctorHours(DoctorProfile doctor, LocalDateTime slotStart) {
@@ -1899,6 +1903,9 @@ public class VisitServiceImpl implements VisitService {
             if (doctor.getUser() != null) {
                 doctorName = ((doctor.getUser().getFirstName() == null ? "" : doctor.getUser().getFirstName()) + " "
                         + (doctor.getUser().getLastName() == null ? "" : doctor.getUser().getLastName())).trim();
+                if (doctorName.isBlank()) {
+                    doctorName = doctor.getUser().getEmail();
+                }
             }
             if (doctor.getSpecialization() != null) {
                 doctorSpecialization = doctor.getSpecialization().getSpecialization();

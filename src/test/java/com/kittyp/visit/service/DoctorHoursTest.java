@@ -185,4 +185,12 @@ class DoctorHoursTest {
         List<LocalTime[]> windows = DoctorHours.windowsForDate(mondayOnly, null, sunday);
         assertTrue(windows.isEmpty());
     }
+
+    @Test
+    void hoursLabelJoinsWindows() {
+        List<LocalTime[]> windows = List.<LocalTime[]>of(
+                new LocalTime[] { LocalTime.of(9, 0), LocalTime.of(17, 0) });
+        assertEquals("09:00–17:00", DoctorHours.hoursLabel(windows));
+        assertEquals(null, DoctorHours.hoursLabel(List.of()));
+    }
 }

@@ -17,14 +17,23 @@ public class SignupRequestDto {
 
 	@NotBlank
 	@Size(min = 2, max = 50)
+	@Pattern(
+			regexp = "^[\\p{L}][\\p{L} .'-]{1,49}$",
+			message = "Name can only contain letters, spaces, hyphens, and apostrophes")
 	private String firstName;
 
 	@Size(max = 50)
+	@Pattern(
+			regexp = "^$|^[\\p{L}][\\p{L} .'-]{0,49}$",
+			message = "Name can only contain letters, spaces, hyphens, and apostrophes")
 	private String lastName;
 
 	@NotBlank
 	@Size(max = 50)
 	@Email
+	@Pattern(
+			regexp = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$",
+			message = "Enter a valid email address")
 	private String email;
 
 	/**

@@ -2,6 +2,7 @@ package com.kittyp.doctor.controller;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
@@ -45,7 +47,7 @@ public class AdminDoctorController {
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN_OR_MODERATOR)
     public ResponseEntity<SuccessResponse<List<DoctorVerificationModel>>> list(
             @RequestParam(required = false) DoctorStatus status) {
-        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         List<DoctorProfile> profiles = status == null
                 ? doctorProfileDao.findAllOrdered()
                 : doctorProfileDao.findByStatus(status);
@@ -58,7 +60,7 @@ public class AdminDoctorController {
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN_OR_MODERATOR)
     public ResponseEntity<SuccessResponse<DoctorVerificationModel>> detail(@PathVariable String uuid) {
         DoctorProfile profile = doctorProfileDao.findByUuid(uuid);
-        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         return responseBuilder.buildSuccessResponse(toModel(profile, clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -87,7 +89,7 @@ public class AdminDoctorController {
         if (profile.getStatus() == DoctorStatus.DOCUMENTS_SUBMITTED && anyChecked(profile)) {
             profile.setStatus(DoctorStatus.UNDER_REVIEW);
         }
-        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.save(profile), clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -115,7 +117,7 @@ public class AdminDoctorController {
             profile.setReviewedAt(LocalDateTime.now());
         }
 
-        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveAffiliatedDoctorIds();
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.save(profile), clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
@@ -151,11 +153,28 @@ public class AdminDoctorController {
         return value != null && !value.isBlank();
     }
 
-    private DoctorVerificationModel toModel(DoctorProfile p, Set<Long> clinicLinkedIds) {
-        boolean hasClinic = p.getClinic() != null;
-        boolean clinicPriority = hasClinic || clinicLinkedIds.contains(p.getId());
-        String clinicAddress = hasClinic ? p.getClinic().getAddress() : null;
-        String clinicName = hasClinic ? p.getClinic().getName() : null;
+    /**
+     * True when the doctor's linked clinic is a solo personal practice (owner = doctor user
+     * and that user is an active affiliated doctor on that clinic). Org clinics are not personal.
+     */
+    private boolean isPersonalPracticeClinic(Clinic clinic, DoctorProfile p) {
+        if (clinic == null || clinic.getOwner() == null || p.getUser() == null) {
+            return false;
+        }
+        if (!Objects.equals(clinic.getOwner().getId(), p.getUser().getId())) {
+            return false;
+        }
+        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
+                clinic.getId(), p.getUser().getId());
+    }
+
+    private DoctorVerificationModel toModel(DoctorProfile p, Set<Long> orgAffiliatedIds) {
+        boolean linkedToOrgClinic = p.getClinic() != null && !isPersonalPracticeClinic(p.getClinic(), p);
+        boolean orgAffiliated = orgAffiliatedIds.contains(p.getId());
+        boolean clinicPriority = linkedToOrgClinic || orgAffiliated;
+        boolean hasClinic = clinicPriority;
+        String clinicAddress = linkedToOrgClinic ? p.getClinic().getAddress() : null;
+        String clinicName = linkedToOrgClinic ? p.getClinic().getName() : null;
         String specialization = p.getSpecialization() != null ? p.getSpecialization().name() : null;
         var user = p.getUser();
         return new DoctorVerificationModel(
@@ -173,7 +192,7 @@ public class AdminDoctorController {
                 p.getClinicPhotosUrls(),
                 clinicAddress,
                 clinicName,
-                hasClinic || clinicPriority,
+                hasClinic,
                 clinicPriority,
                 requiresGovernmentIdCheck(p),
                 false,
@@ -191,6 +210,7 @@ public class AdminDoctorController {
                 p.isCheckClinicPhotos(),
                 p.getSubmittedAt(),
                 p.getReviewedAt(),
-                p.getReviewNotes());
+                p.getReviewNotes(),
+                p.getExperienceYears());
     }
 }

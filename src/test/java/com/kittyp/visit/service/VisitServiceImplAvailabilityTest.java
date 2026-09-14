@@ -1,12 +1,14 @@
 package com.kittyp.visit.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.kittyp.booking.entity.DoctorAvailability;
+import com.kittyp.booking.repository.BookingRepository;
 import com.kittyp.booking.repository.DoctorAvailabilityRepository;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
@@ -30,6 +33,7 @@ import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
+import com.kittyp.visit.dto.VisitDtos.DoctorDaySlotsModel;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.WalkInCreateRequest;
 
@@ -50,6 +54,9 @@ class VisitServiceImplAvailabilityTest {
 
 	@Mock
 	private DoctorAvailabilityRepository doctorAvailabilityRepository;
+
+	@Mock
+	private BookingRepository bookingRepository;
 
 	@Mock
 	private DoctorProfileDao doctorProfileDao;
@@ -96,8 +103,38 @@ class VisitServiceImplAvailabilityTest {
 		LocalDate day = LocalDate.now().plusDays(1);
 		when(doctorAvailabilityRepository.findByDoctor_Id(5L)).thenReturn(Optional.of(closedOn(f.doctor, day)));
 
-		List<LocalDateTime> slots = visitService.listParentDoctorSlots("clinic-v", "doc-1", day, "staff@example.com");
-		assertTrue(slots.isEmpty());
+		DoctorDaySlotsModel daySlots = visitService.listParentDoctorSlots("clinic-v", "doc-1", day,
+				"staff@example.com");
+		assertTrue(daySlots.closed());
+		assertTrue(daySlots.slots().isEmpty());
+		assertEquals(null, daySlots.hoursLabel());
+	}
+
+	@Test
+	void listParentDoctorSlots_inactiveMonday_closed() {
+		Fixture f = stubVerifiedClinicWithDoctor();
+		LocalDate monday = LocalDate.of(2026, 9, 21);
+		when(doctorAvailabilityRepository.findByDoctor_Id(5L)).thenReturn(Optional.of(inactiveMonday(f.doctor)));
+
+		DoctorDaySlotsModel daySlots = visitService.listParentDoctorSlots("clinic-v", "doc-1", monday,
+				"staff@example.com");
+		assertTrue(daySlots.closed());
+		assertTrue(daySlots.slots().isEmpty());
+	}
+
+	@Test
+	void listParentDoctorSlots_mondayHours_excludes1730() {
+		Fixture f = stubVerifiedClinicWithDoctor();
+		LocalDate monday = LocalDate.of(2026, 9, 21);
+		when(doctorAvailabilityRepository.findByDoctor_Id(5L)).thenReturn(Optional.of(mondayNineToFive(f.doctor)));
+		when(bookingRepository.findOverlappingForDoctor(eq(5L), any(), any(), any())).thenReturn(List.of());
+
+		DoctorDaySlotsModel daySlots = visitService.listParentDoctorSlots("clinic-v", "doc-1", monday,
+				"staff@example.com");
+		assertFalse(daySlots.closed());
+		assertEquals("09:00–17:00", daySlots.hoursLabel());
+		assertTrue(daySlots.slots().contains("2026-09-21T16:30"));
+		assertFalse(daySlots.slots().contains("2026-09-21T17:30"));
 	}
 
 	private Fixture stubVerifiedClinicWithDoctor() {
@@ -132,6 +169,28 @@ class VisitServiceImplAvailabilityTest {
 						"[{\"dayOfWeek\":1,\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"isActive\":true}]")
 				.exceptionsJson(exceptions)
 				.slotDurationMinutes(30)
+				.build();
+	}
+
+	private static DoctorAvailability inactiveMonday(DoctorProfile doctor) {
+		return DoctorAvailability.builder()
+				.doctor(doctor)
+				.weeklyScheduleJson(
+						"[{\"dayOfWeek\":1,\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"isActive\":false},"
+								+ "{\"dayOfWeek\":2,\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"isActive\":true}]")
+				.exceptionsJson("[]")
+				.slotDurationMinutes(30)
+				.build();
+	}
+
+	private static DoctorAvailability mondayNineToFive(DoctorProfile doctor) {
+		return DoctorAvailability.builder()
+				.doctor(doctor)
+				.weeklyScheduleJson(
+						"[{\"dayOfWeek\":1,\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"isActive\":true}]")
+				.exceptionsJson("[]")
+				.slotDurationMinutes(30)
+				.timezone("Asia/Kolkata")
 				.build();
 	}
 

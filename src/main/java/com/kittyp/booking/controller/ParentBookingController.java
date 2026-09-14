@@ -25,6 +25,7 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.visit.dto.VisitDtos.DoctorDaySlotsModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingPatchRequest;
 import com.kittyp.visit.service.VisitService;
@@ -77,14 +78,13 @@ public class ParentBookingController {
 
     @GetMapping(ApiUrl.USER_DOCTOR_SLOTS)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<List<String>>> slots(
+    public ResponseEntity<SuccessResponse<DoctorDaySlotsModel>> slots(
             @PathVariable String clinicUuid,
             @PathVariable String doctorUuid,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        List<String> slots = visitService.listParentDoctorSlots(clinicUuid, doctorUuid, date, email).stream()
-                .map(Object::toString)
-                .toList();
-        return responseBuilder.buildSuccessResponse(slots, ResponseMessage.SUCCESS, HttpStatus.OK);
+        return responseBuilder.buildSuccessResponse(
+                visitService.listParentDoctorSlots(clinicUuid, doctorUuid, date, email), ResponseMessage.SUCCESS,
+                HttpStatus.OK);
     }
 }

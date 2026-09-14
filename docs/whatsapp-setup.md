@@ -1,11 +1,16 @@
 # WhatsApp Cloud API setup (KittyP)
 
+Local Embedded Signup (Facebook Login for Business, HTTPS Vite, ngrok webhooks): see [whatsapp-local-setup.md](whatsapp-local-setup.md).
+
 ## Env / properties
 
 | Property | Env | Description |
 |----------|-----|-------------|
 | `whatsapp.enabled` | `WHATSAPP_ENABLED` | `true` when ready to send (default `false`) |
 | `whatsapp.api-version` | `WHATSAPP_API_VERSION` | e.g. `v21.0` |
+| `whatsapp.meta.app-id` | `WHATSAPP_META_APP_ID` | Meta app id for Embedded Signup token exchange |
+| `whatsapp.meta.app-secret` | `WHATSAPP_META_APP_SECRET` | Meta app secret (server only) |
+| `whatsapp.webhook-verify-token` | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Shared token for Meta webhook GET verify |
 | `whatsapp.invoice-template` | `WHATSAPP_INVOICE_TEMPLATE` | Template name, default `invoice_receipt` |
 | `whatsapp.invoice-template-lang` | `WHATSAPP_INVOICE_TEMPLATE_LANG` | Default `en` |
 | `whatsapp.vaccine-template` | `WHATSAPP_VACCINE_TEMPLATE` | Phase 2, default `vaccine_reminder` |

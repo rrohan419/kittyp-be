@@ -2,6 +2,7 @@ package com.kittyp.visit.dto;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
@@ -88,6 +89,17 @@ public final class VisitDtos {
             LocalDateTime slotStart,
             String notes,
             BookingStatus status) {
+    }
+
+    /**
+     * Free slots for a clinic doctor on one calendar date.
+     * {@code closed} means no working windows that day (inactive weekday or exception).
+     * Empty {@code slots} with {@code closed=false} means hours exist but none remain.
+     */
+    public record DoctorDaySlotsModel(
+            List<String> slots,
+            boolean closed,
+            String hoursLabel) {
     }
 
     public record VisitPatchRequest(

@@ -39,6 +39,9 @@ public class ApiUrl {
 	public static final String ADMIN_CLINICS = ADMIN + "/clinics";
 	public static final String ADMIN_CLINIC_BY_UUID = ADMIN_CLINICS + PATH_VARIABLE_UUID;
 	public static final String ADMIN_CLINIC_STATUS = ADMIN_CLINIC_BY_UUID + "/status";
+	public static final String ADMIN_USERS = ADMIN + "/users";
+	public static final String ADMIN_PARENTS = ADMIN + "/parents";
+	public static final String ADMIN_MASTER_TOTP = ADMIN + "/master-totp";
 
 	public static final String DOCTOR_BASE_URL = "/doctor";
 	public static final String DOCTOR_ME = DOCTOR_BASE_URL + "/me";
@@ -187,7 +190,10 @@ public class ApiUrl {
 	public static final String CLINIC_INVOICE_SEND_WHATSAPP = CLINIC_INVOICE_BY_UUID + "/send-whatsapp";
 	public static final String CLINIC_INVOICE_MARK_PAID = CLINIC_INVOICE_BY_UUID + "/mark-paid";
 	public static final String CLINIC_WHATSAPP_SETTINGS = CLINIC_BY_UUID + "/whatsapp-settings";
+	public static final String CLINIC_WHATSAPP_EMBEDDED_SIGNUP = CLINIC_BY_UUID + "/whatsapp-embedded-signup";
 	public static final String DOCTOR_WHATSAPP_SETTINGS = "/doctor/whatsapp-settings";
+	public static final String DOCTOR_WHATSAPP_EMBEDDED_SIGNUP = "/doctor/whatsapp-embedded-signup";
+	public static final String WHATSAPP_WEBHOOK = "/whatsapp/webhook";
 
 	public static final String DOCTOR_VISITS = DOCTOR_BASE_URL + "/visits";
 	public static final String DOCTOR_VISITS_MINE = DOCTOR_VISITS + "/mine";

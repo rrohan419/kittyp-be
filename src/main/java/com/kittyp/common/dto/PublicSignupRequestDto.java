@@ -28,6 +28,7 @@ public class PublicSignupRequestDto extends SignupRequestDto {
 	private String photoUrl;
 	private String inviteToken;
 	private String address;
+	private String city;
 	private String phone;
 	private String timezone;
 
@@ -57,6 +58,7 @@ public class PublicSignupRequestDto extends SignupRequestDto {
 		dto.setClinicName(clinicName);
 		dto.setLicenseNumber(licenseNumber);
 		dto.setAddress(address);
+		dto.setCity(city);
 		dto.setPhone(phone);
 		dto.setTimezone(timezone);
 		return dto;

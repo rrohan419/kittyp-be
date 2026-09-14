@@ -195,7 +195,8 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public List<ClinicModel> listAllClinics() {
-        return clinicDao.findAllFetchOwner().stream()
+        // Admin clinics tab: organization clinics only (personal practices stay on Doctors).
+        return clinicDao.findAllOrganizationFetchOwner().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
                 .map(this::clinicModel)
@@ -805,6 +806,8 @@ public class ClinicServiceImpl implements ClinicService {
         if (!isDoctor) {
             throw new CustomException("Only doctor accounts can accept clinic invitations", HttpStatus.FORBIDDEN);
         }
+
+        applyInviteNameIfBlank(user, invite.getDoctorName());
 
         Clinic clinic = invite.getClinic();
         requireActivated(clinic);
@@ -2790,8 +2793,7 @@ public class ClinicServiceImpl implements ClinicService {
         if (doctor == null || doctor.getUser() == null) {
             return null;
         }
-        String name = ((doctor.getUser().getFirstName() == null ? "" : doctor.getUser().getFirstName()) + " "
-                + (doctor.getUser().getLastName() == null ? "" : doctor.getUser().getLastName())).trim();
+        String name = fullName(doctor.getUser());
         return name.isBlank() ? null : name;
     }
 
@@ -2836,8 +2838,38 @@ public class ClinicServiceImpl implements ClinicService {
         return a.isAfter(b) ? a : b;
     }
 
-    private String fullName(User user) {
-        return String.join(" ", user.getFirstName() == null ? "" : user.getFirstName(),
+    private static String fullName(User user) {
+        if (user == null) {
+            return "";
+        }
+        String name = String.join(" ", user.getFirstName() == null ? "" : user.getFirstName(),
                 user.getLastName() == null ? "" : user.getLastName()).trim();
+        if (!name.isBlank()) {
+            return name;
+        }
+        return user.getEmail() == null ? "" : user.getEmail();
+    }
+
+    private void applyInviteNameIfBlank(User user, String doctorName) {
+        boolean firstBlank = user.getFirstName() == null || user.getFirstName().isBlank();
+        boolean lastBlank = user.getLastName() == null || user.getLastName().isBlank();
+        if (!firstBlank && !lastBlank) {
+            return;
+        }
+        if (doctorName == null || doctorName.isBlank()) {
+            return;
+        }
+        String cleaned = doctorName.replaceFirst("(?i)^Dr\\.?\\s*", "").trim();
+        if (cleaned.isBlank()) {
+            return;
+        }
+        String[] parts = cleaned.split("\\s+");
+        if (firstBlank && parts.length > 0) {
+            user.setFirstName(parts[0]);
+        }
+        if (lastBlank && parts.length > 1) {
+            user.setLastName(String.join(" ", java.util.Arrays.copyOfRange(parts, 1, parts.length)));
+        }
+        userDao.saveUser(user);
     }
 }

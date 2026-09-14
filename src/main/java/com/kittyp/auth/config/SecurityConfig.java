@@ -72,6 +72,7 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.POST, "/api/v1/clinic/staff-invite/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/upload/signup-documents").permitAll()
 						.requestMatchers("/api/v1/webhook/**").permitAll()
+						.requestMatchers("/api/v1/whatsapp/webhook").permitAll()
 						// Railway healthcheck hits the public app port; status-only body, no details.
 						.requestMatchers("/health", "/actuator/health").permitAll()
 						// Defense-in-depth: SpringDoc stays off via properties; deny paths if re-enabled.

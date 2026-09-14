@@ -37,5 +37,6 @@ public record DoctorVerificationModel(
         boolean checkClinicPhotos,
         LocalDateTime submittedAt,
         LocalDateTime reviewedAt,
-        String reviewNotes) {
+        String reviewNotes,
+        Double experienceYears) {
 }

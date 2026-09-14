@@ -261,7 +261,7 @@ public class GlobalExceptionHandler {
 		String path = extractPath(request);
 
 		ApiError apiError = new ApiError(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Server Error",
-				"An unexpected error occurred", path);
+				ex.getClass().getName() + ": " + String.valueOf(ex.getMessage()), path);
 
 		log.error("Unhandled exception", ex);
 		return new ResponseEntity<>(apiError, HttpStatus.INTERNAL_SERVER_ERROR);

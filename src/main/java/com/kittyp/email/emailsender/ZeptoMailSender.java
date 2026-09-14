@@ -19,6 +19,7 @@ import com.kittyp.common.constants.AppConstant;
 import com.kittyp.email.dto.EmailAddress;
 import com.kittyp.email.dto.ZeptoMailDto;
 import com.kittyp.email.dto.Recipient;
+import com.kittyp.email.dto.ZohoHtmlMailRequest;
 import com.kittyp.email.dto.ZohoMailRequest;
 import com.kittyp.email.model.ZeptoMailResponseModel;
 
@@ -61,6 +62,26 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
                 .retrieve()
                 .toEntity(ZeptoMailResponseModel.class);
         return responseEntity.getBody();
+	}
+
+	@SuppressWarnings("null")
+	public ZeptoMailResponseModel sendHtmlEmail(String recipientEmail, String recipientName, String subject,
+			String htmlBody) {
+		ZohoHtmlMailRequest request = new ZohoHtmlMailRequest();
+		request.setFrom(new EmailAddress(env.getProperty(AppConstant.KITTYP_MAIL_ID), AppConstant.KITTYP));
+		request.setTo(List.of(new Recipient(new EmailAddress(recipientEmail, recipientName))));
+		request.setSubject(subject);
+		request.setHtmlBody(htmlBody);
+
+		ResponseEntity<ZeptoMailResponseModel> responseEntity = restClient.post()
+				.uri(env.getProperty(AppConstant.ZOHO_EMAIL_SEND_HTML_URL))
+				.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+				.header(HttpHeaders.AUTHORIZATION, env.getProperty(AppConstant.ZOHO_API_KEY))
+				.accept(MediaType.APPLICATION_JSON)
+				.body(request)
+				.retrieve()
+				.toEntity(ZeptoMailResponseModel.class);
+		return responseEntity.getBody();
 	}
 
 }

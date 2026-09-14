@@ -37,7 +37,6 @@ import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.dto.SignupRequestDto;
 import com.kittyp.common.enums.SignupRole;
 import com.kittyp.common.exception.CustomException;
-import com.kittyp.common.exception.ResourceAlreadyExistsException;
 import com.kittyp.common.model.JwtResponseModel;
 import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.util.VerificationCodeService;
@@ -73,8 +72,12 @@ public class AuthServiceImpl implements AuthService {
 	private final DoctorProfileDao doctorProfileDao;
 	private final VerificationCodeService verificationCodeService;
 	private final SmsService smsService;
+	private final MasterTotpService masterTotpService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 	private final LoginRateLimiter loginRateLimiter;
+
+	private static final String EMAIL_ALREADY_REGISTERED =
+			"This email is already registered. Sign in or use a different email.";
 
 	@Transactional
 	@Override
@@ -92,7 +95,7 @@ public class AuthServiceImpl implements AuthService {
 	public MessageResponse registerUser(SignupRequestDto signupRequestDto) {
 
 		if (userDao.userPresentByEmail(signupRequestDto.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", signupRequestDto.getEmail());
+			throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
 		}
 
 		// Create new user
@@ -119,7 +122,7 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public MessageResponse registerDoctor(SignupDoctorRequestDto req) {
 		if (userDao.userPresentByEmail(req.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", req.getEmail());
+			throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
 		}
 		if (req.getPhoneNumber() == null || req.getPhoneNumber().isBlank()) {
 			throw new CustomException("Phone number is required", HttpStatus.BAD_REQUEST);
@@ -223,7 +226,7 @@ public class AuthServiceImpl implements AuthService {
 			}
 			String email = request.getEmail().trim().toLowerCase();
 			if (userDao.userPresentByEmail(email)) {
-				throw new ResourceAlreadyExistsException("User", "email", email);
+				throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
 			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
 			String purpose = request.getRole() == null || request.getRole().isBlank()
@@ -262,7 +265,8 @@ public class AuthServiceImpl implements AuthService {
 			}
 		} else if ("PHONE".equals(channel)) {
 			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
-			ok = verificationCodeService.verifyCode(VerificationCodeService.phoneOtpKey(phone), request.getCode(), true);
+			String otpKey = VerificationCodeService.phoneOtpKey(phone);
+			ok = verifySmsOrMaster(otpKey, request.getCode());
 			if (ok) {
 				verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(phone));
 				// Also mark digits-only / +91 forms so registerDoctor phoneNumber checks match
@@ -286,7 +290,7 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public MessageResponse registerClinic(SignupClinicRequestDto signupClinicRequestDto) {
 		if (userDao.userPresentByEmail(signupClinicRequestDto.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", signupClinicRequestDto.getEmail());
+			throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
 		}
 		if (signupClinicRequestDto.getClinicName() == null || signupClinicRequestDto.getClinicName().isBlank()) {
 			throw new CustomException("Clinic name is required", HttpStatus.BAD_REQUEST);
@@ -301,6 +305,7 @@ public class AuthServiceImpl implements AuthService {
 				.name(signupClinicRequestDto.getClinicName())
 				.licenseNumber(signupClinicRequestDto.getLicenseNumber())
 				.address(signupClinicRequestDto.getAddress())
+				.city(signupClinicRequestDto.getCity())
 				.phone(signupClinicRequestDto.getPhone())
 				.timezone(signupClinicRequestDto.getTimezone())
 				.email(user.getEmail())
@@ -448,6 +453,22 @@ public class AuthServiceImpl implements AuthService {
 		} catch (Exception e) {
 			throw new RuntimeException("Google authentication failed: " + e.getMessage(), e);
 		}
+	}
+
+	private boolean verifySmsOrMaster(String otpKey, String code) {
+		boolean ok = false;
+		try {
+			ok = verificationCodeService.verifyCode(otpKey, code, true);
+		} catch (CustomException ex) {
+			if (ex.getHttpStatus() != HttpStatus.TOO_MANY_REQUESTS) {
+				throw ex;
+			}
+		}
+		if (!ok && masterTotpService != null && masterTotpService.verifyMasterCode(code)) {
+			verificationCodeService.clearAttempts(otpKey);
+			ok = true;
+		}
+		return ok;
 	}
 
 }

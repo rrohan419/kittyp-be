@@ -1,5 +1,6 @@
 package com.kittyp.doctor.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,4 +32,6 @@ public interface DoctorProfileRepository extends JpaRepository<DoctorProfile, Lo
     List<DoctorProfile> findAllByOrderBySubmittedAtDesc();
 
     List<DoctorProfile> findByStatusOrderBySubmittedAtDesc(DoctorStatus status);
+
+    long countByStatusIn(Collection<DoctorStatus> statuses);
 }

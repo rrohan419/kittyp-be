@@ -7,6 +7,7 @@ import java.util.List;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
+import com.kittyp.visit.dto.VisitDtos.DoctorDaySlotsModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
@@ -37,7 +38,7 @@ public interface VisitService {
     BookingModel updateMyParentBooking(String bookingUuid, ParentBookingPatchRequest request, String email);
 
     /** Free half-hour slots for a clinic doctor on a given date (availability minus busy). */
-    List<LocalDateTime> listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date, String email);
+    DoctorDaySlotsModel listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date, String email);
 
     /** Busy intervals for a clinic doctor across all clinics (active bookings overlapping the range). */
     List<BookingModel> listDoctorBusySlots(String clinicUuid, String doctorUuid, LocalDateTime from,

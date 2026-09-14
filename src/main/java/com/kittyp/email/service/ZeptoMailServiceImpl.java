@@ -102,16 +102,13 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String code = verificationCodeService.generateCode(user.getUuid());
 		System.out.println("code = " + code);
 
-		ZeptoMailDto mailDto = new ZeptoMailDto();
-		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName(), "RESET_CODE",
-				code, "logo_url",
-				AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
-		mailDto.setRecipientEmail(email);
-		mailDto.setRecipientName(user.getFirstName());
-		mailDto.setTemplateKey(TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID);
-
+		String name = user.getFirstName() == null || user.getFirstName().isBlank() ? "there" : user.getFirstName();
+		String htmlBody = "<p>Hi " + escapeHtml(name) + ",</p>"
+				+ "<p>Your Kittyp password reset code is <strong>" + escapeHtml(code) + "</strong>.</p>"
+				+ "<p>It expires in 10 minutes. If you did not request this, ignore this email.</p>";
 		try {
-			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendHtmlEmail(
+					email, name, "Your Kittyp password reset code", htmlBody);
 			log.info("password reset code sent for email : " + email);
 			addEmailAuditLog(responseModel, email);
 		} catch (Exception e) {
@@ -300,6 +297,48 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 		log.info("Order confirmation email sent to: {}", recipientEmail);
 		addEmailAuditLog(responseModel, recipientEmail);
+	}
+
+	@Override
+	public void sendPasswordChangedEmail(String recipientEmail, String firstName) {
+		sendAccountChangeNotice(recipientEmail, firstName,
+				"Your Kittyp password was changed",
+				"Your Kittyp password was changed. If you did not do this, reset your password immediately.");
+	}
+
+	@Override
+	public void sendPhoneChangedEmail(String recipientEmail, String firstName, String newPhone) {
+		String phone = newPhone == null || newPhone.isBlank() ? "a new number" : newPhone;
+		sendAccountChangeNotice(recipientEmail, firstName,
+				"Your Kittyp phone number was changed",
+				"Your Kittyp phone number was updated to " + phone
+						+ ". If you did not do this, change it back in Settings.");
+	}
+
+	private void sendAccountChangeNotice(String recipientEmail, String firstName, String subject, String body) {
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		String name = firstName == null || firstName.isBlank() ? "there" : firstName;
+		String htmlBody = "<p>Hi " + escapeHtml(name) + ",</p><p>" + escapeHtml(body) + "</p>";
+		try {
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendHtmlEmail(
+					recipientEmail, name, subject, htmlBody);
+			addEmailAuditLog(responseModel, recipientEmail);
+			log.info("Account change notice sent to {}", recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send account change notice to {}: {}", recipientEmail, e.getMessage());
+		}
+	}
+
+	private static String escapeHtml(String value) {
+		if (value == null) {
+			return "";
+		}
+		return value.replace("&", "&amp;")
+				.replace("<", "&lt;")
+				.replace(">", "&gt;")
+				.replace("\"", "&quot;");
 	}
 
 	private void addEmailAuditLog(ZeptoMailResponseModel responseModel, String recipientEmail) {

@@ -6,11 +6,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.stereotype.Service;
 
 /**
- * Default SMS implementation: logs the OTP (safe for local).
- * Replace/override with a Twilio (or other) bean when credentials are configured.
+ * Fallback SMS implementation: logs the OTP when no real gateway bean exists.
+ * SmsGatewayService (TextBee) or TwilioSmsService replace this when configured.
  */
 @Service
-@ConditionalOnMissingBean(name = "twilioSmsService")
+@ConditionalOnMissingBean(SmsService.class)
 public class LoggingSmsService implements SmsService {
 
 	private static final Logger log = LoggerFactory.getLogger(LoggingSmsService.class);

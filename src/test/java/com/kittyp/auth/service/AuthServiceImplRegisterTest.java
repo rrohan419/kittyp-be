@@ -35,7 +35,6 @@ import com.kittyp.common.dto.SignupClinicRequestDto;
 import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.enums.SignupRole;
 import com.kittyp.common.exception.CustomException;
-import com.kittyp.common.exception.ResourceAlreadyExistsException;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.email.service.ZeptoMailService;
@@ -90,6 +89,7 @@ class AuthServiceImplRegisterTest {
 				clinicDoctorInviteRepository,
 				doctorProfileDao,
 				verificationCodeService,
+				null,
 				null,
 				clinicOwnerUserLinkService,
 				null);
@@ -157,7 +157,9 @@ class AuthServiceImplRegisterTest {
 		req.setRole(SignupRole.USER);
 		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(true);
 
-		assertThrows(ResourceAlreadyExistsException.class, () -> authService.register(req));
+		CustomException ex = assertThrows(CustomException.class, () -> authService.register(req));
+		assertEquals(HttpStatus.CONFLICT, ex.getHttpStatus());
+		assertEquals("This email is already registered. Sign in or use a different email.", ex.getMessage());
 		verify(roleDao, never()).roleByName(any());
 		verify(userDao, never()).saveUser(any());
 	}

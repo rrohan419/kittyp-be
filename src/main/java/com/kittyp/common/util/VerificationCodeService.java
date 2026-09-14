@@ -89,6 +89,14 @@ public class VerificationCodeService {
         verifiedCache.invalidate(key);
     }
 
+    public void clearAttempts(String key) {
+        if (key == null) {
+            return;
+        }
+        attemptCache.invalidate(key);
+        codeCache.invalidate(key);
+    }
+
     private void enforceSendRateLimit(String key) {
         AtomicInteger sends = sendRateCache.get(key, k -> new AtomicInteger(0));
         if (sends != null && sends.incrementAndGet() > MAX_SENDS_PER_WINDOW) {

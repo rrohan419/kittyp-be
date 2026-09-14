@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +26,7 @@ import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.dto.DoctorVerificationModel;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.notification.service.WhatsAppCredentialsVerifier;
+import com.kittyp.notification.service.WhatsAppEmbeddedSignupService;
 import com.kittyp.notification.service.WhatsAppSettingsSupport;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
@@ -44,6 +46,7 @@ public class DoctorProfileController {
     private final UserDao userDao;
     private final ApiResponse<?> responseBuilder;
     private final WhatsAppCredentialsVerifier whatsAppCredentialsVerifier;
+    private final WhatsAppEmbeddedSignupService whatsAppEmbeddedSignupService;
 
     @GetMapping(ApiUrl.DOCTOR_ME)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
@@ -95,8 +98,23 @@ public class DoctorProfileController {
                 profile.isCheckClinicPhotos(),
                 profile.getSubmittedAt(),
                 profile.getReviewedAt(),
-                profile.getReviewNotes());
+                profile.getReviewNotes(),
+                profile.getExperienceYears());
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PutMapping(ApiUrl.DOCTOR_ME)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<DoctorVerificationModel>> updateMyExperience(
+            @Valid @RequestBody ExperienceYearsRequest request) {
+        DoctorProfile profile = requireMyProfile();
+        Double years = request.getExperienceYears();
+        if (years != null && (years < 0 || years > 60)) {
+            throw new CustomException("Years of experience must be between 0 and 60", HttpStatus.BAD_REQUEST);
+        }
+        profile.setExperienceYears(years);
+        doctorProfileDao.save(profile);
+        return myProfile();
     }
 
     @GetMapping(ApiUrl.DOCTOR_WHATSAPP_SETTINGS)
@@ -141,6 +159,16 @@ public class DoctorProfileController {
                 HttpStatus.OK);
     }
 
+    @PostMapping(ApiUrl.DOCTOR_WHATSAPP_EMBEDDED_SIGNUP)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> embeddedSignup(
+            @Valid @RequestBody EmbeddedSignupRequest request) {
+        DoctorProfile profile = requireMyProfile();
+        Map<String, Object> view = whatsAppEmbeddedSignupService.complete(
+                profile, request.getCode(), request.getWabaId(), request.getPhoneNumberId());
+        return responseBuilder.buildSuccessResponse(view, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
     private DoctorProfile requireMyProfile() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userDao.userByEmail(email);
@@ -156,6 +184,18 @@ public class DoctorProfileController {
     }
 
     @Data
+    public static class EmbeddedSignupRequest {
+        @NotBlank
+        private String code;
+        @NotBlank
+        @jakarta.validation.constraints.Size(max = 64)
+        private String wabaId;
+        @NotBlank
+        @jakarta.validation.constraints.Size(max = 64)
+        private String phoneNumberId;
+    }
+
+    @Data
     public static class WhatsAppSettingsRequest {
         @NotBlank
         @jakarta.validation.constraints.Size(max = 64)
@@ -166,5 +206,12 @@ public class DoctorProfileController {
         /** Optional on update if already set — omit to keep existing token. */
         @jakarta.validation.constraints.Size(max = 2048)
         private String token;
+    }
+
+    @Data
+    public static class ExperienceYearsRequest {
+        @jakarta.validation.constraints.DecimalMin("0")
+        @jakarta.validation.constraints.DecimalMax("60")
+        private Double experienceYears;
     }
 }

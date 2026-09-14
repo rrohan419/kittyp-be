@@ -207,6 +207,24 @@ final class DoctorHours {
         return !parseJsonList(weeklyScheduleJson).isEmpty();
     }
 
+    /** Compact window summary, e.g. {@code 09:00–17:00}. Null when there are no windows. */
+    static String hoursLabel(List<LocalTime[]> windows) {
+        if (windows == null || windows.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (LocalTime[] window : windows) {
+            if (window == null || window.length < 2 || window[0] == null || window[1] == null) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(window[0]).append('\u2013').append(window[1]);
+        }
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
     private static boolean dateMatches(Object rawDate, LocalDate date) {
         if (rawDate == null) {
             return false;

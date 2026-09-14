@@ -41,6 +41,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	Page<User> findAll(Pageable pageable);
 
 	/**
+	 * All platform accounts with optional search (name, email, phone, uuid).
+	 */
+	@Query("""
+			SELECT u FROM User u
+			WHERE (
+				:q = ''
+				OR LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(u.firstName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(COALESCE(u.lastName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR LOWER(CONCAT(COALESCE(u.firstName, ''), ' ', COALESCE(u.lastName, ''))) LIKE LOWER(CONCAT('%', :q, '%'))
+				OR COALESCE(u.phoneNumber, '') LIKE CONCAT('%', :q, '%')
+				OR LOWER(COALESCE(u.uuid, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+			)
+			""")
+	Page<User> findAllUsers(@Param("q") String q, Pageable pageable);
+
+	/**
 	 * Pet-owner accounts only: has ROLE_USER and no doctor/clinic/admin/moderator role.
 	 */
 	@Query("""

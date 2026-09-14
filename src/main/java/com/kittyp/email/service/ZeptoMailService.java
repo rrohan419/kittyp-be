@@ -34,4 +34,10 @@ public interface ZeptoMailService {
 	/** Notify clinic that a doctor accepted or declined an invite. */
 	void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
 			String doctorEmail, boolean accepted);
+
+	/** Confirm that the account password was changed. */
+	void sendPasswordChangedEmail(String recipientEmail, String firstName);
+
+	/** Confirm that the account phone number was changed. */
+	void sendPhoneChangedEmail(String recipientEmail, String firstName, String newPhone);
 }

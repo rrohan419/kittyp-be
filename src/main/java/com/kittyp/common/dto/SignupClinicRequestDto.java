@@ -13,6 +13,7 @@ public class SignupClinicRequestDto extends SignupRequestDto {
 
     private String licenseNumber;
     private String address;
+    private String city;
     private String phone;
     private String timezone;
 }

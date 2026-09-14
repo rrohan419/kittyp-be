@@ -33,6 +33,7 @@ import com.kittyp.doctor.dto.MarkInvoicePaidDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.service.TreatmentInvoiceService;
 import com.kittyp.notification.service.WhatsAppCredentialsVerifier;
+import com.kittyp.notification.service.WhatsAppEmbeddedSignupService;
 import com.kittyp.notification.service.WhatsAppSettingsSupport;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.UserRepository;
@@ -56,6 +57,7 @@ public class ClinicInvoiceController {
     private final TreatmentInvoiceService treatmentInvoiceService;
     private final UserRepository userRepository;
     private final WhatsAppCredentialsVerifier whatsAppCredentialsVerifier;
+    private final WhatsAppEmbeddedSignupService whatsAppEmbeddedSignupService;
 
     @GetMapping(ApiUrl.CLINIC_INVOICES)
     @PreAuthorize(CLINIC_BILLING)
@@ -164,6 +166,16 @@ public class ClinicInvoiceController {
                 HttpStatus.OK);
     }
 
+    @PostMapping(ApiUrl.CLINIC_WHATSAPP_EMBEDDED_SIGNUP)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> embeddedSignup(
+            @PathVariable String uuid, @Valid @RequestBody EmbeddedSignupRequest request) {
+        Clinic clinic = requireManagedClinic(uuid);
+        Map<String, Object> view = whatsAppEmbeddedSignupService.complete(
+                clinic, request.getCode(), request.getWabaId(), request.getPhoneNumberId());
+        return responseBuilder.buildSuccessResponse(view, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
     private Clinic requireAccessibleClinic(String clinicUuid) {
         // Ensures caller is affiliated / staff for this clinic
         clinicService.get(clinicUuid, email());
@@ -201,6 +213,18 @@ public class ClinicInvoiceController {
 
     private String email() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
+    }
+
+    @Data
+    public static class EmbeddedSignupRequest {
+        @NotBlank
+        private String code;
+        @NotBlank
+        @jakarta.validation.constraints.Size(max = 64)
+        private String wabaId;
+        @NotBlank
+        @jakarta.validation.constraints.Size(max = 64)
+        private String phoneNumberId;
     }
 
     @Data

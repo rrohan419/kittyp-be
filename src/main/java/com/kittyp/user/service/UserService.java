@@ -39,6 +39,8 @@ public interface UserService {
 
 	PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize, String q);
 
+	PaginationModel<UserDetailsModel> getPetOwnerUsers(Integer pageNumber, Integer pageSize, String q);
+
 	UserDetailsModel updateUserStatus(String userUuid, boolean enabled);
 
 	UserDetailsModel updateUserProfile(String userUuid, String profilePictureUrl);

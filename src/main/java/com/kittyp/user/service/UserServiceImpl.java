@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.kittyp.auth.service.MasterTotpService;
 import com.kittyp.auth.util.JwtUtils;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
@@ -67,6 +68,7 @@ public class UserServiceImpl implements UserService {
 	private final UserFcmTokenDao fcmTokenDao;
 	private final JwtUtils jwtUtils;
 	private final SmsService smsService;
+	private final MasterTotpService masterTotpService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 
 	@Transactional
@@ -181,6 +183,16 @@ public class UserServiceImpl implements UserService {
 		if (emailChanging || phoneChanging) {
 			clinicOwnerUserLinkService.linkUserToClinicOwners(user);
 		}
+		if (phoneChanging) {
+			try {
+				zeptoMailService.sendPhoneChangedEmail(
+						user.getEmail(),
+						user.getFirstName(),
+						normalizePhone(user.getPhoneCountryCode(), user.getPhoneNumber()));
+			} catch (Exception e) {
+				logger.warn("Failed to send phone-changed email to {}: {}", user.getEmail(), e.getMessage());
+			}
+		}
 		logger.info("User details updated successfully for email: {}", user.getEmail());
 		UserDetailsModel model = toUserDetailsModel(user);
 		if (emailChanging) {
@@ -292,8 +304,8 @@ public class UserServiceImpl implements UserService {
 			}
 		} else if ("PHONE".equals(channel)) {
 			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
-			ok = verificationCodeService.verifyCode(
-					VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone), request.getCode(), true);
+			String otpKey = VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone);
+			ok = verifySmsOrMaster(otpKey, request.getCode());
 			if (ok) {
 				verificationCodeService.markVerified(
 						VerificationCodeService.profilePhoneVerifiedKey(user.getUuid(), phone));
@@ -355,6 +367,11 @@ public class UserServiceImpl implements UserService {
 			user.setPassword(encoder.encode(updatePasswordDto.getPassword()));
 			userDao.saveUser(user);
 			logger.info("Password updated successfully for user UUID: {}", user.getUuid());
+			try {
+				zeptoMailService.sendPasswordChangedEmail(user.getEmail(), user.getFirstName());
+			} catch (Exception e) {
+				logger.warn("Failed to send password-changed email to {}: {}", user.getEmail(), e.getMessage());
+			}
 			return true;
 		}
 
@@ -393,7 +410,22 @@ public class UserServiceImpl implements UserService {
 
 	@Override
 	public PaginationModel<UserDetailsModel> getAllUsers(Integer pageNumber, Integer pageSize, String q) {
-		logger.info("Fetching users with pagination: page {}, size {}", pageNumber, pageSize);
+		logger.info("Fetching all users with pagination: page {}, size {}", pageNumber, pageSize);
+		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
+		String query = q == null ? "" : q.trim();
+		Page<User> userPage = userDao.findAllUsers(query, pageable);
+
+		List<UserDetailsModel> userModels = userPage.getContent().stream()
+				.map(this::toUserDetailsModel)
+				.collect(Collectors.toList());
+
+		logger.info("Total users fetched: {}", userModels.size());
+		return userPageToModel(new PageImpl<>(userModels, pageable, userPage.getTotalElements()));
+	}
+
+	@Override
+	public PaginationModel<UserDetailsModel> getPetOwnerUsers(Integer pageNumber, Integer pageSize, String q) {
+		logger.info("Fetching pet owners with pagination: page {}, size {}", pageNumber, pageSize);
 		Pageable pageable = PageRequest.of(pageNumber - 1, pageSize);
 		String query = q == null ? "" : q.trim();
 		Page<User> userPage = userDao.findPetOwnerUsers(query, pageable);
@@ -402,7 +434,7 @@ public class UserServiceImpl implements UserService {
 				.map(this::toUserDetailsModel)
 				.collect(Collectors.toList());
 
-		logger.info("Total users fetched: {}", userModels.size());
+		logger.info("Total pet owners fetched: {}", userModels.size());
 		return userPageToModel(new PageImpl<>(userModels, pageable, userPage.getTotalElements()));
 	}
 
@@ -534,5 +566,21 @@ public class UserServiceImpl implements UserService {
 			List<String> fcmTokensList = fcmTokens.stream().map(UserFcmToken::getToken).toList();
 			fcmPushNotificationService.sendNotificationToUser(fcmTokensList, title, body);
 		}
+	}
+
+	private boolean verifySmsOrMaster(String otpKey, String code) {
+		boolean ok = false;
+		try {
+			ok = verificationCodeService.verifyCode(otpKey, code, true);
+		} catch (CustomException ex) {
+			if (ex.getHttpStatus() != HttpStatus.TOO_MANY_REQUESTS) {
+				throw ex;
+			}
+		}
+		if (!ok && masterTotpService != null && masterTotpService.verifyMasterCode(code)) {
+			verificationCodeService.clearAttempts(otpKey);
+			ok = true;
+		}
+		return ok;
 	}
 }

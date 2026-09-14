@@ -72,6 +72,7 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 				|| path.startsWith("/api/v1/public/")
 				|| path.equals("/health")
 				|| path.equals("/actuator/health")
-				|| path.startsWith("/api/v1/webhook/");
+				|| path.startsWith("/api/v1/webhook/")
+				|| path.equals("/api/v1/whatsapp/webhook");
 	}
 }
