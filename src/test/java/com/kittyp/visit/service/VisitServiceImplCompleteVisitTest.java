@@ -51,7 +51,7 @@ class VisitServiceImplCompleteVisitTest {
 	private VisitServiceImpl visitService;
 
 	@Test
-	void completeVisit_inProgress_becomesCompleted() {
+	void completeVisit_inProgress_becomesCheckingOut() {
 		User user = User.builder().email("doc@example.com").password("x").uuid("u-doc").firstName("Ajit")
 				.lastName("Attarde").build();
 		user.setId(8L);
@@ -85,8 +85,8 @@ class VisitServiceImplCompleteVisitTest {
 
 		VisitModel model = visitService.completeVisit("visit-1", "doc@example.com");
 
-		assertEquals(VisitStatus.COMPLETED, visit.getStatus());
-		assertNotNull(visit.getCompletedAt());
-		assertEquals(VisitStatus.COMPLETED, model.status());
+		assertEquals(VisitStatus.CHECKING_OUT, visit.getStatus());
+		assertNotNull(visit.getCheckingOutAt());
+		assertEquals(VisitStatus.CHECKING_OUT, model.status());
 	}
 }

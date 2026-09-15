@@ -28,12 +28,18 @@ import lombok.RequiredArgsConstructor;
  *
  * Timing: works whether the parent already has a KittyP account when the clinic
  * registers them, or signs up months/years later with the same email/phone.
+ *
+ * Linked parents' verified {@link User#getPhoneNumber()} is the source of truth for
+ * {@link ClinicPetOwner#getPhone()} (including replacing placeholder {@code 0000000000}).
  */
 @Service
 @RequiredArgsConstructor
 public class ClinicOwnerUserLinkService {
 
 	private static final Logger log = LoggerFactory.getLogger(ClinicOwnerUserLinkService.class);
+
+	/** Used when a clinic owner row is created before the parent has a valid phone. */
+	public static final String PLACEHOLDER_PHONE = "0000000000";
 
 	private final ClinicPetOwnerRepository clinicPetOwnerRepository;
 	private final UserRepository userRepository;
@@ -71,9 +77,11 @@ public class ClinicOwnerUserLinkService {
 						current.getUuid(), emailMatch.getUuid());
 				owner.setLinkedUser(emailMatch);
 				owner = clinicPetOwnerRepository.save(owner);
+				owner = syncOwnerPhoneFromUser(owner, emailMatch);
 				attachPetsToUser(owner, emailMatch);
 				return owner;
 			}
+			owner = syncOwnerPhoneFromUser(owner, current);
 			attachPetsToUser(owner, current);
 			return owner;
 		}
@@ -91,6 +99,7 @@ public class ClinicOwnerUserLinkService {
 		if (matched != null) {
 			owner.setLinkedUser(matched);
 			owner = clinicPetOwnerRepository.save(owner);
+			owner = syncOwnerPhoneFromUser(owner, matched);
 			attachPetsToUser(owner, matched);
 			log.info("Linked clinic owner {} to existing user {} (pets attached)", owner.getUuid(),
 					matched.getUuid());
@@ -160,6 +169,7 @@ public class ClinicOwnerUserLinkService {
 		}
 
 		linked += ensurePetsForAlreadyLinkedOwners(user);
+		syncAllLinkedOwnerPhones(user);
 		return linked;
 	}
 
@@ -168,6 +178,7 @@ public class ClinicOwnerUserLinkService {
 		for (ClinicPetOwner owner : owners) {
 			User current = owner.getLinkedUser();
 			if (current != null && current.getId().equals(user.getId())) {
+				syncOwnerPhoneFromUser(owner, user);
 				attachPetsToUser(owner, user);
 				continue;
 			}
@@ -183,6 +194,7 @@ public class ClinicOwnerUserLinkService {
 			}
 			owner.setLinkedUser(user);
 			clinicPetOwnerRepository.save(owner);
+			syncOwnerPhoneFromUser(owner, user);
 			attachPetsToUser(owner, user);
 			n++;
 			log.info("Late-linked clinic owner {} to user {}", owner.getUuid(), user.getUuid());
@@ -201,6 +213,46 @@ public class ClinicOwnerUserLinkService {
 			}
 		}
 		return n;
+	}
+
+	/**
+	 * Copy the parent's verified phone onto every linked clinic CRM owner row.
+	 * Called after signup / profile phone change / visit history load.
+	 */
+	private void syncAllLinkedOwnerPhones(User user) {
+		if (user == null || user.getId() == null) {
+			return;
+		}
+		String userPhone = normalizePhoneDigits(user.getPhoneNumber());
+		if (userPhone == null || !userPhone.matches("\\d{10}")) {
+			return;
+		}
+		for (ClinicPetOwner owner : clinicPetOwnerRepository.findByLinkedUser_IdAndIsActiveTrue(user.getId())) {
+			syncOwnerPhoneFromUser(owner, user);
+		}
+	}
+
+	/**
+	 * When a clinic owner is linked to a platform user with a valid 10-digit phone,
+	 * keep {@link ClinicPetOwner#getPhone()} in sync (fixes stale placeholder numbers).
+	 */
+	ClinicPetOwner syncOwnerPhoneFromUser(ClinicPetOwner owner, User user) {
+		if (owner == null || user == null) {
+			return owner;
+		}
+		String userPhone = normalizePhoneDigits(user.getPhoneNumber());
+		if (userPhone == null || !userPhone.matches("\\d{10}")) {
+			return owner;
+		}
+		String current = normalizePhoneDigits(owner.getPhone());
+		if (userPhone.equals(current)) {
+			return owner;
+		}
+		owner.setPhone(userPhone);
+		owner = clinicPetOwnerRepository.save(owner);
+		log.info("Synced clinic owner {} phone from linked user {} (was {})", owner.getUuid(), user.getUuid(),
+				current == null ? "blank" : current);
+		return owner;
 	}
 
 	private int userPetCount(User user) {

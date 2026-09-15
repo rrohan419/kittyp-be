@@ -21,6 +21,13 @@ public interface ZeptoMailService {
 	/** Sends a signup OTP email. purpose e.g. "email" or "phone". */
 	void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint);
 
+	/**
+	 * Owner consent OTP: clinic staff is adding pet {@code petName} on the owner's profile.
+	 * Merge fields: Customer_Name, OTP, clinic_name, pet_name.
+	 */
+	void sendClinicPetConsentOtpEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String code);
+
 	/** Clinic doctor invitation with accept link. */
 	void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);
 

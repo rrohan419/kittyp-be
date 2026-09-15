@@ -195,6 +195,23 @@ public final class ClinicDtos {
     public record EnsureOwnerFromUserRequest(@NotBlank String userUuid) {
     }
 
+    public record AdmitPlatformPetRequest(@NotBlank String petUuid) {
+    }
+
+    /** Email gate for New patient: existing clinic owner and/or KittyP parent. */
+    public record OwnerEmailLookupModel(
+            boolean found,
+            String source,
+            ClinicOwnerModel owner,
+            PlatformUserSearchModel platformUser) {
+    }
+
+    public record PetConsentSendRequest(@NotBlank String petName) {
+    }
+
+    public record PetConsentVerifyRequest(@NotBlank String petName, @NotBlank String code) {
+    }
+
     public record ClinicOwnerProfileModel(ClinicOwnerModel owner, String billingStatus, long invoiceCount) {
     }
 
