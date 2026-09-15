@@ -38,13 +38,23 @@ public interface ZeptoMailService {
 	void sendClinicDoctorInviteReminderEmail(String recipientEmail, String doctorName, String clinicName,
 			String acceptUrl);
 
+	void sendDoctorInviteReminder(String email, String doctorName, String clinicName, String acceptUrl);
+
 	/** Notify clinic that a doctor accepted or declined an invite. */
 	void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
 			String doctorEmail, boolean accepted);
 
-	/** Confirm that the account password was changed. */
-	void sendPasswordChangedEmail(String recipientEmail, String firstName);
+	void sendPasswordChangedNotification(String email, String customerName, String clinicName, String changeTime);
 
-	/** Confirm that the account phone number was changed. */
-	void sendPhoneChangedEmail(String recipientEmail, String firstName, String newPhone);
+	void sendPhoneChangedNotification(String email, String customerName, String clinicName, String newPhone,
+			String loginUrl);
+
+	void sendEmailChangeOtp(String email, String customerName, String clinicName, String otp);
+
+	void sendDoctorProfileVerified(String email, String doctorName, String dashboardUrl);
+
+	void sendClinicProfileVerified(String email, String customerName, String clinicName, String clinicUrl);
+
+	void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
+			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename);
 }

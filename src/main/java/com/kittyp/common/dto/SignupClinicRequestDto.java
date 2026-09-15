@@ -14,6 +14,8 @@ public class SignupClinicRequestDto extends SignupRequestDto {
     private String licenseNumber;
     private String address;
     private String city;
+    private Double latitude;
+    private Double longitude;
     private String phone;
     private String timezone;
 }

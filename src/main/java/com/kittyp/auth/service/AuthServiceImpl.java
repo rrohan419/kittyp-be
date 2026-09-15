@@ -306,6 +306,8 @@ public class AuthServiceImpl implements AuthService {
 				.licenseNumber(signupClinicRequestDto.getLicenseNumber())
 				.address(signupClinicRequestDto.getAddress())
 				.city(signupClinicRequestDto.getCity())
+				.latitude(signupClinicRequestDto.getLatitude())
+				.longitude(signupClinicRequestDto.getLongitude())
 				.phone(signupClinicRequestDto.getPhone())
 				.timezone(signupClinicRequestDto.getTimezone())
 				.email(user.getEmail())

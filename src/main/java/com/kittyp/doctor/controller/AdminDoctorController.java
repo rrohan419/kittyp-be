@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,10 +31,14 @@ import com.kittyp.doctor.dto.DoctorStatusUpdateRequest;
 import com.kittyp.doctor.dto.DoctorVerificationModel;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.DoctorStatus;
+import com.kittyp.email.service.ZeptoMailService;
+import com.kittyp.user.entity.User;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RestController
 @RequestMapping(ApiUrl.BASE_URL)
 @RequiredArgsConstructor
@@ -42,6 +47,10 @@ public class AdminDoctorController {
     private final DoctorProfileDao doctorProfileDao;
     private final ClinicDoctorRepository clinicDoctorRepository;
     private final ApiResponse<?> responseBuilder;
+    private final ZeptoMailService zeptoMailService;
+
+    @Value("${app.frontend.base-url:http://localhost:8080}")
+    private String frontendBaseUrl;
 
     @GetMapping(ApiUrl.ADMIN_DOCTORS)
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN_OR_MODERATOR)
@@ -99,6 +108,7 @@ public class AdminDoctorController {
     public ResponseEntity<SuccessResponse<DoctorVerificationModel>> updateStatus(
             @PathVariable String uuid, @Valid @RequestBody DoctorStatusUpdateRequest request) {
         DoctorProfile profile = doctorProfileDao.findByUuid(uuid);
+        DoctorStatus previous = profile.getStatus();
         DoctorStatus next = request.getStatus();
 
         if (next == DoctorStatus.VERIFIED || next == DoctorStatus.PUBLISHED) {
@@ -118,8 +128,36 @@ public class AdminDoctorController {
         }
 
         Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
-        return responseBuilder.buildSuccessResponse(toModel(doctorProfileDao.save(profile), clinicLinkedIds),
+        DoctorProfile saved = doctorProfileDao.save(profile);
+        notifyDoctorProfileVerified(saved, previous, next);
+        return responseBuilder.buildSuccessResponse(toModel(saved, clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    private void notifyDoctorProfileVerified(DoctorProfile profile, DoctorStatus previous, DoctorStatus next) {
+        boolean becomingVisible = next == DoctorStatus.VERIFIED || next == DoctorStatus.PUBLISHED;
+        boolean alreadyVisible = previous == DoctorStatus.VERIFIED || previous == DoctorStatus.PUBLISHED;
+        if (!becomingVisible || alreadyVisible) {
+            return;
+        }
+        User user = profile.getUser();
+        if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+            return;
+        }
+        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
+        String last = user.getLastName() == null ? "" : user.getLastName().trim();
+        String doctorName = (first + " " + last).trim();
+        if (doctorName.isBlank()) {
+            doctorName = "Doctor";
+        }
+        String base = frontendBaseUrl == null || frontendBaseUrl.isBlank()
+                ? "http://localhost:8080"
+                : frontendBaseUrl.replaceAll("/$", "");
+        try {
+            zeptoMailService.sendDoctorProfileVerified(user.getEmail(), doctorName, base + "/doctor");
+        } catch (Exception e) {
+            log.warn("Failed to send doctor-verified email to {}: {}", user.getEmail(), e.getMessage());
+        }
     }
 
     private boolean anyChecked(DoctorProfile p) {

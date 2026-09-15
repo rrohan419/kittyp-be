@@ -3,6 +3,9 @@
  */
 package com.kittyp.user.service;
 
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +14,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -58,6 +62,9 @@ import lombok.RequiredArgsConstructor;
 public class UserServiceImpl implements UserService {
 
 	private static final Logger logger = LoggerFactory.getLogger(UserServiceImpl.class);
+	private static final String DEFAULT_CLINIC_NAME = "KittyP";
+	private static final DateTimeFormatter CHANGE_TIME_FORMAT =
+			DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a");
 
 	private final UserDao userDao;
 	private final RoleDao roleDao;
@@ -70,6 +77,9 @@ public class UserServiceImpl implements UserService {
 	private final SmsService smsService;
 	private final MasterTotpService masterTotpService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
+
+	@Value("${app.frontend.base-url:http://localhost:8080}")
+	private String frontendBaseUrl;
 
 	@Transactional
 	@Override
@@ -185,10 +195,12 @@ public class UserServiceImpl implements UserService {
 		}
 		if (phoneChanging) {
 			try {
-				zeptoMailService.sendPhoneChangedEmail(
+				zeptoMailService.sendPhoneChangedNotification(
 						user.getEmail(),
 						user.getFirstName(),
-						normalizePhone(user.getPhoneCountryCode(), user.getPhoneNumber()));
+						DEFAULT_CLINIC_NAME,
+						normalizePhone(user.getPhoneCountryCode(), user.getPhoneNumber()),
+						frontendUrl("/login"));
 			} catch (Exception e) {
 				logger.warn("Failed to send phone-changed email to {}: {}", user.getEmail(), e.getMessage());
 			}
@@ -260,7 +272,7 @@ public class UserServiceImpl implements UserService {
 			}
 			String code = verificationCodeService.generateCode(
 					VerificationCodeService.profileEmailOtpKey(user.getUuid(), newEmail));
-			zeptoMailService.sendSignupOtpEmail(newEmail, code, "EMAIL", null);
+			zeptoMailService.sendEmailChangeOtp(newEmail, user.getFirstName(), DEFAULT_CLINIC_NAME, code);
 			return new MessageResponse("OTP sent to email");
 		}
 
@@ -368,7 +380,11 @@ public class UserServiceImpl implements UserService {
 			userDao.saveUser(user);
 			logger.info("Password updated successfully for user UUID: {}", user.getUuid());
 			try {
-				zeptoMailService.sendPasswordChangedEmail(user.getEmail(), user.getFirstName());
+				zeptoMailService.sendPasswordChangedNotification(
+						user.getEmail(),
+						user.getFirstName(),
+						DEFAULT_CLINIC_NAME,
+						ZonedDateTime.now(ZoneId.of("Asia/Kolkata")).format(CHANGE_TIME_FORMAT));
 			} catch (Exception e) {
 				logger.warn("Failed to send password-changed email to {}: {}", user.getEmail(), e.getMessage());
 			}
@@ -582,5 +598,12 @@ public class UserServiceImpl implements UserService {
 			ok = true;
 		}
 		return ok;
+	}
+
+	private String frontendUrl(String path) {
+		String base = frontendBaseUrl == null || frontendBaseUrl.isBlank()
+				? "http://localhost:8080"
+				: frontendBaseUrl.replaceAll("/$", "");
+		return base + path;
 	}
 }

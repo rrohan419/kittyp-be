@@ -101,11 +101,11 @@ public class ConsultationInvoiceController {
 
     @PostMapping(ApiUrl.CONSULTATION_INVOICE_SEND_WHATSAPP)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<ConsultationInvoice>> sendWhatsApp(@PathVariable String uuid) {
+    public ResponseEntity<SuccessResponse<CreateInvoiceResultDto>> sendWhatsApp(@PathVariable String uuid) {
         User doctor = currentUser();
-        ConsultationInvoice invoice = treatmentInvoiceService.sendInvoiceWhatsApp(
+        CreateInvoiceResultDto result = treatmentInvoiceService.sendInvoiceToOwner(
                 requireDoctorOperableInvoice(uuid), null, doctor);
-        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
+        return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_PDF)

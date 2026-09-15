@@ -3,6 +3,7 @@
  */
 package com.kittyp.email.dto;
 
+import java.util.List;
 import java.util.Map;
 
 import lombok.Getter;
@@ -16,10 +17,14 @@ import lombok.Setter;
 public class ZeptoMailDto implements IEmailDto{
 
 	private String templateKey;
+	private String templateAlias;
+	private String subject;
 	private String type;
 	private String recipientName;
 	private String recipientEmail;
 	private String message;
 //	private String provider;
 	private Map<String, Object> mergeInfo;
+	private String htmlBody;
+	private List<EmailAttachment> attachments;
 }

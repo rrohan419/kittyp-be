@@ -115,13 +115,13 @@ public class ClinicInvoiceController {
 
     @PostMapping(ApiUrl.CLINIC_INVOICE_SEND_WHATSAPP)
     @PreAuthorize(CLINIC_BILLING)
-    public ResponseEntity<SuccessResponse<ConsultationInvoice>> sendWhatsApp(
+    public ResponseEntity<SuccessResponse<CreateInvoiceResultDto>> sendWhatsApp(
             @PathVariable String uuid, @PathVariable String invoiceUuid) {
         Clinic clinic = requireAccessibleClinic(uuid);
         ConsultationInvoice invoice = treatmentInvoiceService.requireClinicInvoice(clinic, invoiceUuid);
-        invoice = treatmentInvoiceService.sendInvoiceWhatsApp(
+        CreateInvoiceResultDto result = treatmentInvoiceService.sendInvoiceToOwner(
                 invoice, null, treatmentInvoiceService.clinicSender(clinic));
-        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
+        return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.CLINIC_WHATSAPP_SETTINGS)

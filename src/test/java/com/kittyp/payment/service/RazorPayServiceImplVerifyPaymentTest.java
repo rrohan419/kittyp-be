@@ -54,7 +54,7 @@ class RazorPayServiceImplVerifyPaymentTest {
 
 		TreatmentInvoiceService treatmentInvoiceService = new TreatmentInvoiceService(
 				mock(ConsultationInvoiceRepository.class), null, null, null, null, null, null, null, null, null, null,
-				null, null, null, null, null);
+				null, null, null, null, null, null);
 
 		service = new RazorPayServiceImpl(env, orderDao, mock(ProductService.class), razorpayGateway, captureProbe,
 				mock(ConsultationInvoiceRepository.class), treatmentInvoiceService, mock(ClinicService.class),

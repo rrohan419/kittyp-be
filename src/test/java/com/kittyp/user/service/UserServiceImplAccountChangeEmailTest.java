@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -60,6 +61,7 @@ class UserServiceImplAccountChangeEmailTest {
 				mock(SmsService.class),
 				mock(MasterTotpService.class),
 				clinicOwnerUserLinkService);
+		ReflectionTestUtils.setField(userService, "frontendBaseUrl", "https://kittyp.in");
 	}
 
 	@Test
@@ -71,7 +73,8 @@ class UserServiceImplAccountChangeEmailTest {
 		assertTrue(userService.updatePassword(passwordDto("doc@kittyp.test", code, "NewPass1!")));
 
 		verify(userDao).saveUser(user);
-		verify(zeptoMailService).sendPasswordChangedEmail("doc@kittyp.test", "Doc");
+		verify(zeptoMailService).sendPasswordChangedNotification(
+				eq("doc@kittyp.test"), eq("Doc"), eq("KittyP"), any());
 	}
 
 	@Test
@@ -84,7 +87,7 @@ class UserServiceImplAccountChangeEmailTest {
 				() -> userService.updatePassword(passwordDto("doc@kittyp.test", "000000", "NewPass1!")));
 
 		verify(userDao, never()).saveUser(any());
-		verify(zeptoMailService, never()).sendPasswordChangedEmail(any(), any());
+		verify(zeptoMailService, never()).sendPasswordChangedNotification(any(), any(), any(), any());
 	}
 
 	@Test
@@ -102,7 +105,8 @@ class UserServiceImplAccountChangeEmailTest {
 
 		userService.updateUserDetail("doc@kittyp.test", dto);
 
-		verify(zeptoMailService).sendPhoneChangedEmail("doc@kittyp.test", "Doc", "+919111111111");
+		verify(zeptoMailService).sendPhoneChangedNotification(
+				"doc@kittyp.test", "Doc", "KittyP", "+919111111111", "https://kittyp.in/login");
 	}
 
 	@Test
@@ -119,7 +123,7 @@ class UserServiceImplAccountChangeEmailTest {
 
 		userService.updateUserDetail("doc@kittyp.test", dto);
 
-		verify(zeptoMailService, never()).sendPhoneChangedEmail(any(), any(), any());
+		verify(zeptoMailService, never()).sendPhoneChangedNotification(any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -136,7 +140,7 @@ class UserServiceImplAccountChangeEmailTest {
 		CustomException ex = assertThrows(CustomException.class,
 				() -> userService.updateUserDetail("doc@kittyp.test", dto));
 		assertEquals("Phone re-verification required before changing phone number", ex.getMessage());
-		verify(zeptoMailService, never()).sendPhoneChangedEmail(any(), any(), any());
+		verify(zeptoMailService, never()).sendPhoneChangedNotification(any(), any(), any(), any(), any());
 	}
 
 	private static User user(String uuid, String email, String firstName) {
