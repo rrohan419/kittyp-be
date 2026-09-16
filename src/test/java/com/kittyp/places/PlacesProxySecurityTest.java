@@ -36,7 +36,7 @@ class PlacesProxySecurityTest {
 
 	@BeforeEach
 	void setUp() {
-		PlacesProxyService service = new PlacesProxyService(RestClient.builder().build(), new ObjectMapper(), "");
+		PlacesProxyService service = new PlacesProxyService(RestClient.builder().build(), new ObjectMapper(), "", "");
 		ApiResponse<?> responseBuilder = new ApiResponse<>();
 		PlacesController controller = new PlacesController(service, responseBuilder);
 		GlobalExceptionHandler advice = new GlobalExceptionHandler(responseBuilder);
@@ -76,11 +76,11 @@ class PlacesProxySecurityTest {
 	}
 
 	@Test
-	void autocompleteBody_doesNotContainApiKey() throws Exception {
+	void blankApiKeyAutocomplete_is503AndDoesNotContainApiKey() throws Exception {
 		String body = mockMvc.perform(post("/api/v1/places/autocomplete")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"query\":\"pune clinic\"}"))
-				.andExpect(status().isOk())
+				.andExpect(status().isServiceUnavailable())
 				.andReturn()
 				.getResponse()
 				.getContentAsString();
@@ -89,7 +89,7 @@ class PlacesProxySecurityTest {
 
 	@Test
 	void detailsCrLf_rejectedBeforeGoogle() {
-		PlacesProxyService service = new PlacesProxyService(mock(RestClient.class), new ObjectMapper(), KEY);
+		PlacesProxyService service = new PlacesProxyService(mock(RestClient.class), new ObjectMapper(), KEY, "");
 		assertThrows(IllegalArgumentException.class, () -> service.details("place\r\nid", null));
 	}
 }
