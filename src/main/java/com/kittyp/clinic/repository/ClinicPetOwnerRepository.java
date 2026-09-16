@@ -32,6 +32,18 @@ public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, 
 
 	List<ClinicPetOwner> findByLinkedUserIsNullAndIsActiveTrueAndAlternatePhone(String alternatePhone);
 
+	@Query(value = """
+			SELECT COUNT(*) FROM clinic_pet_owners
+			WHERE is_active = true
+			AND (
+				RIGHT(regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g'), 10) = :digits
+				OR RIGHT(regexp_replace(COALESCE(alternate_phone, ''), '[^0-9]', '', 'g'), 10) = :digits
+			)
+			AND (:exceptUserId IS NULL OR linked_user_id IS NULL OR linked_user_id <> :exceptUserId)
+			""", nativeQuery = true)
+	long countActiveByLocal10ExcludingLinkedUser(@Param("digits") String digits,
+			@Param("exceptUserId") Long exceptUserId);
+
 	List<ClinicPetOwner> findByLinkedUser_IdAndIsActiveTrue(Long linkedUserId);
 
 	boolean existsByClinic_IdAndLinkedUser_IdAndIsActiveTrue(Long clinicId, Long linkedUserId);

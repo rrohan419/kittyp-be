@@ -24,7 +24,7 @@ class AuthServiceImplOtpVerifyTest {
 		verificationCodeService = new VerificationCodeService();
 		authService = new AuthServiceImpl(
 				null, null, null, null, null, null, null, null, null, null, null,
-				verificationCodeService, null, new MasterTotpService(""), null, null);
+				verificationCodeService, null, new MasterTotpService(""), null, null, null);
 	}
 
 	@Test

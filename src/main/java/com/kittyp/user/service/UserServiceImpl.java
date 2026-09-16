@@ -77,6 +77,7 @@ public class UserServiceImpl implements UserService {
 	private final SmsService smsService;
 	private final MasterTotpService masterTotpService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
+	private final PhoneAvailabilityService phoneAvailabilityService;
 
 	@Value("${app.frontend.base-url:http://localhost:8080}")
 	private String frontendBaseUrl;
@@ -174,6 +175,7 @@ public class UserServiceImpl implements UserService {
 				throw new CustomException("Phone re-verification required before changing phone number",
 						HttpStatus.BAD_REQUEST);
 			}
+			phoneAvailabilityService.assertAvailable(userDetailDto.getPhoneNumber().trim(), user);
 			user.setPhoneCountryCode(userDetailDto.getPhoneCountryCode().trim());
 			user.setPhoneNumber(userDetailDto.getPhoneNumber().trim());
 			verificationCodeService.clearVerified(
@@ -291,6 +293,7 @@ public class UserServiceImpl implements UserService {
 			if (phone.equals(currentFull)) {
 				throw new CustomException("New phone must be different from current phone", HttpStatus.BAD_REQUEST);
 			}
+			phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), user);
 			String code = verificationCodeService.generateCode(
 					VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone));
 			smsService.sendOtp(phone, code);

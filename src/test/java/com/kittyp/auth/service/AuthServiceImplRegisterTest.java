@@ -92,6 +92,7 @@ class AuthServiceImplRegisterTest {
 				null,
 				null,
 				clinicOwnerUserLinkService,
+				null,
 				null);
 	}
 

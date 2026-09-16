@@ -51,6 +51,7 @@ import com.kittyp.user.entity.Role;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserRole;
 import com.kittyp.user.enums.ERole;
+import com.kittyp.user.service.PhoneAvailabilityService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +76,7 @@ public class AuthServiceImpl implements AuthService {
 	private final MasterTotpService masterTotpService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 	private final LoginRateLimiter loginRateLimiter;
+	private final PhoneAvailabilityService phoneAvailabilityService;
 
 	private static final String EMAIL_ALREADY_REGISTERED =
 			"This email is already registered. Sign in or use a different email.";
@@ -245,6 +247,7 @@ public class AuthServiceImpl implements AuthService {
 				throw new CustomException("Phone number must include a valid 10-digit local number",
 						HttpStatus.BAD_REQUEST);
 			}
+			phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), null);
 			String code = verificationCodeService.generateCode(VerificationCodeService.phoneOtpKey(phone));
 			smsService.sendOtp(phone, code);
 			return new MessageResponse("OTP sent to phone");

@@ -38,6 +38,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
 			""")
 	List<User> findByPhoneDigits(@Param("digits") String digits);
 
+	@Query(value = """
+			SELECT COUNT(*) FROM users
+			WHERE RIGHT(regexp_replace(COALESCE(phone_number, ''), '[^0-9]', '', 'g'), 10) = :digits
+			AND (:exceptUuid IS NULL OR uuid <> :exceptUuid)
+			""", nativeQuery = true)
+	long countByLocal10DigitsExcludingUuid(@Param("digits") String digits, @Param("exceptUuid") String exceptUuid);
+
 	Page<User> findAll(Pageable pageable);
 
 	/**

@@ -60,7 +60,8 @@ class UserServiceImplAccountChangeEmailTest {
 				mock(JwtUtils.class),
 				mock(SmsService.class),
 				mock(MasterTotpService.class),
-				clinicOwnerUserLinkService);
+				clinicOwnerUserLinkService,
+				mock(PhoneAvailabilityService.class));
 		ReflectionTestUtils.setField(userService, "frontendBaseUrl", "https://kittyp.in");
 	}
 

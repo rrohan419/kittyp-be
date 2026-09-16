@@ -43,6 +43,7 @@ class AuthServiceImplOtpTest {
 				null,
 				masterTotpService,
 				null,
+				null,
 				null);
 	}
 
