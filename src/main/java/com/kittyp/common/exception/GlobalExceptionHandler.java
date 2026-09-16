@@ -245,10 +245,14 @@ public class GlobalExceptionHandler {
 		return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
 	}
 
+	@ExceptionHandler(IllegalArgumentException.class)
+	public ResponseEntity<ErrorResponse<Void>> handleIllegalArgumentException(IllegalArgumentException ex) {
+		return responseBuilder.buildErrorResponse(ex.getMessage(), ex.getLocalizedMessage(),
+				HttpStatus.BAD_REQUEST, null);
+	}
+
 	@ExceptionHandler(CustomException.class)
 	public ResponseEntity<ErrorResponse<Void>> handleCustomException(CustomException ex, WebRequest request) {
-		// String path = extractPath(request);
-		
 		return responseBuilder.buildErrorResponse(ex.getMessage(), ex.getLocalizedMessage(),
 				ex.getHttpStatus(), null);
 	}

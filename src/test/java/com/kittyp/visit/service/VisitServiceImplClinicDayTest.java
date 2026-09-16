@@ -57,12 +57,12 @@ class VisitServiceImplClinicDayTest {
 
 		when(clinicDao.findByUuid("clinic-tz")).thenReturn(clinic);
 		when(userDao.userByEmail("admin@example.com")).thenReturn(owner);
-		when(visitDao.findByClinicAndDay(eq(7L), any(), any())).thenReturn(List.of());
+		when(visitDao.findByClinicScheduleBetween(eq(7L), any(), any())).thenReturn(List.of());
 
 		visitService.listClinicVisits("clinic-tz", null, null, null, null, null, "admin@example.com");
 
 		LocalDate expected = LocalDate.now(ZoneId.of("Asia/Kolkata"));
-		verify(visitDao).findByClinicAndDay(eq(7L),
+		verify(visitDao).findByClinicScheduleBetween(eq(7L),
 				eq(expected.atStartOfDay()),
 				eq(expected.atTime(java.time.LocalTime.MAX)));
 	}

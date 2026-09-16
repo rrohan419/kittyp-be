@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import com.kittyp.auth.filter.TenantSecurityFilter;
 import com.kittyp.auth.util.AuthEntryPointJwt;
 import com.kittyp.auth.util.AuthenticationFilter;
 
@@ -30,6 +31,7 @@ public class SecurityConfig {
 	private final AuthEntryPointJwt authEntryPointJwt;
 	private final JwtAccessDeniedHandler accessDeniedHandler;
 	private final AuthenticationFilter authenticationFilter;
+	private final TenantSecurityFilter tenantSecurityFilter;
 
 	@Bean
 	public PasswordEncoder passwordEncoder() {
@@ -45,6 +47,14 @@ public class SecurityConfig {
 	public FilterRegistrationBean<AuthenticationFilter> authenticationFilterRegistration(
 			AuthenticationFilter filter) {
 		FilterRegistrationBean<AuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+		registration.setEnabled(false);
+		return registration;
+	}
+
+	@Bean
+	public FilterRegistrationBean<TenantSecurityFilter> tenantSecurityFilterRegistration(
+			TenantSecurityFilter filter) {
+		FilterRegistrationBean<TenantSecurityFilter> registration = new FilterRegistrationBean<>(filter);
 		registration.setEnabled(false);
 		return registration;
 	}
@@ -79,7 +89,8 @@ public class SecurityConfig {
 						.requestMatchers("/swagger-ui", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
 						.denyAll()
 						.anyRequest().authenticated())
-				.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
+				.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class)
+				.addFilterAfter(tenantSecurityFilter, AuthenticationFilter.class);
 
 		return http.build();
 	}

@@ -89,16 +89,16 @@ public class WhatsAppWebhookController {
 
     private void verifySignature(String rawBody, String signatureHeader) {
         if (!StringUtils.hasText(appSecret)) {
-            return;
+            throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
         }
         if (!StringUtils.hasText(signatureHeader) || !signatureHeader.startsWith("sha256=")) {
-            throw new CustomException("Invalid webhook signature", HttpStatus.FORBIDDEN);
+            throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
         }
         String expected = "sha256=" + hmacSha256Hex(appSecret, rawBody == null ? "" : rawBody);
         byte[] left = expected.getBytes(StandardCharsets.US_ASCII);
         byte[] right = signatureHeader.trim().getBytes(StandardCharsets.US_ASCII);
         if (left.length != right.length || !MessageDigest.isEqual(left, right)) {
-            throw new CustomException("Invalid webhook signature", HttpStatus.FORBIDDEN);
+            throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
         }
     }
 

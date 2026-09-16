@@ -34,6 +34,7 @@ import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicStaffInviteRepository;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
@@ -56,6 +57,8 @@ class ClinicServiceImplStaffInviteTest {
 	private ClinicStaffDao clinicStaffDao;
 	@Mock
 	private ClinicDoctorRepository clinicDoctorRepository;
+	@Mock
+	private DoctorProfileDao doctorProfileDao;
 	@Mock
 	private ClinicStaffInviteRepository clinicStaffInviteRepository;
 	@Mock

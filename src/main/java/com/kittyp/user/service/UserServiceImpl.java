@@ -297,7 +297,7 @@ public class UserServiceImpl implements UserService {
 			phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), user);
 			String code = verificationCodeService.generateCode(
 					VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone));
-			smsService.sendOtp(phone, code);
+			smsService.sendOtp(phone, code, user.getEmail());
 			return new MessageResponse("OTP sent to phone");
 		}
 

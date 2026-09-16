@@ -1,7 +1,14 @@
 package com.kittyp.visit.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -17,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import com.kittyp.auth.tenant.TenantAccessService;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.enums.ClinicStatus;
@@ -49,6 +57,8 @@ class VisitServiceImplAttendedPatientsTest {
 	private UserDao userDao;
 	@Mock
 	private DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
+	@Mock
+	private TenantAccessService tenantAccessService;
 
 	@InjectMocks
 	private VisitServiceImpl visitService;
@@ -73,6 +83,7 @@ class VisitServiceImplAttendedPatientsTest {
 		when(clinicDao.findByUuid(PERSONAL_UUID)).thenReturn(personal);
 		when(doctorPatientEnrollmentRepository.findByDoctor_IdAndIsActiveTrue(9L)).thenReturn(List.of());
 		when(visitDao.findByDoctor(9L)).thenReturn(List.of());
+		doNothing().when(tenantAccessService).requireMember(anyString(), anyString(), anyString());
 	}
 
 	@Test
@@ -132,5 +143,15 @@ class VisitServiceImplAttendedPatientsTest {
 		assertEquals(1, rows.size());
 		assertEquals("Milo", rows.get(0).petName());
 		assertEquals("Ada Lovelace", rows.get(0).ownerName());
+	}
+
+	@Test
+	void foreignClinicUuidIsForbidden() {
+		doThrow(new AccessDeniedException("You do not have access to this clinic."))
+				.when(tenantAccessService)
+				.requireMember(eq("clinic-2"), eq(EMAIL), anyString());
+
+		assertThrows(AccessDeniedException.class,
+				() -> visitService.listMyAttendedPatients(EMAIL, "clinic-2"));
 	}
 }

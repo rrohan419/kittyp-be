@@ -94,7 +94,7 @@ class AuthServiceImplSignupOtpTest {
 		CustomException ex = assertThrows(CustomException.class, () -> service.sendSignupOtp(request));
 		assertEquals(HttpStatus.CONFLICT, ex.getHttpStatus());
 		assertEquals(PhoneAvailabilityService.ALREADY_IN_USE, ex.getMessage());
-		verify(smsService, never()).sendOtp(anyString(), anyString());
+		verify(smsService, never()).sendOtp(anyString(), anyString(), org.mockito.ArgumentMatchers.any());
 	}
 
 	@Test
@@ -108,6 +108,6 @@ class AuthServiceImplSignupOtpTest {
 		service.sendSignupOtp(request);
 
 		verify(phoneAvailabilityService).assertAvailable("7798296970", null);
-		verify(smsService).sendOtp("+917798296970", "123456");
+		verify(smsService).sendOtp("+917798296970", "123456", null);
 	}
 }

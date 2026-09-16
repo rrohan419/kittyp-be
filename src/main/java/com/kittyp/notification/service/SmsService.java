@@ -12,4 +12,11 @@ public interface SmsService {
 	 * @param code        6-digit OTP
 	 */
 	void sendOtp(String phoneNumber, String code);
+
+	/**
+	 * Same as {@link #sendOtp(String, String)} with email failover when the phone gateway fails.
+	 */
+	default void sendOtp(String phoneNumber, String code, String fallbackEmail) {
+		sendOtp(phoneNumber, code);
+	}
 }

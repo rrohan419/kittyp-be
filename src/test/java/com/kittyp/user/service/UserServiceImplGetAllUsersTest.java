@@ -35,19 +35,19 @@ class UserServiceImplGetAllUsersTest {
 	private UserServiceImpl userService;
 
 	@Test
-	void getAllUsers_usesPetOwnerQuery() {
+	void getAllUsers_listsUsers() {
 		Role userRole = new Role();
 		userRole.setName(ERole.ROLE_USER);
 		User owner = User.builder().email("owner@example.com").password("x").uuid("u1").firstName("Pat")
 				.lastName("Owner").build();
 		owner.getUserRoles().add(new UserRole(owner, userRole));
 
-		when(userDao.findPetOwnerUsers(eq(""), any(Pageable.class)))
+		when(userDao.findAllUsers(eq(""), any(Pageable.class)))
 				.thenReturn(new PageImpl<>(List.of(owner)));
 
 		PaginationModel<UserDetailsModel> page = userService.getAllUsers(1, 10, null);
 
-		verify(userDao).findPetOwnerUsers(eq(""), any(Pageable.class));
+		verify(userDao).findAllUsers(eq(""), any(Pageable.class));
 		assertEquals(1, page.getModels().size());
 		assertEquals(Set.of("ROLE_USER"), page.getModels().get(0).getRoles());
 		assertEquals("owner@example.com", page.getModels().get(0).getEmail());
@@ -55,12 +55,12 @@ class UserServiceImplGetAllUsersTest {
 
 	@Test
 	void getAllUsers_passesTrimmedQuery() {
-		when(userDao.findPetOwnerUsers(eq("pat"), any(Pageable.class)))
+		when(userDao.findAllUsers(eq("pat"), any(Pageable.class)))
 				.thenReturn(new PageImpl<>(List.of()));
 
 		PaginationModel<UserDetailsModel> page = userService.getAllUsers(1, 10, "  pat  ");
 
-		verify(userDao).findPetOwnerUsers(eq("pat"), any(Pageable.class));
+		verify(userDao).findAllUsers(eq("pat"), any(Pageable.class));
 		assertEquals(0, page.getModels().size());
 	}
 }

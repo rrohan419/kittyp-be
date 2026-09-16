@@ -62,9 +62,13 @@ public class DoctorBookingController {
         if (from != null || to != null) {
             start = from == null ? LocalDate.now() : from;
             end = to == null ? start : to;
-        } else {
-            start = date == null ? LocalDate.now() : date;
+        } else if (date != null) {
+            start = date;
             end = start;
+        } else {
+            // Match doctor appointments UI: upcoming window, not empty/today-only surprise.
+            start = LocalDate.now();
+            end = start.plusDays(14);
         }
         if (end.isBefore(start)) {
             LocalDate tmp = start;

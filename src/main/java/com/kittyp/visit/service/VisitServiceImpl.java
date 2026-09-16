@@ -42,6 +42,7 @@ import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
+import com.kittyp.auth.tenant.TenantAccessService;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
@@ -134,6 +135,7 @@ public class VisitServiceImpl implements VisitService {
     private final JitsiMeetService jitsiMeetService;
     private final VerificationCodeService verificationCodeService;
     private final UserRepository userRepository;
+    private final TenantAccessService tenantAccessService;
 
     @Override
     @Transactional
@@ -693,6 +695,11 @@ public class VisitServiceImpl implements VisitService {
         if (booking.getDoctor() == null || !booking.getDoctor().getId().equals(profile.getId())) {
             throw new AccessDeniedException("This booking is not assigned to you");
         }
+        if (booking.getClinic() == null
+                || !clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
+                        booking.getClinic().getId(), profile.getUser().getId())) {
+            throw new AccessDeniedException("You are not a doctor at this clinic");
+        }
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.NO_SHOW) {
             throw new CustomException("Cannot start treatment for a cancelled booking", HttpStatus.BAD_REQUEST);
         }
@@ -1163,6 +1170,9 @@ public class VisitServiceImpl implements VisitService {
     @Transactional(readOnly = true)
     public List<AttendedPatientModel> listMyAttendedPatients(String email, String clinicUuid) {
         DoctorProfile profile = requireDoctorProfile(email);
+        if (clinicUuid != null && !clinicUuid.isBlank()) {
+            tenantAccessService.requireMember(clinicUuid, email, "/api/v1/doctor/patients/attended");
+        }
         Map<String, AttendedPatientModel> byPet = new HashMap<>();
         // Only visits where this doctor actually treated the pet (not waitlist assignment alone).
         Set<VisitStatus> seenStatuses = EnumSet.of(

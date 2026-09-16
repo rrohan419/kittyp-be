@@ -84,7 +84,7 @@ class UserServiceImplProfileOtpTest {
 				() -> service.sendProfileOtp("me@kittyp.test", request));
 		assertEquals(HttpStatus.CONFLICT, ex.getHttpStatus());
 		assertEquals("Phone number is already in use", ex.getMessage());
-		verify(smsService, never()).sendOtp(anyString(), anyString());
+		verify(smsService, never()).sendOtp(anyString(), anyString(), org.mockito.ArgumentMatchers.any());
 	}
 
 	@Test
@@ -101,6 +101,6 @@ class UserServiceImplProfileOtpTest {
 		service.sendProfileOtp("me@kittyp.test", request);
 
 		verify(phoneAvailabilityService).assertAvailable(eq("9876543210"), eq(current));
-		verify(smsService).sendOtp("+919876543210", "123456");
+		verify(smsService).sendOtp("+919876543210", "123456", "me@kittyp.test");
 	}
 }

@@ -170,7 +170,9 @@ class ZeptoMailServiceImplAccountChangeTest {
 		ZeptoMailDto mail = captureMail();
 		assertEquals(EMAIL_CHANGE_OTP, mail.getTemplateKey());
 		assertEquals("654321", mail.getMergeInfo().get("otp"));
+		assertEquals("654321", mail.getMergeInfo().get("OTP"));
 		assertEquals("Doc", mail.getMergeInfo().get("customer_name"));
+		assertEquals("Doc", mail.getMergeInfo().get("Customer_Name"));
 		assertEquals(java.time.LocalDate.now().getYear(), mail.getMergeInfo().get("current_year"));
 		assertEquals(AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO, mail.getMergeInfo().get("logo_url"));
 	}
@@ -186,6 +188,16 @@ class ZeptoMailServiceImplAccountChangeTest {
 		assertEquals("https://kittyp.in/accept", mail.getMergeInfo().get("accept_url"));
 		assertEquals(java.time.LocalDate.now().getYear(), mail.getMergeInfo().get("current_year"));
 		assertEquals(AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO, mail.getMergeInfo().get("logo_url"));
+	}
+
+	@Test
+	void sendDoctorProfileVerified_blankTemplate_doesNotThrow() {
+		when(env.getProperty(TemplateConstant.ZOHO_DOCTOR_PROFILE_VERIFIED_TEMPLATE_ID)).thenReturn("");
+
+		mailService.sendDoctorProfileVerified("doc@kittyp.test", "Dr Swapnil", "https://kittyp.in/doctor");
+
+		verify(sender, never()).sendEmail(any());
+		verify(auditService, never()).saveEmailAudit(any());
 	}
 
 	@Test

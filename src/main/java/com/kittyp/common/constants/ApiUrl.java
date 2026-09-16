@@ -114,6 +114,10 @@ public class ApiUrl {
 	// public controller
 	public static final String PUBLIC_BASE_URL = "/public";
 	public static final String SITEMAP = PUBLIC_BASE_URL + "/sitemap.xml";
+	public static final String PUBLIC_PLACES_AUTOCOMPLETE = PUBLIC_BASE_URL + "/places/autocomplete";
+	public static final String PUBLIC_PLACES_DETAILS = PUBLIC_BASE_URL + "/places/details";
+	public static final String PLACES_AUTOCOMPLETE = "/places/autocomplete";
+	public static final String PLACES_DETAILS = "/places/details";
 
 	// pet controller
 	public static final String PET_BASE_URL = "/pet";

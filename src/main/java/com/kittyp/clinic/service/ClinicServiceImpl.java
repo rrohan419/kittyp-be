@@ -96,6 +96,7 @@ import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicStaffInviteRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
+import com.kittyp.common.geo.GeoBounds;
 import com.kittyp.common.util.SafePhotoUrl;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.PaginationSupport;
@@ -220,6 +221,7 @@ public class ClinicServiceImpl implements ClinicService {
                 .city(blankToNull(request.city())).latitude(request.latitude()).longitude(request.longitude())
                 .profileImageUrl(blankToNull(request.profileImageUrl()))
                 .build();
+        GeoBounds.validate(clinic.getLatitude(), clinic.getLongitude());
         clinic = clinicDao.saveClinic(clinic);
         return clinicModel(clinic);
     }
@@ -306,6 +308,7 @@ public class ClinicServiceImpl implements ClinicService {
         if (request.longitude() != null) {
             clinic.setLongitude(request.longitude());
         }
+        GeoBounds.validate(clinic.getLatitude(), clinic.getLongitude());
         if (request.profileImageUrl() != null) {
             clinic.setProfileImageUrl(blankToNull(request.profileImageUrl()));
         }

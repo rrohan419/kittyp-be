@@ -19,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.constants.AppConstant;
 import com.kittyp.common.constants.TemplateConstant;
+import com.kittyp.common.logging.PiiMasker;
 import com.kittyp.common.util.VerificationCodeService;
+import com.kittyp.email.ZeptoMergeFields;
 import com.kittyp.email.dto.EmailAttachment;
 import com.kittyp.email.dto.EmailAuditDto;
 import com.kittyp.email.dto.ZeptoMailDto;
@@ -65,7 +67,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		if (!dispatch(mailDto, TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID)) {
 			return;
 		}
-		log.info("welcome email sent for email : " + recipientEmail);
+		log.info("welcome email sent for email : {}", PiiMasker.maskEmail(recipientEmail));
 
 	}
 
@@ -79,7 +81,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		if (!dispatch(mailDto, TemplateConstant.ZOHO_DOCTOR_WELCOME_EMAIL_TEMPLATE_ID)) {
 			return;
 		}
-		log.info("welcome email sent for email : " + recipientEmail);
+		log.info("welcome email sent for email : {}", PiiMasker.maskEmail(recipientEmail));
 	}
 
 	@Override
@@ -92,7 +94,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		if (!dispatch(mailDto, TemplateConstant.ZOHO_CLINIC_ADMIN_WELCOME_EMAIL_TEMPLATE_ID)) {
 			return;
 		}
-		log.info("welcome email sent for email : " + recipientEmail);
+		log.info("welcome email sent for email : {}", PiiMasker.maskEmail(recipientEmail));
 	}
 
 	/**
@@ -104,23 +106,27 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String code = verificationCodeService.generateCode(user.getUuid());
 
 		ZeptoMailDto mailDto = new ZeptoMailDto();
-		mailDto.setMergeInfo(withLogoYear(Map.of("customer_name", user.getFirstName(), "reset_code", code)));
+		mailDto.setMergeInfo(withLogoYear(Map.of(
+				"customer_name", user.getFirstName(),
+				ZeptoMergeFields.CUSTOMER_NAME, user.getFirstName(),
+				ZeptoMergeFields.RESET_CODE, code)));
 		mailDto.setRecipientEmail(email);
 		mailDto.setRecipientName(user.getFirstName());
 		try {
 			if (!dispatch(mailDto, TemplateConstant.ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID)) {
 				return;
 			}
-			log.info("password reset code sent for email : " + email);
+			log.info("password reset code sent for email : {}", PiiMasker.maskEmail(email));
 		} catch (Exception e) {
-			log.warn("Failed to send password reset email to {}: {}", email, e.getMessage());
+			log.warn("Failed to send password reset email to {}: {}", PiiMasker.maskEmail(email), e.getMessage());
 		}
 
 	}
 
 	@Override
 	public void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint) {
-		log.info("Signup OTP [{}] requested for email={} phoneHint={}", purpose, recipientEmail, phoneHint);
+		log.info("Signup OTP [{}] requested for email={} phoneHint={}", purpose, PiiMasker.maskEmail(recipientEmail),
+				phoneHint);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name;
@@ -143,7 +149,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			dispatch(mailDto, TemplateConstant.ZEPTO_SIGNUP_OTP_EMAIL_TEMPLATE_ID);
 		} catch (Exception e) {
 			// OTP is still in cache / logs — don't fail signup OTP in local if mail provider is down
-			log.warn("Failed to send signup OTP email to {}: {}", recipientEmail, e.getMessage());
+			log.warn("Failed to send signup OTP email to {}: {}", PiiMasker.maskEmail(recipientEmail), e.getMessage());
 		}
 	}
 
@@ -153,13 +159,16 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String clinic = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName.trim();
 		String pet = petName == null || petName.isBlank() ? "pet" : petName.trim();
 		String name = ownerName == null || ownerName.isBlank() ? "Pet parent" : ownerName.trim();
-		log.info("Clinic pet-consent OTP to email={} clinic={} pet={}", recipientEmail, clinic, pet);
+		log.info("Clinic pet-consent OTP to email={} clinic={} pet={}", PiiMasker.maskEmail(recipientEmail), clinic,
+				pet);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			mailDto.setMergeInfo(withLogoYear(Map.of(
 					"customer_name", name,
+					ZeptoMergeFields.CUSTOMER_NAME, name,
 					"otp", code,
-					"clinic_name", clinic,
+					ZeptoMergeFields.OTP, code,
+					ZeptoMergeFields.CLINIC_NAME, clinic,
 					"pet_name", pet)));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
@@ -170,27 +179,27 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			}
 			dispatch(mailDto, templateProperty);
 		} catch (Exception e) {
-			log.warn("Failed to send clinic pet-consent OTP to {}: {} (OTP remains in cache)", recipientEmail,
-					e.getMessage());
+			log.warn("Failed to send clinic pet-consent OTP to {}: {} (OTP remains in cache)",
+					PiiMasker.maskEmail(recipientEmail), e.getMessage());
 		}
 	}
 
 	@Override
 	public void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName,
 			String acceptUrl) {
-		log.info("Clinic doctor invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);
+		log.info("Clinic doctor invite to email={} clinic={}", PiiMasker.maskEmail(recipientEmail), clinicName);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name = doctorName == null || doctorName.isBlank() ? "Doctor" : doctorName;
 			mailDto.setMergeInfo(withLogoYear(Map.of(
 					"doctor_name", name,
-					"clinic_name", clinicName,
-					"acceptUrl", acceptUrl)));
+					ZeptoMergeFields.CLINIC_NAME, clinicName,
+					ZeptoMergeFields.ACCEPT_URL, acceptUrl)));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
 			dispatch(mailDto, TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_EMAIL_TEMPLATE_ID);
 		} catch (Exception e) {
-			log.warn("Failed to send clinic invite email to {}: {} (acceptUrl logged above)", recipientEmail,
+			log.warn("Failed to send clinic invite email to {}: {}", PiiMasker.maskEmail(recipientEmail),
 					e.getMessage());
 		}
 	}
@@ -198,20 +207,20 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	@Override
 	public void sendClinicStaffInviteEmail(String recipientEmail, String staffName, String clinicName,
 			String acceptUrl) {
-		log.info("Clinic staff invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);
+		log.info("Clinic staff invite to email={} clinic={}", PiiMasker.maskEmail(recipientEmail), clinicName);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name = staffName == null || staffName.isBlank() ? "Staff" : staffName;
 			mailDto.setMergeInfo(withLogoYear(Map.of(
-					"clinic_name", clinicName == null ? "Clinic" : clinicName,
+					ZeptoMergeFields.CLINIC_NAME, clinicName == null ? "Clinic" : clinicName,
 					"Clinic_Name", clinicName == null ? "Clinic" : clinicName,
-					"acceptUrl", acceptUrl,
+					ZeptoMergeFields.ACCEPT_URL, acceptUrl,
 					"staff_name", name)));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
 			dispatch(mailDto, TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_EMAIL_TEMPLATE_ID);
 		} catch (Exception e) {
-			log.warn("Failed to send clinic staff invite email to {}: {} (acceptUrl logged above)", recipientEmail,
+			log.warn("Failed to send clinic staff invite email to {}: {}", PiiMasker.maskEmail(recipientEmail),
 					e.getMessage());
 		}
 	}
@@ -226,8 +235,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	public void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
 			String doctorEmail, boolean accepted) {
 		String status = accepted ? "accepted" : "declined";
-		log.info("Clinic invite {} — notify clinicEmail={} clinic={} doctor={} <{}>", status, recipientEmail,
-				clinicName, doctorName, doctorEmail);
+		log.info("Clinic invite {} — notify clinicEmail={} clinic={} doctor={}", status,
+				PiiMasker.maskEmail(recipientEmail), clinicName, doctorName);
 		if (recipientEmail == null || recipientEmail.isBlank()) {
 			return;
 		}
@@ -238,13 +247,14 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			mailDto.setMergeInfo(withLogoYear(Map.of(
 					"doctor_name", doctorName,
 					"doctor_email", doctorEmail,
-					"clinic_name", name,
+					ZeptoMergeFields.CLINIC_NAME, name,
 					"status", status)));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
 			dispatch(mailDto, TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_RESPONSE_EMAIL_TEMPLATE_ID);
 		} catch (Exception e) {
-			log.warn("Failed to send clinic invite response email to {}: {}", recipientEmail, e.getMessage());
+			log.warn("Failed to send clinic invite response email to {}: {}", PiiMasker.maskEmail(recipientEmail),
+					e.getMessage());
 		}
 	}
 
@@ -309,11 +319,11 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 		// Set merge info directly as a map (no JSON serialization/deserialization)
 		mailDto.setMergeInfo(root);
-		log.info("ZeptoMail Merge Info: {}", root);
+		log.info("ZeptoMail Merge Info: order_number={} productCount={}", order.getOrderNumber(), productsList.size());
 		if (!dispatch(mailDto, TemplateConstant.ZEPTO_ORDER_CONFIRMATION_EMAIL_TEMPLATE_ID)) {
 			return;
 		}
-		log.info("Order confirmation email sent to: {}", recipientEmail);
+		log.info("Order confirmation email sent to: {}", PiiMasker.maskEmail(recipientEmail));
 	}
 
 	@Override
@@ -321,7 +331,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String name = blankToDefault(customerName, "there");
 		sendDedicated(email, name, TemplateConstant.ZOHO_ACCOUNT_PASSWORD_CHANGED_TEMPLATE_ID, withLogoYear(Map.of(
 				"customer_name", name,
-				"clinic_name", blankToDefault(clinicName, "KittyP"),
+				ZeptoMergeFields.CUSTOMER_NAME, name,
+				ZeptoMergeFields.CLINIC_NAME, blankToDefault(clinicName, "KittyP"),
 				"change_time", blankToDefault(changeTime, ""),
 				"support_url", supportUrl())));
 	}
@@ -332,7 +343,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String name = blankToDefault(customerName, "there");
 		sendDedicated(email, name, TemplateConstant.ZOHO_ACCOUNT_PHONE_CHANGED_TEMPLATE_ID, withLogoYear(Map.of(
 				"customer_name", name,
-				"clinic_name", blankToDefault(clinicName, "KittyP"),
+				ZeptoMergeFields.CUSTOMER_NAME, name,
+				ZeptoMergeFields.CLINIC_NAME, blankToDefault(clinicName, "KittyP"),
 				"new_phone", blankToDefault(newPhone, ""),
 				"login_url", blankToDefault(loginUrl, supportUrl()))));
 	}
@@ -342,18 +354,21 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String name = blankToDefault(customerName, "there");
 		sendDedicated(email, name, TemplateConstant.ZOHO_EMAIL_CHANGE_OTP_TEMPLATE_ID, withLogoYear(Map.of(
 				"customer_name", name,
-				"clinic_name", blankToDefault(clinicName, "KittyP"),
-				"otp", otp == null ? "" : otp)));
+				ZeptoMergeFields.CUSTOMER_NAME, name,
+				ZeptoMergeFields.CLINIC_NAME, blankToDefault(clinicName, "KittyP"),
+				"otp", otp == null ? "" : otp,
+				ZeptoMergeFields.OTP, otp == null ? "" : otp)));
 	}
 
 	@Override
 	public void sendDoctorInviteReminder(String email, String doctorName, String clinicName, String acceptUrl) {
-		log.info("Clinic doctor invite REMINDER to email={} clinic={} acceptUrl={}", email, clinicName, acceptUrl);
+		log.info("Clinic doctor invite REMINDER to email={} clinic={}", PiiMasker.maskEmail(email), clinicName);
 		String name = doctorName == null || doctorName.isBlank() ? "Doctor" : doctorName;
 		sendDedicated(email, name, TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_REMINDER_EMAIL_TEMPLATE_ID, withLogoYear(Map.of(
 				"doctor_name", name,
-				"clinic_name", clinicName == null ? "Clinic" : clinicName,
-				"accept_url", acceptUrl == null ? "" : acceptUrl)));
+				ZeptoMergeFields.CLINIC_NAME, clinicName == null ? "Clinic" : clinicName,
+				"accept_url", acceptUrl == null ? "" : acceptUrl,
+				ZeptoMergeFields.ACCEPT_URL, acceptUrl == null ? "" : acceptUrl)));
 	}
 
 	@Override
@@ -361,6 +376,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String name = blankToDefault(doctorName, "Doctor");
 		sendDedicated(email, name, TemplateConstant.ZOHO_DOCTOR_PROFILE_VERIFIED_TEMPLATE_ID, withLogoYear(Map.of(
 				"customer_name", name,
+				ZeptoMergeFields.CUSTOMER_NAME, name,
 				"doctor_url", blankToDefault(dashboardUrl, ""))));
 	}
 
@@ -369,7 +385,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		String name = blankToDefault(customerName, "there");
 		sendDedicated(email, name, TemplateConstant.ZOHO_CLINIC_PROFILE_VERIFIED_TEMPLATE_ID, withLogoYear(Map.of(
 				"customer_name", name,
-				"clinic_name", blankToDefault(clinicName, "Clinic"),
+				ZeptoMergeFields.CUSTOMER_NAME, name,
+				ZeptoMergeFields.CLINIC_NAME, blankToDefault(clinicName, "Clinic"),
 				"clinic_url", blankToDefault(clinicUrl, ""))));
 	}
 
@@ -384,7 +401,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		ZeptoMailDto mailDto = new ZeptoMailDto();
 		mailDto.setMergeInfo(withLogoYear(Map.of(
 				"customer_name", name,
-				"clinic_name", blankToDefault(clinicName, "KittyP Clinic"),
+				ZeptoMergeFields.CUSTOMER_NAME, name,
+				ZeptoMergeFields.CLINIC_NAME, blankToDefault(clinicName, "KittyP Clinic"),
 				"pet_name", blankToDefault(petName, "your pet"),
 				"invoice_number", blankToDefault(invoiceNumber, ""),
 				"amount", blankToDefault(amount, "0.00"),
@@ -405,9 +423,9 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			if (!dispatch(mailDto, TemplateConstant.ZOHO_TREATMENT_INVOICE_EMAIL_TEMPLATE_ID)) {
 				throw new IllegalStateException("Invoice email template is not configured");
 			}
-			log.info("Invoice email sent to {} invoice={}", email, invoiceNumber);
+			log.info("Invoice email sent to {} invoice={}", PiiMasker.maskEmail(email), invoiceNumber);
 		} catch (Exception e) {
-			log.warn("Failed to send invoice email to {}: {}", email, e.getMessage());
+			log.warn("Failed to send invoice email to {}: {}", PiiMasker.maskEmail(email), e.getMessage());
 			if (e instanceof RuntimeException re) {
 				throw re;
 			}
@@ -426,10 +444,12 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		mailDto.setRecipientName(recipientName);
 		try {
 			if (dispatch(mailDto, templateProperty)) {
-				log.info("Dedicated template email sent to {} using {}", recipientEmail, templateProperty);
+				log.info("Dedicated template email sent to {} using {}", PiiMasker.maskEmail(recipientEmail),
+						templateProperty);
 			}
 		} catch (Exception e) {
-			log.warn("Failed to send dedicated template email to {}: {}", recipientEmail, e.getMessage());
+			log.warn("Failed to send dedicated template email to {}: {}", PiiMasker.maskEmail(recipientEmail),
+					e.getMessage());
 		}
 	}
 
@@ -496,7 +516,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		emailAudit.setEventName("email_Sent");
 
 		emailAuditService.saveEmailAudit(emailAudit);
-		log.info("email audit added for email: " + recipientEmail + " request id : " + responseModel.getRequestId());
+		log.info("email audit added for email: {} request id : {}", PiiMasker.maskEmail(recipientEmail),
+				responseModel.getRequestId());
 	}
 
 }

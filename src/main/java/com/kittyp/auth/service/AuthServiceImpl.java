@@ -37,6 +37,7 @@ import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.dto.SignupRequestDto;
 import com.kittyp.common.enums.SignupRole;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.geo.GeoBounds;
 import com.kittyp.common.model.JwtResponseModel;
 import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.util.VerificationCodeService;
@@ -249,7 +250,7 @@ public class AuthServiceImpl implements AuthService {
 			}
 			phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), null);
 			String code = verificationCodeService.generateCode(VerificationCodeService.phoneOtpKey(phone));
-			smsService.sendOtp(phone, code);
+			smsService.sendOtp(phone, code, request.getEmail());
 			return new MessageResponse("OTP sent to phone");
 		}
 		throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
@@ -310,6 +311,7 @@ public class AuthServiceImpl implements AuthService {
 
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
 
+		GeoBounds.validate(signupClinicRequestDto.getLatitude(), signupClinicRequestDto.getLongitude());
 		clinicDao.saveClinic(Clinic.builder()
 				.name(signupClinicRequestDto.getClinicName())
 				.licenseNumber(signupClinicRequestDto.getLicenseNumber())
