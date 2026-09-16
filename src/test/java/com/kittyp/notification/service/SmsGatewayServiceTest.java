@@ -54,8 +54,22 @@ class SmsGatewayServiceTest {
 				new TypeReference<Map<String, Object>>() {
 				});
 		assertEquals("device-1", body.get("deviceId"));
-		assertEquals(List.of("+919876543210"), body.get("recipients"));
+		assertEquals(List.of("9876543210"), body.get("recipients"));
 		assertTrue(String.valueOf(body.get("message")).contains("123456"));
+	}
+
+	@Test
+	void sendOtp_stripsE164ToTenDigitLocal() throws Exception {
+		server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"data\":{\"smsBatchId\":\"b1\"}}"));
+		SmsGatewayService service = newService("tb-key", "device-1");
+
+		service.sendOtp("+919876543210", "123456");
+
+		RecordedRequest request = server.takeRequest(2, TimeUnit.SECONDS);
+		Map<String, Object> body = objectMapper.readValue(request.getBody().readUtf8(),
+				new TypeReference<Map<String, Object>>() {
+				});
+		assertEquals(List.of("9876543210"), body.get("recipients"));
 	}
 
 	@Test

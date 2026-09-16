@@ -50,20 +50,20 @@ public class SmsGatewayService implements SmsService {
 			throw new CustomException("SMS gateway is not configured", HttpStatus.SERVICE_UNAVAILABLE);
 		}
 
-		String phone = phoneNumber.trim();
+		String phone = toGatewayRecipient(phoneNumber);
 		Map<String, Object> body = Map.of(
 				"deviceId", deviceId,
 				"recipients", List.of(phone),
-				"message", "Your Kittyp verification code is " + otpCode.trim() + ". It expires in 10 minutes.");
+				"message", "Kittyp OTP: " + otpCode.trim());
 
 		try {
-			restClient.post()
+			String response = restClient.post()
 					.uri(baseUrl + SEND_PATH)
 					.header("x-api-key", apiKey)
 					.body(body)
 					.retrieve()
-					.toBodilessEntity();
-			log.info("SMS OTP sent to {}", maskPhone(phone));
+					.body(String.class);
+			log.info("SMS OTP queued for {} textbee={}", maskPhone(phone), truncate(response));
 		} catch (RestClientResponseException e) {
 			String snippet = e.getResponseBodyAsString();
 			if (snippet != null && snippet.length() > 200) {
@@ -94,5 +94,24 @@ public class SmsGatewayService implements SmsService {
 			return "****";
 		}
 		return "****" + digits.substring(digits.length() - 4);
+	}
+
+	/**
+	 * TextBee Android delivers 10-digit local numbers and fails {@code +91} E.164.
+	 */
+	static String toGatewayRecipient(String phoneNumber) {
+		String digits = phoneNumber == null ? "" : phoneNumber.replaceAll("\\D", "");
+		if (digits.length() >= 10) {
+			return digits.substring(digits.length() - 10);
+		}
+		return digits;
+	}
+
+	private static String truncate(String body) {
+		if (body == null || body.isBlank()) {
+			return "";
+		}
+		String trimmed = body.trim();
+		return trimmed.length() > 200 ? trimmed.substring(0, 200) : trimmed;
 	}
 }
