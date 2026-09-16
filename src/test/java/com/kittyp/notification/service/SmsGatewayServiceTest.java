@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -40,42 +42,43 @@ class SmsGatewayServiceTest {
 	}
 
 	@Test
-	void sendOtp_postsJsonPayload() throws Exception {
-		server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"success\":true}"));
-		SmsGatewayService service = newService("tb-key", "device-1");
+	void sendOtp_postsSmsGatePayload() throws Exception {
+		server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"id\":\"m1\"}"));
+		SmsGatewayService service = newService("sms", "secret");
 
 		service.sendOtp("+919876543210", "123456");
 
 		RecordedRequest request = server.takeRequest(2, TimeUnit.SECONDS);
 		assertEquals("POST", request.getMethod());
-		assertEquals("/gateway/send-sms", request.getPath());
-		assertEquals("tb-key", request.getHeader("x-api-key"));
+		assertEquals("/message", request.getPath());
+		assertEquals(basic("sms", "secret"), request.getHeader("Authorization"));
 		Map<String, Object> body = objectMapper.readValue(request.getBody().readUtf8(),
 				new TypeReference<Map<String, Object>>() {
 				});
-		assertEquals("device-1", body.get("deviceId"));
-		assertEquals(List.of("9876543210"), body.get("recipients"));
-		assertTrue(String.valueOf(body.get("message")).contains("123456"));
+		assertEquals(List.of("+919876543210"), body.get("phoneNumbers"));
+		@SuppressWarnings("unchecked")
+		Map<String, Object> textMessage = (Map<String, Object>) body.get("textMessage");
+		assertTrue(String.valueOf(textMessage.get("text")).contains("123456"));
 	}
 
 	@Test
-	void sendOtp_stripsE164ToTenDigitLocal() throws Exception {
-		server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"data\":{\"smsBatchId\":\"b1\"}}"));
-		SmsGatewayService service = newService("tb-key", "device-1");
+	void sendOtp_tenDigitLocalBecomesE164() throws Exception {
+		server.enqueue(new MockResponse().setResponseCode(200).setBody("{}"));
+		SmsGatewayService service = newService("sms", "secret");
 
-		service.sendOtp("+919876543210", "123456");
+		service.sendOtp("9876543210", "123456");
 
 		RecordedRequest request = server.takeRequest(2, TimeUnit.SECONDS);
 		Map<String, Object> body = objectMapper.readValue(request.getBody().readUtf8(),
 				new TypeReference<Map<String, Object>>() {
 				});
-		assertEquals(List.of("9876543210"), body.get("recipients"));
+		assertEquals(List.of("+919876543210"), body.get("phoneNumbers"));
 	}
 
 	@Test
 	void sendOtp_gateway500_throwsBadGateway() {
 		server.enqueue(new MockResponse().setResponseCode(500).setBody("boom"));
-		SmsGatewayService service = newService("tb-key", "device-1");
+		SmsGatewayService service = newService("sms", "secret");
 
 		CustomException ex = assertThrows(CustomException.class, () -> service.sendOtp("+919876543210", "123456"));
 		assertEquals(HttpStatus.BAD_GATEWAY, ex.getHttpStatus());
@@ -83,16 +86,20 @@ class SmsGatewayServiceTest {
 	}
 
 	@Test
-	void sendOtp_missingApiKey_doesNotCallGateway() throws Exception {
-		SmsGatewayService service = newService("", "device-1");
+	void sendOtp_missingPassword_doesNotCallGateway() throws Exception {
+		SmsGatewayService service = newService("sms", "");
 
 		CustomException ex = assertThrows(CustomException.class, () -> service.sendOtp("+919876543210", "123456"));
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getHttpStatus());
 		assertEquals(0, server.getRequestCount());
 	}
 
-	private SmsGatewayService newService(String apiKey, String deviceId) {
+	private SmsGatewayService newService(String username, String password) {
 		String base = server.url("/").toString().replaceAll("/$", "");
-		return new SmsGatewayService(RestClient.builder().build(), base, apiKey, deviceId);
+		return new SmsGatewayService(RestClient.builder().build(), base, username, password);
+	}
+
+	private static String basic(String user, String pass) {
+		return "Basic " + Base64.getEncoder().encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8));
 	}
 }

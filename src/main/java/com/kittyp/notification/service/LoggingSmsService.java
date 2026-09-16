@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Fallback SMS implementation: logs the OTP when no real gateway bean exists.
- * SmsGatewayService (TextBee) or TwilioSmsService replace this when configured.
+ * SmsGatewayService (SMS Gate) or TwilioSmsService replace this when configured.
  */
 @Service
 @ConditionalOnMissingBean(SmsService.class)

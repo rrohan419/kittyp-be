@@ -1,5 +1,7 @@
 package com.kittyp.notification.service;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -20,22 +22,22 @@ import lombok.extern.slf4j.Slf4j;
 @Primary
 public class SmsGatewayService implements SmsService {
 
-	private static final String SEND_PATH = "/gateway/send-sms";
+	private static final String SEND_PATH = "/message";
 
 	private final RestClient restClient;
 	private final String baseUrl;
-	private final String apiKey;
-	private final String deviceId;
+	private final String username;
+	private final String password;
 
 	public SmsGatewayService(
 			RestClient restClient,
-			@Value("${textbee.base-url:https://api.textbee.dev/api/v1}") String baseUrl,
-			@Value("${textbee.api-key:}") String apiKey,
-			@Value("${textbee.device-id:}") String deviceId) {
+			@Value("${sms.base-url:}") String baseUrl,
+			@Value("${sms.username:}") String username,
+			@Value("${sms.password:}") String password) {
 		this.restClient = restClient;
 		this.baseUrl = trimSlash(baseUrl);
-		this.apiKey = apiKey == null ? "" : apiKey.trim();
-		this.deviceId = deviceId == null ? "" : deviceId.trim();
+		this.username = username == null ? "" : username.trim();
+		this.password = password == null ? "" : password.trim();
 	}
 
 	@Override
@@ -46,24 +48,24 @@ public class SmsGatewayService implements SmsService {
 		if (otpCode == null || otpCode.isBlank()) {
 			throw new CustomException("OTP code is required", HttpStatus.BAD_REQUEST);
 		}
-		if (apiKey.isBlank() || deviceId.isBlank() || baseUrl.isBlank()) {
+		if (baseUrl.isBlank() || username.isBlank() || password.isBlank()) {
 			throw new CustomException("SMS gateway is not configured", HttpStatus.SERVICE_UNAVAILABLE);
 		}
 
-		String phone = toGatewayRecipient(phoneNumber);
+		String phone = toE164(phoneNumber);
 		Map<String, Object> body = Map.of(
-				"deviceId", deviceId,
-				"recipients", List.of(phone),
-				"message", "Kittyp OTP: " + otpCode.trim());
+				"textMessage", Map.of("text", "Kittyp OTP: " + otpCode.trim()),
+				"phoneNumbers", List.of(phone));
 
 		try {
 			String response = restClient.post()
 					.uri(baseUrl + SEND_PATH)
-					.header("x-api-key", apiKey)
+					.header("Authorization", basicAuth(username, password))
+					.header("Content-Type", "application/json")
 					.body(body)
 					.retrieve()
 					.body(String.class);
-			log.info("SMS OTP queued for {} textbee={}", maskPhone(phone), truncate(response));
+			log.info("SMS OTP queued for {} smsgate={}", maskPhone(phone), truncate(response));
 		} catch (RestClientResponseException e) {
 			String snippet = e.getResponseBodyAsString();
 			if (snippet != null && snippet.length() > 200) {
@@ -75,6 +77,11 @@ public class SmsGatewayService implements SmsService {
 			log.warn("SMS gateway unreachable for {}: {}", maskPhone(phone), e.getMessage());
 			throw new CustomException("Failed to send SMS", HttpStatus.SERVICE_UNAVAILABLE, e);
 		}
+	}
+
+	private static String basicAuth(String user, String pass) {
+		String token = Base64.getEncoder().encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8));
+		return "Basic " + token;
 	}
 
 	private static String trimSlash(String url) {
@@ -96,15 +103,13 @@ public class SmsGatewayService implements SmsService {
 		return "****" + digits.substring(digits.length() - 4);
 	}
 
-	/**
-	 * TextBee Android delivers 10-digit local numbers and fails {@code +91} E.164.
-	 */
-	static String toGatewayRecipient(String phoneNumber) {
+	/** SMS Gate expects E.164. Indian numbers use +91 plus last 10 digits. */
+	static String toE164(String phoneNumber) {
 		String digits = phoneNumber == null ? "" : phoneNumber.replaceAll("\\D", "");
 		if (digits.length() >= 10) {
-			return digits.substring(digits.length() - 10);
+			return "+91" + digits.substring(digits.length() - 10);
 		}
-		return digits;
+		return digits.isEmpty() ? "" : "+" + digits;
 	}
 
 	private static String truncate(String body) {
