@@ -3,7 +3,6 @@
  */
 package com.kittyp.user.dao;
 
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.core.env.Environment;
@@ -34,19 +33,6 @@ public class UserDaoImpl implements UserDao {
 	public User saveUser(User user) {
 		try {
 			return userRepository.save(user);
-		} catch (Exception e) {
-			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
-					HttpStatus.INTERNAL_SERVER_ERROR);
-		}
-	}
-
-	/**
-	 * @author rrohan419@gmail.com
-	 */
-	@Override
-	public List<User> findByPhoneDigits(String digits) {
-		try {
-			return userRepository.findByPhoneDigits(digits);
 		} catch (Exception e) {
 			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
 					HttpStatus.INTERNAL_SERVER_ERROR);

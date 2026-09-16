@@ -1,6 +1,5 @@
 package com.kittyp.user.dao;
 
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -13,8 +12,6 @@ public interface UserDao {
 	User saveUser(User user);
 		
 	boolean userPresentByEmail(String email);
-
-	List<User> findByPhoneDigits(String digits);
 	
 	User userByEmail(String email);
 	

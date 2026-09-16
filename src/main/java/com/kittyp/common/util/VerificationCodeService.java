@@ -44,6 +44,11 @@ public class VerificationCodeService {
 
     public String generateCode(String key) {
         enforceSendRateLimit(key);
+        String existing = codeCache.getIfPresent(key);
+        if (existing != null && !existing.isBlank()) {
+            attemptCache.invalidate(key);
+            return existing;
+        }
         int code = 100_000 + secureRandom.nextInt(900_000);
         String codeStr = String.valueOf(code);
         codeCache.put(key, codeStr);

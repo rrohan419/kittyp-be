@@ -2,6 +2,7 @@ package com.kittyp.common.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,6 +40,17 @@ class VerificationCodeServiceTest {
 				() -> service.verifyCode(key, "111111", true));
 		assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getHttpStatus());
 		assertEquals("Too many invalid OTP attempts. Please request a new code.", ex.getMessage());
+	}
+
+	@Test
+	void generateCode_resend_reusesLiveCode() {
+		String key = VerificationCodeService.phoneOtpKey("+919876543210");
+		String first = service.generateCode(key);
+		String second = service.generateCode(key);
+		assertEquals(first, second);
+		assertTrue(service.verifyCode(key, first, true));
+		String afterVerify = service.generateCode(key);
+		assertNotEquals(first, afterVerify);
 	}
 
 	@Test

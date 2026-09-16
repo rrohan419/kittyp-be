@@ -1,8 +1,7 @@
 package com.kittyp.notification.service;
 
 /**
- * Pluggable SMS delivery for OTP codes.
- * Local/dev uses a logging implementation; production can bind Twilio (or similar).
+ * SMS OTP delivery. Live bean is SmsGatewayService (SMS Gate POST /message).
  */
 public interface SmsService {
 

@@ -2,7 +2,7 @@ package com.kittyp.notification.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -58,7 +58,8 @@ class SmsGatewayServiceTest {
 		assertEquals(List.of("+919876543210"), body.get("phoneNumbers"));
 		@SuppressWarnings("unchecked")
 		Map<String, Object> textMessage = (Map<String, Object>) body.get("textMessage");
-		assertTrue(String.valueOf(textMessage.get("text")).contains("123456"));
+		assertEquals("Thank you for choosing Kittyp. Your code is 123456. Valid for 10 minutes.",
+				textMessage.get("text"));
 	}
 
 	@Test
