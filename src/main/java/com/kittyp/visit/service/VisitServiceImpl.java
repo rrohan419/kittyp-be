@@ -1726,7 +1726,9 @@ public class VisitServiceImpl implements VisitService {
                 doctorSpecialization,
                 doctorPhotoUrl,
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.isVideoLive(),
+                booking.isVideoJoinOpen());
     }
 
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {

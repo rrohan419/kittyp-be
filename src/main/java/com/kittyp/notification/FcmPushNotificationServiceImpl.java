@@ -33,12 +33,24 @@ public class FcmPushNotificationServiceImpl implements FcmPushNotificationServic
      */
     @Override
     public void sendPushNotification(String fcmToken, String title, String body) {
+        sendPushNotification(fcmToken, title, body, Map.of());
+    }
+
+    @Override
+    public void sendPushNotification(String fcmToken, String title, String body, Map<String, String> extraData) {
         try {
 
             Map<String, String> data = new HashMap<>();
             data.put("url", "/offers"); // This will be used by service worker for navigation
             data.put("click_action", "FLUTTER_NOTIFICATION_CLICK"); // optional, keeps compatibility
             data.put("icon", AppConstant.KITTYP_PUSH_NOTIFICATION_LOGO);
+            if (extraData != null) {
+                extraData.forEach((key, value) -> {
+                    if (key != null && value != null) {
+                        data.put(key, value);
+                    }
+                });
+            }
 
             Message message = Message.builder()
                     .setToken(fcmToken)
@@ -68,8 +80,13 @@ public class FcmPushNotificationServiceImpl implements FcmPushNotificationServic
 
     @Override
     public void sendNotificationToUser(List<String> fcmTokens, String title, String body) {
+        sendNotificationToUser(fcmTokens, title, body, Map.of());
+    }
+
+    @Override
+    public void sendNotificationToUser(List<String> fcmTokens, String title, String body, Map<String, String> extraData) {
         for (String token : fcmTokens) {
-            sendPushNotification(token, title, body);
+            sendPushNotification(token, title, body, extraData);
         }
     }
 

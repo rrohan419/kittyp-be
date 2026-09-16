@@ -22,5 +22,7 @@ public enum NotificationType {
     /** Clinic or platform promotional offer. */
     PROMO_OFFER,
     /** Parent booked an appointment with a doctor. */
-    BOOKING_CREATED
+    BOOKING_CREATED,
+    /** Doctor or parent started the Jitsi video consult. */
+    VIDEO_CALL_STARTED
 }

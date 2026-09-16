@@ -90,6 +90,8 @@ public class Booking extends BaseEntity implements HasPublicId {
     @Column(length = 1024)
     private String videoJoinUrl;
 
+    private LocalDateTime videoDoctorHeartbeatAt;
+
     @Column(columnDefinition = "TEXT")
     private String notes;
 
@@ -98,4 +100,26 @@ public class Booking extends BaseEntity implements HasPublicId {
 
     @Column(length = 1024)
     private String invoiceUrl;
+
+    public boolean isVideoLive() {
+        return isVideoLive(LocalDateTime.now());
+    }
+
+    public boolean isVideoLive(LocalDateTime now) {
+        if (videoDoctorHeartbeatAt == null || now == null) {
+            return false;
+        }
+        return videoDoctorHeartbeatAt.isAfter(now.minusSeconds(20));
+    }
+
+    public boolean isVideoJoinOpen() {
+        return isVideoJoinOpen(LocalDateTime.now());
+    }
+
+    public boolean isVideoJoinOpen(LocalDateTime now) {
+        if (mode != BookingMode.VIDEO || slotStart == null || now == null) {
+            return false;
+        }
+        return now.isBefore(slotStart.plusMinutes(30));
+    }
 }

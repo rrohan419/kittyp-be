@@ -70,6 +70,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             @Param("userUuid") String userUuid,
             @Param("userEmail") String userEmail);
 
+    @EntityGraph(attributePaths = { "pet", "pet.clinicOwner", "pet.clinicOwner.linkedUser", "doctor", "doctor.user",
+            "owner" })
     Optional<Booking> findByUuid(String uuid);
 
     boolean existsByUuid(String uuid);

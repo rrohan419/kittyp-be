@@ -48,4 +48,6 @@ public interface UserService {
 	FcmTokenModel updateUserFcmToken(String email, String fcmToken, HttpServletRequest request);
 
 	void sendPushNotification(String email, String title, String body);
+
+	void sendPushNotification(String email, String title, String body, String dataUrl, String type);
 }

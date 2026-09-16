@@ -6,6 +6,7 @@ package com.kittyp.user.service;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -579,11 +580,29 @@ public class UserServiceImpl implements UserService {
 
 	@Override
 	public void sendPushNotification(String email, String title, String body) {
+		sendPushNotification(email, title, body, "/offers", null);
+	}
+
+	@Override
+	public void sendPushNotification(String email, String title, String body, String dataUrl, String type) {
 		User user = userDao.userByEmail(email);
 		List<UserFcmToken> fcmTokens = fcmTokenDao.findByUser(user);
 		if (fcmTokens != null && !fcmTokens.isEmpty()) {
 			List<String> fcmTokensList = fcmTokens.stream().map(UserFcmToken::getToken).toList();
-			fcmPushNotificationService.sendNotificationToUser(fcmTokensList, title, body);
+			Map<String, String> extra = new HashMap<>();
+			String url = dataUrl == null || dataUrl.isBlank() ? "/offers" : dataUrl;
+			extra.put("url", url);
+			if (type != null && !type.isBlank()) {
+				extra.put("type", type);
+			}
+			if ("VIDEO_CALL".equals(type) && url.contains("/consult/")) {
+				String bookingUuid = url.substring(url.lastIndexOf('/') + 1);
+				if (!bookingUuid.isBlank()) {
+					extra.put("bookingUuid", bookingUuid);
+					extra.put("tag", "kittyp-video-" + bookingUuid);
+				}
+			}
+			fcmPushNotificationService.sendNotificationToUser(fcmTokensList, title, body, extra);
 		}
 	}
 

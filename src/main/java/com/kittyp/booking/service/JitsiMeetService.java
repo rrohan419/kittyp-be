@@ -13,39 +13,32 @@ import com.kittyp.booking.enums.BookingMode;
 @Service
 public class JitsiMeetService {
 
-	@Value("${app.jitsi.base-url:https://meet.jit.si}")
+	@Value("${app.jitsi.base-url:https://meet.element.io}")
 	private String baseUrl;
 
 	public void ensureVideoRoom(Booking booking) {
 		if (booking == null || booking.getMode() != BookingMode.VIDEO) {
 			return;
 		}
-		if (hasRoom(booking)) {
-			return;
+		if (booking.getJitsiRoomId() == null || booking.getJitsiRoomId().isBlank()) {
+			String token = booking.getUuid() == null ? "" : booking.getUuid().replaceAll("[^A-Za-z0-9]", "");
+			String salt = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+			booking.setJitsiRoomId(("kittyp" + token + salt).toLowerCase(Locale.ROOT));
 		}
-		String token = booking.getUuid() == null ? "" : booking.getUuid().replaceAll("[^A-Za-z0-9]", "");
-		String salt = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-		String room = ("kittyp" + token + salt).toLowerCase(Locale.ROOT);
-		booking.setJitsiRoomId(room);
-		booking.setVideoJoinUrl(normalizedBase() + "/" + room);
+		booking.setVideoJoinUrl(normalizedBase() + "/" + booking.getJitsiRoomId());
 	}
 
 	public String domain() {
 		try {
 			String host = URI.create(normalizedBase()).getHost();
-			return host == null || host.isBlank() ? "meet.jit.si" : host;
+			return host == null || host.isBlank() ? "meet.element.io" : host;
 		} catch (IllegalArgumentException ex) {
-			return "meet.jit.si";
+			return "meet.element.io";
 		}
 	}
 
-	private static boolean hasRoom(Booking booking) {
-		return booking.getJitsiRoomId() != null && !booking.getJitsiRoomId().isBlank()
-				&& booking.getVideoJoinUrl() != null && !booking.getVideoJoinUrl().isBlank();
-	}
-
 	private String normalizedBase() {
-		String raw = baseUrl == null || baseUrl.isBlank() ? "https://meet.jit.si" : baseUrl.trim();
+		String raw = baseUrl == null || baseUrl.isBlank() ? "https://meet.element.io" : baseUrl.trim();
 		while (raw.endsWith("/")) {
 			raw = raw.substring(0, raw.length() - 1);
 		}

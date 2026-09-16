@@ -2981,7 +2981,9 @@ public class ClinicServiceImpl implements ClinicService {
                         : booking.getDoctor().getSpecialization().name(),
                 booking.getDoctor() == null ? null : booking.getDoctor().getPhotoUrl(),
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.isVideoLive(),
+                booking.isVideoJoinOpen());
     }
 
     private static String doctorDisplayName(com.kittyp.doctor.entity.DoctorProfile doctor) {

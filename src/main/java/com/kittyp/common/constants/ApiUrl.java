@@ -211,6 +211,9 @@ public class ApiUrl {
 	public static final String DOCTOR_BOOKING_BY_UUID = DOCTOR_BASE_URL + "/bookings/{bookingUuid}";
 	public static final String DOCTOR_BOOKING_START_TREATMENT = DOCTOR_BOOKING_BY_UUID + "/start-treatment";
 	public static final String DOCTOR_BOOKING_VIDEO = DOCTOR_BOOKING_BY_UUID + "/video";
+	public static final String DOCTOR_BOOKING_VIDEO_STATUS = DOCTOR_BOOKING_VIDEO + "/status";
+	public static final String DOCTOR_BOOKING_VIDEO_HEARTBEAT = DOCTOR_BOOKING_VIDEO + "/heartbeat";
+	public static final String DOCTOR_BOOKING_VIDEO_END = DOCTOR_BOOKING_VIDEO + "/end";
 
 	public static final String CLINIC_DOCTOR_BUSY = CLINIC_DOCTOR_BY_UUID + "/busy";
 
@@ -225,6 +228,9 @@ public class ApiUrl {
 	public static final String USER_BOOKINGS = "/user/bookings";
 	public static final String USER_BOOKING_BY_UUID = USER_BOOKINGS + "/{bookingUuid}";
 	public static final String USER_BOOKING_VIDEO = USER_BOOKINGS + "/{bookingUuid}/video";
+	public static final String USER_BOOKING_VIDEO_STATUS = USER_BOOKING_VIDEO + "/status";
+	public static final String USER_VIDEO_CALLS_INCOMING = "/user/video-calls/incoming";
+	public static final String USER_VIDEO_CALL_ACK = "/user/video-calls/{bookingUuid}/ack";
 	public static final String USER_DOCTOR_SLOTS = "/user/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
 	public static final String USER_INVOICES_MINE = "/user/invoices/mine";
 	public static final String USER_REMINDERS = "/user/reminders";

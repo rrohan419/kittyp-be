@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.booking.dto.VideoJoinModel;
+import com.kittyp.booking.dto.VideoLiveModel;
 import com.kittyp.booking.entity.Booking;
 import com.kittyp.booking.repository.BookingRepository;
 import com.kittyp.booking.service.BookingVideoService;
@@ -98,6 +99,28 @@ public class DoctorBookingController {
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
+    @GetMapping(ApiUrl.DOCTOR_BOOKING_VIDEO_STATUS)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<VideoLiveModel>> videoStatus(
+            @PathVariable String bookingUuid) {
+        return responseBuilder.buildSuccessResponse(bookingVideoService.status(email(), bookingUuid),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.DOCTOR_BOOKING_VIDEO_HEARTBEAT)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<Void>> videoHeartbeat(@PathVariable String bookingUuid) {
+        bookingVideoService.heartbeat(email(), bookingUuid);
+        return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.DOCTOR_BOOKING_VIDEO_END)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<Void>> videoEnd(@PathVariable String bookingUuid) {
+        bookingVideoService.end(email(), bookingUuid);
+        return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
     private BookingModel toModel(Booking booking) {
         String ownerName = null;
         if (booking.getOwner() != null) {
@@ -155,7 +178,9 @@ public class DoctorBookingController {
                 doctorSpecialization,
                 doctorPhotoUrl,
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.isVideoLive(),
+                booking.isVideoJoinOpen());
     }
 
     private DoctorProfile currentDoctor() {

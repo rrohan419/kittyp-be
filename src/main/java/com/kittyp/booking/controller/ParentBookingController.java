@@ -17,7 +17,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.booking.dto.IncomingVideoCallModel;
 import com.kittyp.booking.dto.VideoJoinModel;
+import com.kittyp.booking.dto.VideoLiveModel;
 import com.kittyp.booking.service.BookingVideoService;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.common.constants.ApiUrl;
@@ -74,6 +76,31 @@ public class ParentBookingController {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return responseBuilder.buildSuccessResponse(bookingVideoService.join(email, bookingUuid),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @GetMapping(ApiUrl.USER_BOOKING_VIDEO_STATUS)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<VideoLiveModel>> videoStatus(
+            @PathVariable String bookingUuid) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(bookingVideoService.status(email, bookingUuid),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @GetMapping(ApiUrl.USER_VIDEO_CALLS_INCOMING)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<IncomingVideoCallModel>> incoming() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(bookingVideoService.incoming(email), ResponseMessage.SUCCESS,
+                HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.USER_VIDEO_CALL_ACK)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<Void>> ack(@PathVariable String bookingUuid) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        bookingVideoService.ack(email, bookingUuid);
+        return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.USER_DOCTOR_SLOTS)
