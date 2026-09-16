@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
+import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.repository.DoctorProfileRepository;
@@ -29,12 +30,15 @@ class PhoneAvailabilityServiceTest {
 	private ClinicPetOwnerRepository clinicPetOwnerRepository;
 	@Mock
 	private DoctorProfileRepository doctorProfileRepository;
+	@Mock
+	private ClinicRepository clinicRepository;
 
 	private PhoneAvailabilityService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new PhoneAvailabilityService(userRepository, clinicPetOwnerRepository, doctorProfileRepository);
+		service = new PhoneAvailabilityService(userRepository, clinicPetOwnerRepository, doctorProfileRepository,
+				clinicRepository);
 	}
 
 	@Test
@@ -68,10 +72,22 @@ class PhoneAvailabilityServiceTest {
 	}
 
 	@Test
+	void assertAvailable_clinicRowTaken_throwsConflict() {
+		when(userRepository.countByLocal10DigitsExcludingUuid("9384720938", null)).thenReturn(0L);
+		when(clinicPetOwnerRepository.countActiveByLocal10ExcludingLinkedUser("9384720938", null)).thenReturn(0L);
+		when(doctorProfileRepository.countByLocal10ExcludingUserUuid("9384720938", null)).thenReturn(0L);
+		when(clinicRepository.countByLocal10ExcludingOwnerUserId("9384720938", null)).thenReturn(1L);
+
+		CustomException ex = assertThrows(CustomException.class, () -> service.assertAvailable("9384720938", null));
+		assertEquals(PhoneAvailabilityService.ALREADY_IN_USE, ex.getMessage());
+	}
+
+	@Test
 	void assertAvailable_free_doesNotThrow() {
 		when(userRepository.countByLocal10DigitsExcludingUuid("7798296970", null)).thenReturn(0L);
 		when(clinicPetOwnerRepository.countActiveByLocal10ExcludingLinkedUser("7798296970", null)).thenReturn(0L);
 		when(doctorProfileRepository.countByLocal10ExcludingUserUuid("7798296970", null)).thenReturn(0L);
+		when(clinicRepository.countByLocal10ExcludingOwnerUserId("7798296970", null)).thenReturn(0L);
 
 		service.assertAvailable("7798296970", null);
 
@@ -81,6 +97,6 @@ class PhoneAvailabilityServiceTest {
 	@Test
 	void assertAvailable_placeholder_skipsLookup() {
 		service.assertAvailable(ClinicOwnerUserLinkService.PLACEHOLDER_PHONE, null);
-		verifyNoInteractions(userRepository, clinicPetOwnerRepository, doctorProfileRepository);
+		verifyNoInteractions(userRepository, clinicPetOwnerRepository, doctorProfileRepository, clinicRepository);
 	}
 }

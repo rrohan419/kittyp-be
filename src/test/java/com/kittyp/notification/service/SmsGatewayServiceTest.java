@@ -58,7 +58,7 @@ class SmsGatewayServiceTest {
 		assertEquals(List.of("+919876543210"), body.get("phoneNumbers"));
 		@SuppressWarnings("unchecked")
 		Map<String, Object> textMessage = (Map<String, Object>) body.get("textMessage");
-		assertEquals("Thank you for choosing Kittyp. Your code is 123456. Valid for 10 minutes.",
+		assertEquals("Kittyp code 123456. Valid 10 min.",
 				textMessage.get("text"));
 	}
 

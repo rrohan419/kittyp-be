@@ -55,7 +55,7 @@ public class SmsGatewayService implements SmsService {
 		String phone = toE164(phoneNumber);
 		Map<String, Object> body = Map.of(
 				"textMessage", Map.of("text",
-						"Thank you for choosing Kittyp. Your code is " + otpCode.trim() + ". Valid for 10 minutes."),
+						"Kittyp code " + otpCode.trim() + ". Valid 10 min."),
 				"phoneNumbers", List.of(phone));
 
 		try {

@@ -301,6 +301,12 @@ public class AuthServiceImpl implements AuthService {
 		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
+		if (signupClinicRequestDto.getPhone() != null && !signupClinicRequestDto.getPhone().isBlank()) {
+			String digits = signupClinicRequestDto.getPhone().replaceAll("\\D", "");
+			if (digits.length() >= 10) {
+				phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), null);
+			}
+		}
 
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
 
