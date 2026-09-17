@@ -15,8 +15,11 @@ public interface SmsService {
 
 	/**
 	 * Same as {@link #sendOtp(String, String)} with email failover when the phone gateway fails.
+	 *
+	 * @return {@code true} if the OTP was delivered via email failover instead of SMS
 	 */
-	default void sendOtp(String phoneNumber, String code, String fallbackEmail) {
+	default boolean sendOtp(String phoneNumber, String code, String fallbackEmail) {
 		sendOtp(phoneNumber, code);
+		return false;
 	}
 }

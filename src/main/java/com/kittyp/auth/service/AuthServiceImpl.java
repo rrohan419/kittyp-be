@@ -250,7 +250,10 @@ public class AuthServiceImpl implements AuthService {
 			}
 			phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), null);
 			String code = verificationCodeService.generateCode(VerificationCodeService.phoneOtpKey(phone));
-			smsService.sendOtp(phone, code, request.getEmail());
+			boolean emailed = smsService.sendOtp(phone, code, request.getEmail());
+			if (emailed) {
+				return new MessageResponse("SMS unavailable; OTP sent to email");
+			}
 			return new MessageResponse("OTP sent to phone");
 		}
 		throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);

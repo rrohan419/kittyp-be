@@ -60,12 +60,15 @@ public class SmsGatewayService implements SmsService {
 	}
 
 	@Override
-	public void sendOtp(String phoneNumber, String otpCode, String fallbackEmail) {
+	public boolean sendOtp(String phoneNumber, String otpCode, String fallbackEmail) {
 		NotificationInputSanitizer.rejectCrLf(phoneNumber, "phone");
 		String otp = NotificationInputSanitizer.requireOtp(otpCode);
 		String phone = NotificationInputSanitizer.requireE164Phone(phoneNumber);
 
 		if (baseUrl.isBlank() || username.isBlank() || password.isBlank()) {
+			if (failover(fallbackEmail, otp, phone)) {
+				return true;
+			}
 			throw new CustomException("SMS gateway is not configured", HttpStatus.SERVICE_UNAVAILABLE);
 		}
 
@@ -83,31 +86,34 @@ public class SmsGatewayService implements SmsService {
 					.retrieve()
 					.body(String.class);
 			log.info("SMS OTP queued for {} smsgate={}", PiiMasker.maskPhone(phone), truncate(response));
+			return false;
 		} catch (RestClientResponseException e) {
 			String snippet = e.getResponseBodyAsString();
 			if (snippet != null && snippet.length() > 200) {
 				snippet = snippet.substring(0, 200);
 			}
 			log.warn("SMS gateway HTTP {} for {}: {}", e.getStatusCode().value(), PiiMasker.maskPhone(phone), snippet);
-			if (isServerError(e.getStatusCode()) && failover(fallbackEmail, otp)) {
-				return;
+			if (isServerError(e.getStatusCode()) && failover(fallbackEmail, otp, phone)) {
+				return true;
 			}
 			throw new CustomException("Failed to send SMS", HttpStatus.BAD_GATEWAY, e);
 		} catch (ResourceAccessException e) {
 			log.warn("SMS gateway unreachable for {}: {}", PiiMasker.maskPhone(phone), e.getMessage());
-			if (failover(fallbackEmail, otp)) {
-				return;
+			if (failover(fallbackEmail, otp, phone)) {
+				return true;
 			}
-			throw new CustomException("Failed to send SMS", HttpStatus.SERVICE_UNAVAILABLE, e);
+			throw new CustomException(
+					"SMS gateway unreachable. Use email OTP, or start the SMS gateway and retry.",
+					HttpStatus.SERVICE_UNAVAILABLE, e);
 		}
 	}
 
-	private boolean failover(String fallbackEmail, String otp) {
+	private boolean failover(String fallbackEmail, String otp, String phone) {
 		if (zeptoMailService == null || fallbackEmail == null || fallbackEmail.isBlank()) {
 			return false;
 		}
 		NotificationInputSanitizer.requireEmail(fallbackEmail);
-		zeptoMailService.sendEmailChangeOtp(fallbackEmail.trim(), "there", "KittyP", otp);
+		zeptoMailService.sendSignupOtpEmail(fallbackEmail.trim(), otp, "PHONE", phone);
 		log.warn("SMS gateway failed; OTP emailed to {}", PiiMasker.maskEmail(fallbackEmail));
 		return true;
 	}
