@@ -131,7 +131,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name;
 			if ("PHONE".equalsIgnoreCase(purpose) && phoneHint != null) {
-				name = "Phone verify (" + phoneHint + ")";
+				name = "Phone OTP (not email) — " + phoneHint;
 			} else if ("CLINIC".equalsIgnoreCase(purpose) || "CLINIC_ADMIN".equalsIgnoreCase(purpose)) {
 				name = "Clinic Admin";
 			} else if ("PARENT".equalsIgnoreCase(purpose) || "USER".equalsIgnoreCase(purpose)) {

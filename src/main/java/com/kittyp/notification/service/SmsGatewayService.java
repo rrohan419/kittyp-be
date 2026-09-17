@@ -103,7 +103,7 @@ public class SmsGatewayService implements SmsService {
 				return true;
 			}
 			throw new CustomException(
-					"SMS gateway unreachable. Use email OTP, or start the SMS gateway and retry.",
+					"SMS gateway unreachable. Check email for a Phone verify OTP, or start the SMS gateway and retry.",
 					HttpStatus.SERVICE_UNAVAILABLE, e);
 		}
 	}

@@ -266,6 +266,16 @@ public class AuthServiceImpl implements AuthService {
 
 		if ("EMAIL".equals(channel)) {
 			String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
+			String phoneForCrossCheck = request.getPhone() == null ? "" : request.getPhone().trim();
+			if (!phoneForCrossCheck.isBlank()
+					&& verificationCodeService.codeMatches(VerificationCodeService.phoneOtpKey(phoneForCrossCheck),
+							request.getCode())
+					&& !verificationCodeService.codeMatches(VerificationCodeService.emailOtpKey(email),
+							request.getCode())) {
+				throw new CustomException(
+						"That code is for phone verification. Enter the email OTP from your inbox.",
+						HttpStatus.BAD_REQUEST);
+			}
 			ok = verificationCodeService.verifyCode(VerificationCodeService.emailOtpKey(email), request.getCode(), true);
 			if (ok) {
 				verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(email));
@@ -273,6 +283,16 @@ public class AuthServiceImpl implements AuthService {
 		} else if ("PHONE".equals(channel)) {
 			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
 			String otpKey = VerificationCodeService.phoneOtpKey(phone);
+			// Reject email-channel OTP pasted into the phone field (common when SMS fails over to email).
+			String emailForCrossCheck = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
+			if (!emailForCrossCheck.isBlank()
+					&& verificationCodeService.codeMatches(VerificationCodeService.emailOtpKey(emailForCrossCheck),
+							request.getCode())
+					&& !verificationCodeService.codeMatches(otpKey, request.getCode())) {
+				throw new CustomException(
+						"That code is for email verification. Enter the phone OTP from SMS or the Phone verify email.",
+						HttpStatus.BAD_REQUEST);
+			}
 			ok = verifySmsOrMaster(otpKey, request.getCode());
 			if (ok) {
 				verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(phone));

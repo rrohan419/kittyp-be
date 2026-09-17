@@ -82,6 +82,15 @@ public class VerificationCodeService {
         return false;
     }
 
+    /** Peek whether code matches without consuming attempts or deactivating. */
+    public boolean codeMatches(String key, String code) {
+        if (key == null || code == null || code.isBlank()) {
+            return false;
+        }
+        String cached = codeCache.getIfPresent(key);
+        return cached != null && cached.equals(code.trim());
+    }
+
     public void markVerified(String key) {
         verifiedCache.put(key, Boolean.TRUE);
     }
@@ -110,12 +119,25 @@ public class VerificationCodeService {
         }
     }
 
+    /** Last-10 digits with +91 prefix so send/verify share one phone OTP cache key. */
+    public static String normalizePhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return "";
+        }
+        String digits = phone.replaceAll("\\D", "");
+        if (digits.length() >= 10) {
+            String local10 = digits.substring(digits.length() - 10);
+            return "+91" + local10;
+        }
+        return phone.trim();
+    }
+
     public static String emailOtpKey(String email) {
         return "signup-email:" + email.trim().toLowerCase();
     }
 
     public static String phoneOtpKey(String phone) {
-        return "signup-phone:" + phone.trim();
+        return "signup-phone:" + normalizePhone(phone);
     }
 
     public static String emailVerifiedKey(String email) {
@@ -123,7 +145,7 @@ public class VerificationCodeService {
     }
 
     public static String phoneVerifiedKey(String phone) {
-        return "signup-phone-ok:" + phone.trim();
+        return "signup-phone-ok:" + normalizePhone(phone);
     }
 
     public static String profileEmailOtpKey(String userUuid, String email) {
