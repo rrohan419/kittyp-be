@@ -45,7 +45,7 @@ import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.email.service.ZeptoMailService;
-import com.kittyp.notification.service.SmsService;
+import com.kittyp.notification.service.SmsGatewayService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Role;
@@ -72,7 +72,7 @@ public class AuthServiceImpl implements AuthService {
 	private final ClinicDoctorInviteRepository clinicDoctorInviteRepository;
 	private final DoctorProfileDao doctorProfileDao;
 	private final VerificationCodeService verificationCodeService;
-	private final SmsService smsService;
+	private final SmsGatewayService smsGatewayService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 	private final LoginRateLimiter loginRateLimiter;
 
@@ -226,7 +226,6 @@ public class AuthServiceImpl implements AuthService {
 				throw new ResourceAlreadyExistsException("User", "email", email);
 			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
-			System.out.println("code = " + code);
 			zeptoMailService.sendSignupOtpEmail(email, code, "EMAIL", null);
 			return new MessageResponse("OTP sent to email");
 		}
@@ -242,7 +241,7 @@ public class AuthServiceImpl implements AuthService {
 			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.phoneOtpKey(phone));
 			System.out.println("code = " + code);
-			smsService.sendOtp(phone, code);
+			smsGatewayService.sendOtp(phone, code);
 			return new MessageResponse("OTP sent to phone");
 		}
 		throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
