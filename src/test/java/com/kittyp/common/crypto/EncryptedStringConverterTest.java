@@ -39,6 +39,13 @@ class EncryptedStringConverterTest {
     }
 
     @Test
+    void undecryptableCiphertextReadsAsUnset() {
+        String stored = converter.convertToDatabaseColumn("EAAG.rotated-key-token");
+        String tampered = stored.substring(0, stored.length() - 5) + "AAAAA";
+        assertEquals(null, converter.convertToEntityAttribute(tampered));
+    }
+
+    @Test
     void doesNotDoubleEncrypt() {
         String once = converter.convertToDatabaseColumn("tok");
         String twice = converter.convertToDatabaseColumn(once);

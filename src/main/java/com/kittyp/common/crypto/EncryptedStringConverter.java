@@ -132,7 +132,10 @@ public class EncryptedStringConverter implements AttributeConverter<String, Stri
             cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(requireKey(), "AES"), new GCMParameterSpec(TAG_BITS, iv));
             return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to decrypt sensitive field", e);
+            // A ciphertext written under a rotated key must not break reads of the whole row.
+            log.error("Failed to decrypt sensitive field (len={}) — treating as unset. "
+                    + "Re-save the value with the current app.crypto.secret.", dbData.length(), e);
+            return null;
         }
     }
 
