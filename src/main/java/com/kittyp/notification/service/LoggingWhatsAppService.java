@@ -59,6 +59,18 @@ public class LoggingWhatsAppService implements WhatsAppService {
         throw notConfigured();
     }
 
+        @Override
+        public void sendAuthenticationTemplate(
+            WhatsAppSenderCredentials sender,
+            String toE164Digits,
+            String templateName,
+            String languageCode,
+            String code) {
+        log.warn("WhatsApp disabled — would send authentication template {} to {}", templateName,
+            WhatsAppPhones.redact(toE164Digits));
+        throw notConfigured();
+        }
+
     private CustomException notConfigured() {
         return new CustomException(
                 "WhatsApp is not configured. Set WHATSAPP_ENABLED=true and Meta credentials in Doctor/Clinic settings.",

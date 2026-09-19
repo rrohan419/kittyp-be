@@ -14,6 +14,8 @@ public class SignupOtpVerifyRequest {
     private String email;
     private String phone;
 
-    @NotBlank
     private String code;
+
+    /** MSG91 widget JWT returned after the WhatsApp OTP is verified in the widget. */
+    private String accessToken;
 }
