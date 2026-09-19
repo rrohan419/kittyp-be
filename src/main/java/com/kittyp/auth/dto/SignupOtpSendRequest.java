@@ -8,7 +8,7 @@ import lombok.Setter;
 @Setter
 public class SignupOtpSendRequest {
 
-    /** EMAIL or PHONE */
+    /** EMAIL or WHATSAPP */
     @NotBlank
     private String channel;
 

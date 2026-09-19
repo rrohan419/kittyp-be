@@ -19,6 +19,8 @@ import org.springframework.web.client.RestClientResponseException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.constants.ApiUrl;
+import com.kittyp.common.constants.KeyConstant;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -60,9 +62,9 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         }
         String safeName = (filename == null || filename.isBlank()) ? "invoice.pdf" : filename;
         MultipartBodyBuilder body = new MultipartBodyBuilder();
-        body.part("messaging_product", "whatsapp");
-        body.part("type", "application/pdf");
-        body.part("file", new ByteArrayResource(pdfBytes) {
+        body.part(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, KeyConstant.WHATSAPP_MESSAGE_PRODUCT);
+        body.part(KeyConstant.WHATSAPP_MESSAGE_TYPE, "application/pdf");
+        body.part(KeyConstant.WHATSAPP_MESSAGE_FILE, new ByteArrayResource(pdfBytes) {
             @Override
             public String getFilename() {
                 return safeName;
@@ -104,14 +106,14 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             List<String> bodyParams) {
         WhatsAppSenderCredentials creds = requireSender(sender);
         Map<String, Object> headerParam = new LinkedHashMap<>();
-        headerParam.put("type", "document");
+        headerParam.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "document");
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("id", mediaId);
         document.put("filename", filename == null || filename.isBlank() ? "invoice.pdf" : filename);
         headerParam.put("document", document);
 
         Map<String, Object> headerComponent = new LinkedHashMap<>();
-        headerComponent.put("type", "header");
+        headerComponent.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "header");
         headerComponent.put("parameters", List.of(headerParam));
 
         List<Map<String, Object>> components = new ArrayList<>();
@@ -120,12 +122,12 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             List<Map<String, Object>> params = new ArrayList<>();
             for (String param : bodyParams) {
                 Map<String, Object> tp = new LinkedHashMap<>();
-                tp.put("type", "text");
-                tp.put("text", WhatsAppPhones.sanitizeTemplateText(param));
+                tp.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text");
+                tp.put("text", WhatsAppPhones.sanitizeTemplateText(p));
                 params.add(tp);
             }
             Map<String, Object> bodyComponent = new LinkedHashMap<>();
-            bodyComponent.put("type", "body");
+            bodyComponent.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "body");
             bodyComponent.put("parameters", params);
             components.add(bodyComponent);
         }
@@ -137,9 +139,9 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         template.put("components", components);
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("messaging_product", "whatsapp");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, "whatsapp");
         payload.put("to", toE164Digits);
-        payload.put("type", "template");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "template");
         payload.put("template", template);
 
         postMessage(creds, payload);
@@ -158,12 +160,12 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             List<Map<String, Object>> params = new ArrayList<>();
             for (String p : bodyParams) {
                 Map<String, Object> tp = new LinkedHashMap<>();
-                tp.put("type", "text");
+                tp.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text");
                 tp.put("text", WhatsAppPhones.sanitizeTemplateText(p));
                 params.add(tp);
             }
             Map<String, Object> bodyComponent = new LinkedHashMap<>();
-            bodyComponent.put("type", "body");
+            bodyComponent.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "body");
             bodyComponent.put("parameters", params);
             components.add(bodyComponent);
         }
@@ -177,9 +179,45 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("messaging_product", "whatsapp");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, "whatsapp");
         payload.put("to", toE164Digits);
-        payload.put("type", "template");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "template");
+        payload.put("template", template);
+
+        postMessage(creds, payload);
+    }
+
+    @Override
+    public void sendAuthenticationTemplate(
+            WhatsAppSenderCredentials sender,
+            String toE164Digits,
+            String templateName,
+            String languageCode,
+            String code) {
+        WhatsAppSenderCredentials creds = requireSender(sender);
+        String safeCode = WhatsAppPhones.sanitizeTemplateText(code);
+
+        Map<String, Object> bodyParameter = Map.of(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text", "text", safeCode);
+        Map<String, Object> body = Map.of(
+                KeyConstant.WHATSAPP_MESSAGE_TYPE, "body",
+                "parameters", List.of(bodyParameter));
+
+        Map<String, Object> buttonParameter = Map.of(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text", "text", safeCode);
+        Map<String, Object> button = Map.of(
+                KeyConstant.WHATSAPP_MESSAGE_TYPE, "button",
+            "sub_type", "url",
+                "index", "0",
+                "parameters", List.of(buttonParameter));
+
+        Map<String, Object> template = new LinkedHashMap<>();
+        template.put("name", templateName);
+        template.put("language", Map.of("code", languageCode == null || languageCode.isBlank() ? "en" : languageCode));
+        template.put("components", List.of(body, button));
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, "whatsapp");
+        payload.put("to", toE164Digits);
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "template");
         payload.put("template", template);
 
         postMessage(creds, payload);
@@ -208,7 +246,7 @@ public class WhatsAppCloudApiService implements WhatsAppService {
 
     private RestClient client(WhatsAppSenderCredentials creds) {
         return RestClient.builder()
-                .baseUrl("https://graph.facebook.com/" + apiVersion)
+                .baseUrl(ApiUrl.FACEBOOK_BASE_URL + apiVersion)
                 .defaultHeader("Authorization", "Bearer " + creds.token())
                 .build();
     }

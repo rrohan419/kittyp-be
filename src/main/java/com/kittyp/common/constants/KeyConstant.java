@@ -40,6 +40,17 @@ public class KeyConstant {
 	public static final String EXPRESS_SHIPPING = "EXPRESS";
 	public static final String STANDRAD_SHIPPING = "STANDARD";
 
-	
+	// Whatsapp 
+	public static final String WHATSAPP = "whatsapp";
+	public static final String WHATSAPP_MESSAGE_PRODUCT = "messaging_product";
+	public static final String WHATSAPP_MESSAGE_TYPE = "type";
+	public static final String WHATSAPP_MESSAGE_FILE = "file";
+	public static final String WHATSAPP_MESSAGE_TYPE_TEMPLATE = "template";
+	public static final String WHATSAPP_MESSAGE_TYPE_TEXT = "text";
+	public static final String WHATSAPP_MESSAGE_TYPE_DOCUMENT = "document";
+	public static final String WHATSAPP_MESSAGE_TYPE_ATTACHMENT = "attachment";
+	public static final String WHATSAPP_MESSAGE_TEMPLATE_NAME = "name";
+	public static final String WHATSAPP_MESSAGE_TEMPLATE_LANGUAGE = "language";
+	public static final String WHATSAPP_MESSAGE_TEMPLATE_LANGUAGE_CODE = "code";
 	
 }

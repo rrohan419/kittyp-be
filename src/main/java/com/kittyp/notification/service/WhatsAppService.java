@@ -53,4 +53,14 @@ public interface WhatsAppService {
             String templateName,
             String languageCode,
             List<String> bodyParams);
+
+    /**
+     * Send an approved authentication template with a copy-code button.
+     */
+    void sendAuthenticationTemplate(
+            WhatsAppSenderCredentials sender,
+            String toE164Digits,
+            String templateName,
+            String languageCode,
+            String code);
 }

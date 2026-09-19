@@ -244,4 +244,7 @@ public class ApiUrl {
 	public static final String CONSULTATION_INVOICE_PDF = CONSULTATION_INVOICE_BY_UUID + "/pdf";
 	public static final String CONSULTATION_INVOICE_SEND_WHATSAPP = CONSULTATION_INVOICE_BY_UUID + "/send-whatsapp";
 	public static final String CONSULTATION_INVOICE_MARK_PAID = CONSULTATION_INVOICE_BY_UUID + "/mark-paid";
+
+	// Facebook URL
+	public static final String FACEBOOK_BASE_URL = "https://graph.facebook.com/";
 }
