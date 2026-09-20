@@ -7,6 +7,18 @@ import java.util.List;
  */
 public interface WhatsAppService {
 
+    /**
+     * True when this bean can deliver to Meta (Cloud API active).
+     * False for the local/disabled stub even if tenant credentials exist.
+     */
+    default boolean isDeliveryEnabled() {
+        return true;
+    }
+
+    /**
+     * True when the given clinic/doctor sender has Phone Number ID + token.
+     * Does not imply {@link #isDeliveryEnabled()}.
+     */
     boolean isConfigured(WhatsAppSenderCredentials sender);
 
     /**

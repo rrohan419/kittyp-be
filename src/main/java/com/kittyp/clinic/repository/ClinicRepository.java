@@ -64,4 +64,6 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
               AND c.status = com.kittyp.clinic.enums.ClinicStatus.VERIFIED
             """)
     List<Clinic> findDiscoverable();
+
+    List<Clinic> findByWhatsappBusinessAccountId(String whatsappBusinessAccountId);
 }

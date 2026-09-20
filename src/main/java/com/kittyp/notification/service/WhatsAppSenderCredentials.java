@@ -6,15 +6,22 @@ import org.springframework.util.StringUtils;
  * Meta Cloud API sender identity for one business WhatsApp number.
  * Doctor and clinic credentials must never be mixed on a single send.
  */
-public record WhatsAppSenderCredentials(String token, String phoneNumberId) {
+public record WhatsAppSenderCredentials(String token, String phoneNumberId, String invoiceTemplateStatus) {
 
     public boolean isConfigured() {
         return StringUtils.hasText(token) && StringUtils.hasText(phoneNumberId);
     }
 
     public static WhatsAppSenderCredentials of(String token, String phoneNumberId) {
+        return of(token, phoneNumberId, null);
+    }
+
+    public static WhatsAppSenderCredentials of(String token, String phoneNumberId, String invoiceTemplateStatus) {
         return new WhatsAppSenderCredentials(
                 token == null ? "" : token.trim(),
-                phoneNumberId == null ? "" : phoneNumberId.trim());
+                phoneNumberId == null ? "" : phoneNumberId.trim(),
+                invoiceTemplateStatus == null || invoiceTemplateStatus.isBlank()
+                        ? null
+                        : invoiceTemplateStatus.trim());
     }
 }
