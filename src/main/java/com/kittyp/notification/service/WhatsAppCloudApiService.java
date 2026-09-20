@@ -120,7 +120,7 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         components.add(headerComponent);
         if (bodyParams != null && !bodyParams.isEmpty()) {
             List<Map<String, Object>> params = new ArrayList<>();
-            for (String param : bodyParams) {
+            for (String p : bodyParams) {
                 Map<String, Object> tp = new LinkedHashMap<>();
                 tp.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text");
                 tp.put("text", WhatsAppPhones.sanitizeTemplateText(p));
