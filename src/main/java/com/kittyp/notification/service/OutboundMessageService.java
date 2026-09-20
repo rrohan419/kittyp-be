@@ -34,7 +34,7 @@ public class OutboundMessageService {
     private final NotificationLogRepository notificationLogRepository;
     private final ObjectMapper objectMapper;
 
-    @Value("${whatsapp.invoice-template:invoice_receipt}")
+    @Value("${whatsapp.invoice-template:invoice}")
     private String invoiceTemplate;
 
     @Value("${whatsapp.invoice-template-lang:en}")

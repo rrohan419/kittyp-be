@@ -143,7 +143,6 @@ public class WhatsAppConnectionService {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	private static String resolveInvoiceStatus(Map<String, Object> templates) {
 		if (templates == null) {
 			return WhatsAppConnectionStatuses.TEMPLATE_MISSING;

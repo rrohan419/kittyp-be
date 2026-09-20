@@ -6,7 +6,7 @@
 |----------|-----|-------------|
 | `whatsapp.enabled` | `WHATSAPP_ENABLED` | `true` when ready to send (default `false`) |
 | `whatsapp.api-version` | `WHATSAPP_API_VERSION` | e.g. `v21.0` |
-| `whatsapp.invoice-template` | `WHATSAPP_INVOICE_TEMPLATE` | Template name, default `invoice_receipt` |
+| `whatsapp.invoice-template` | `WHATSAPP_INVOICE_TEMPLATE` | Template name, default `invoice` |
 | `whatsapp.invoice-template-lang` | `WHATSAPP_INVOICE_TEMPLATE_LANG` | Default `en` |
 | `whatsapp.vaccine-template` | `WHATSAPP_VACCINE_TEMPLATE` | Phase 2, default `vaccine_reminder` |
 | `whatsapp.checkup-template` | `WHATSAPP_CHECKUP_TEMPLATE` | Phase 2, default `checkup_reminder` |
@@ -22,13 +22,20 @@
 Public FE config (never exposes secret): `GET /api/v1/public/whatsapp/embedded-signup-config`
 → `{ enabled, appId, configId, apiVersion }`.
 
-## Embedded Signup (recommended clinic UX)
+## Embedded Signup v4 (recommended clinic UX)
+
+Create a **new** Facebook Login for Business configuration in Meta App Dashboard:
+`Facebook Login for Business` → `Configurations` → `Embedded Signup`. Select the
+Cloud API product and copy its new configuration ID into
+`WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`. Do not reuse the previous Embedded Signup
+configuration; Meta's v2 flow is deprecated on October 15, 2026.
 
 Clinic admins and personal-practice doctors use **Connect WhatsApp with Meta** on
 `/clinic/whatsapp` or `/doctor/whatsapp`. Flow:
 
-1. FE loads Facebook JS SDK with public App ID + Embedded Signup `config_id`
-2. Meta returns an auth `code` (+ optional `waba_id` / `phone_number_id` via `postMessage`)
+1. FE loads Facebook JS SDK with public App ID + the v4 Embedded Signup `config_id`
+2. Meta returns an auth `code` and a `WA_EMBEDDED_SIGNUP` message with `event: FINISH`
+   plus `data.waba_id` and `data.phone_number_id`
 3. BE `POST .../whatsapp/connect/embedded` exchanges the code (App Secret), validates the phone
    belongs to the WABA, subscribes the KittyP app, optionally registers the phone, saves credentials,
    and ensures `invoice_receipt` templates

@@ -37,7 +37,7 @@ public class WhatsAppEmbeddedSignupService {
 	public WhatsAppEmbeddedSignupService(
 			ObjectMapper objectMapper,
 			WhatsAppCredentialsVerifier credentialsVerifier,
-			@Value("${whatsapp.api-version:v21.0}") String apiVersion,
+			@Value("${whatsapp.api-version:v26.0}") String apiVersion,
 			@Value("${whatsapp.meta-app-id:}") String metaAppId,
 			@Value("${whatsapp.meta-app-secret:}") String metaAppSecret,
 			@Value("${whatsapp.register-pin:}") String registerPin) {

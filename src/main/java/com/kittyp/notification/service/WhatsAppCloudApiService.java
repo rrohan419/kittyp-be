@@ -35,10 +35,10 @@ public class WhatsAppCloudApiService implements WhatsAppService {
 
     public WhatsAppCloudApiService(
             ObjectMapper objectMapper,
-            @Value("${whatsapp.api-version:v21.0}") String apiVersion,
+            @Value("${whatsapp.api-version:v26.0}") String apiVersion,
             @Value("${whatsapp.default-country-code:91}") String defaultCountryCode) {
         this.objectMapper = objectMapper;
-        this.apiVersion = apiVersion == null || apiVersion.isBlank() ? "v21.0" : apiVersion.trim();
+        this.apiVersion = apiVersion == null || apiVersion.isBlank() ? "v26.0" : apiVersion.trim();
         this.defaultCountryCode = defaultCountryCode == null || defaultCountryCode.isBlank()
                 ? "91"
                 : defaultCountryCode.replace("+", "").trim();
