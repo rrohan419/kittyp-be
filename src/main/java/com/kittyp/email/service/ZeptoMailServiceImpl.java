@@ -126,7 +126,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
 			String name = "PHONE".equalsIgnoreCase(purpose) && phoneHint != null
 					? "Phone verify (" + phoneHint + ")"
-					: "Doctor Applicant";
+					: "Kittyp Applicant";
 			mailDto.setMergeInfo(Map.of(
 					"Customer_Name", name,
 					"OTP", code));
