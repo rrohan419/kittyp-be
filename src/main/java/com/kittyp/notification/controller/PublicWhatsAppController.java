@@ -49,7 +49,7 @@ public class PublicWhatsAppController {
 		map.put("enabled", configured);
 		map.put("appId", metaAppId == null ? "" : metaAppId.trim());
 		map.put("configId", embeddedSignupConfigId == null ? "" : embeddedSignupConfigId.trim());
-		map.put("apiVersion", apiVersion == null || apiVersion.isBlank() ? "v21.0" : apiVersion.trim());
+		map.put("apiVersion", apiVersion == null || apiVersion.isBlank() ? "v26.0" : apiVersion.trim());
 		return responseBuilder.buildSuccessResponse(map, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 }
