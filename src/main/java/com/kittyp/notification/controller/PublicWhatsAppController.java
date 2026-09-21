@@ -37,7 +37,7 @@ public class PublicWhatsAppController {
 	@Value("${whatsapp.embedded-signup-config-id:}")
 	private String embeddedSignupConfigId;
 
-	@Value("${whatsapp.api-version:v21.0}")
+	@Value("${whatsapp.api-version:v26.0}")
 	private String apiVersion;
 
 	@GetMapping(ApiUrl.PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG)
