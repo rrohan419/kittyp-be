@@ -77,22 +77,22 @@ class AuthServiceImplRegisterTest {
 		when(clinicDao.saveClinic(any(Clinic.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(clinicDao.findAllByOwnerUserId(any())).thenReturn(List.of());
 
-		// authService = new AuthServiceImpl(
-		// 		userDao,
-		// 		encoder,
-		// 		roleDao,
-		// 		null,
-		// 		null,
-		// 		zeptoMailService,
-		// 		null,
-		// 		clinicDao,
-		// 		clinicDoctorRepository,
-		// 		clinicDoctorInviteRepository,
-		// 		doctorProfileDao,
-		// 		verificationCodeService,
-		// 		null,
-		// 		clinicOwnerUserLinkService,
-		// 		null);
+		authService = new AuthServiceImpl(
+				userDao,
+				encoder,
+				roleDao,
+				null,
+				null,
+				zeptoMailService,
+				null,
+				clinicDao,
+				clinicDoctorRepository,
+				clinicDoctorInviteRepository,
+				doctorProfileDao,
+				verificationCodeService,
+				null,
+				clinicOwnerUserLinkService,
+				null);
 	}
 
 	@Test
