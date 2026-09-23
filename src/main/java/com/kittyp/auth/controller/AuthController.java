@@ -33,6 +33,7 @@ import com.kittyp.user.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -118,7 +119,7 @@ public class AuthController {
 	}
 
 	@GetMapping(ApiUrl.SEND_CODE)
-	public ResponseEntity<SuccessResponse<Boolean>> sendResetPasswordCode(@RequestParam String email) {
+	public ResponseEntity<SuccessResponse<Boolean>> sendResetPasswordCode(@RequestParam @Email(message = "Please provide a valid email address") String email) {
 		// Always return success to prevent email enumeration
 		userService.sendResetPasswordCode(email);
 		return responseBuilder.buildSuccessResponse(true, ResponseMessage.SUCCESS, HttpStatus.OK);

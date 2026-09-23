@@ -366,11 +366,11 @@ public class UserServiceImpl implements UserService {
 		// Anti-enumeration: always succeed from the caller's perspective
 		try {
 			User user = userDao.userByEmail(email);
-			if (user != null) {
-				zeptoMailService.sendPasswordResetCode(user.getEmail());
-			}
+			zeptoMailService.sendPasswordResetCode(user.getEmail());
 		} catch (Exception e) {
 			logger.debug("Password reset requested for non-existent or invalid email");
+			throw new CustomException("User not registerd.", HttpStatus.NOT_FOUND);
+			
 		}
 		return true;
 	}

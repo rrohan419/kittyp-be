@@ -167,6 +167,7 @@ public class ApiUrl {
 	public static final String CLINIC_OWNER_PET_CONSENT_SEND = CLINIC_OWNER_DETAIL + "/pets/consent/send";
 	public static final String CLINIC_OWNER_PET_CONSENT_VERIFY = CLINIC_OWNER_DETAIL + "/pets/consent/verify";
 	public static final String CLINIC_USERS_SEARCH = CLINIC_BY_UUID + "/users/search";
+	public static final String CLINIC_USER_PETS = CLINIC_BY_UUID + "/users/{userUuid}/pets";
 	public static final String CLINIC_PETS = CLINIC_BY_UUID + "/pets";
 	public static final String CLINIC_PET_DETAIL = CLINIC_PETS + "/{petUuid}";
 	public static final String CLINIC_PET_ADMIT = CLINIC_PET_DETAIL + "/admit";

@@ -45,6 +45,7 @@ import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PetConsentSendRequest;
 import com.kittyp.clinic.dto.ClinicDtos.PetConsentVerifyRequest;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
+import com.kittyp.clinic.dto.ClinicDtos.PlatformPetIntakeModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicStatsModel;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInviteCompleteRequest;
@@ -269,6 +270,13 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<List<PlatformUserSearchModel>>> searchUsers(@PathVariable String uuid,
             @RequestParam(required = false) String q, @RequestParam(required = false) String by) {
         return success(clinicService.searchPlatformUsers(uuid, q, email(), emailOrIdOnly(by)));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_USER_PETS)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<PlatformPetIntakeModel>>> userPets(@PathVariable String uuid,
+            @PathVariable String userUuid) {
+        return success(clinicService.platformUserPets(uuid, userUuid, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_OWNER_FROM_USER)

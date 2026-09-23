@@ -192,6 +192,21 @@ public final class ClinicDtos {
             boolean alreadyClient) {
     }
 
+    public record PlatformPetIntakeModel(
+            String petUuid,
+            String globalPetId,
+            String name,
+            String species,
+            String breed,
+            String gender,
+            LocalDate dateOfBirth,
+            String weight,
+            String microchipNumber,
+            String photoUrl,
+            String patientNumber,
+            boolean admitted) {
+    }
+
     public record EnsureOwnerFromUserRequest(@NotBlank String userUuid) {
     }
 

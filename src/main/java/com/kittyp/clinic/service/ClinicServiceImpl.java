@@ -69,6 +69,7 @@ import com.kittyp.clinic.dto.ClinicDtos.OwnerSummaryModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientPetModel;
+import com.kittyp.clinic.dto.ClinicDtos.PlatformPetIntakeModel;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInviteCompleteRequest;
@@ -1432,6 +1433,45 @@ public class ClinicServiceImpl implements ClinicService {
                     existing != null);
         }).toList();
     }
+
+        @Override
+        @Transactional(readOnly = true)
+        public List<PlatformPetIntakeModel> platformUserPets(String clinicUuid, String userUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        if (userUuid == null || userUuid.isBlank() || userUuid.length() > 64) {
+            throw new CustomException("Invalid user id", HttpStatus.BAD_REQUEST);
+        }
+        User platformUser = userRepository.findByUuid(userUuid.trim())
+            .orElseThrow(() -> new ResourceNotFoundException("user", "uuid", userUuid));
+        if (Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled()) {
+            throw new CustomException("User account is not active", HttpStatus.BAD_REQUEST);
+        }
+        boolean isPetParent = platformUser.getUserRoles() != null && platformUser.getUserRoles().stream()
+            .anyMatch(ur -> ur.getRole() != null && ERole.ROLE_USER.equals(ur.getRole().getName()));
+        if (!isPetParent) {
+            throw new CustomException("Only pet-parent KittyP accounts can be added as clients",
+                HttpStatus.BAD_REQUEST);
+        }
+        return platformPetsOf(platformUser).stream()
+            .filter(ClinicServiceImpl::platformPetSelectableForAppointment)
+            .map(pet -> new PlatformPetIntakeModel(
+                pet.getUuid(),
+                pet.resolveGlobalPetId(),
+                pet.getName(),
+                pet.getType(),
+                pet.getBreed(),
+                pet.getGender(),
+                pet.getDateOfBirth(),
+                pet.getWeight(),
+                pet.getMicrochipNumber(),
+                pet.getProfilePicture(),
+                pet.getPatientNumber(),
+                clinicPetEnrollmentRepository.existsByClinic_IdAndPet_UuidAndIsActiveTrue(
+                    clinic.getId(), pet.getUuid())))
+            .sorted(Comparator.comparing(PlatformPetIntakeModel::name,
+                Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .toList();
+        }
 
     @Override
     @Transactional

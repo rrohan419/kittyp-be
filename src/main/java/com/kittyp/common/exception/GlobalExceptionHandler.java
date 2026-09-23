@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.kittyp.common.dto.ApiResponse;
@@ -248,7 +249,7 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(CustomException.class)
 	public ResponseEntity<ErrorResponse<Void>> handleCustomException(CustomException ex, WebRequest request) {
 		// String path = extractPath(request);
-		
+
 		return responseBuilder.buildErrorResponse(ex.getMessage(), ex.getLocalizedMessage(),
 				ex.getHttpStatus(), null);
 	}
@@ -269,8 +270,38 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(BadCredentialsException.class)
 	public ResponseEntity<ErrorResponse<Void>> handleBadCredentialsException(BadCredentialsException ex) {
-		
+
 		return responseBuilder.buildErrorResponse("Invalid username or password", ex.getLocalizedMessage(),
 				HttpStatus.UNAUTHORIZED, null);
+	}
+
+	@ExceptionHandler(HandlerMethodValidationException.class)
+	public ResponseEntity<ApiError> handleHandlerMethodValidationException(
+			HandlerMethodValidationException ex,
+			WebRequest request) {
+
+		String path = extractPath(request);
+
+		String message = ex.getParameterValidationResults()
+				.stream()
+				.flatMap(result -> result.getResolvableErrors().stream())
+				.map(error -> {
+					String defaultMessage = error.getDefaultMessage();
+					return defaultMessage != null
+							? defaultMessage
+							: "Invalid request parameter";
+				})
+				.findFirst()
+				.orElse("Invalid request parameters");
+
+		ApiError apiError = new ApiError(
+				HttpStatus.BAD_REQUEST.value(),
+				"Validation Error",
+				message,
+				path);
+
+		log.error("Handler method validation exception: {}", ex.getMessage());
+
+		return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
 	}
 }

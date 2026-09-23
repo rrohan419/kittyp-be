@@ -29,6 +29,7 @@ import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
 import com.kittyp.clinic.dto.ClinicDtos.OwnerEmailLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.PatientModel;
+import com.kittyp.clinic.dto.ClinicDtos.PlatformPetIntakeModel;
 import com.kittyp.clinic.dto.ClinicDtos.PlatformUserSearchModel;
 import com.kittyp.clinic.dto.ClinicDtos.RetentionAlertModel;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInviteCompleteRequest;
@@ -112,6 +113,9 @@ public interface ClinicService {
     /** Search all active KittyP users (live DB) for existing-customer pickers. */
     List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email,
             boolean emailOrIdOnly);
+
+    /** List active, visible pets owned by a KittyP parent with clinic enrollment state. */
+    List<PlatformPetIntakeModel> platformUserPets(String clinicUuid, String userUuid, String email);
 
     /** Ensure a clinic client row exists for the given platform user and return it. */
     ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email);
