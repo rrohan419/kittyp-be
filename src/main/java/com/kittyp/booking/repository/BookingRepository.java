@@ -23,6 +23,12 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByClinic_Id(Long clinicId);
 
+    List<Booking> findByClinic_IdAndIsActiveTrueAndSlotStartBetweenOrderBySlotStartAsc(
+            Long clinicId, LocalDateTime from, LocalDateTime to);
+
+    long countByClinic_IdAndIsActiveTrueAndSlotStartBetween(
+            Long clinicId, LocalDateTime from, LocalDateTime to);
+
     List<Booking> findByDoctor_IdAndSlotStartBetweenOrderBySlotStartAsc(Long doctorId, LocalDateTime from,
             LocalDateTime to);
 

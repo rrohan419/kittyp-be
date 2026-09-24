@@ -123,6 +123,13 @@ public interface ClinicService {
     /** Admit an existing KittyP (platform) pet into this clinic; idempotent. */
     ClinicPetListModel admitPlatformPet(String clinicUuid, String petUuid, String email);
 
+    /**
+     * Enroll selected KittyP pets for a linked client.
+     * The first association (no clinic patients yet) does not need a pet OTP.
+     * Later pets require a verified pet-consent OTP per pet name.
+     */
+    ClinicOwnerModel admitOwnerPets(String clinicUuid, String ownerUuid, List<String> petUuids, String email);
+
     /** Lookup clinic owner and/or platform parent by email (New patient gate). */
     OwnerEmailLookupModel lookupOwnerByEmail(String clinicUuid, String ownerEmail, String email);
 
@@ -159,7 +166,8 @@ public interface ClinicService {
 
     PaginationModel<BookingModel> bookings(String clinicUuid, String status, int page, int size, String email);
 
-    List<RetentionAlertModel> retentionAlerts(String clinicUuid, String email);
+    PaginationModel<RetentionAlertModel> retentionAlerts(String clinicUuid, Integer pageNumber, Integer pageSize,
+            String status, String type, String email);
 
     void notifyAlert(String clinicUuid, String alertId, String email);
 

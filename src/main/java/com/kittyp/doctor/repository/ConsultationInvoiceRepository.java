@@ -2,6 +2,8 @@ package com.kittyp.doctor.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +31,28 @@ public interface ConsultationInvoiceRepository extends JpaRepository<Consultatio
     Page<ConsultationInvoice> findAllByPetUuidOrderByCreatedAtDesc(String petUuid, Pageable pageable);
 
     List<ConsultationInvoice> findAllByClinic_IdOrderByCreatedAtDesc(Long clinicId);
+
+    List<ConsultationInvoice> findAllByClinic_IdAndConsultationDateBetweenOrderByConsultationDateAsc(
+            Long clinicId, LocalDate from, LocalDate to);
+
+    List<ConsultationInvoice> findAllByClinic_IdAndCreatedAtBetweenOrderByCreatedAtAsc(
+            Long clinicId, LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+            SELECT i FROM ConsultationInvoice i
+            WHERE i.clinic.id = :clinicId
+              AND (
+                i.consultationDate BETWEEN :fromDate AND :toDate
+                OR (i.consultationDate IS NULL AND i.createdAt BETWEEN :fromDateTime AND :toDateTime)
+              )
+            ORDER BY i.createdAt DESC
+            """)
+    List<ConsultationInvoice> findForClinicReport(
+            @Param("clinicId") Long clinicId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("fromDateTime") LocalDateTime fromDateTime,
+            @Param("toDateTime") LocalDateTime toDateTime);
 
     Page<ConsultationInvoice> findAllByClinic_IdOrderByCreatedAtDesc(Long clinicId, Pageable pageable);
 

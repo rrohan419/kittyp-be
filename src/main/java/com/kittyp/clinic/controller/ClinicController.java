@@ -39,6 +39,7 @@ import com.kittyp.clinic.dto.ClinicDtos.DoctorInvitePreview;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteRequest;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorLookupModel;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorModel;
+import com.kittyp.clinic.dto.ClinicDtos.AdmitOwnerPetsRequest;
 import com.kittyp.clinic.dto.ClinicDtos.EnsureOwnerFromUserRequest;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventRequest;
 import com.kittyp.clinic.dto.ClinicDtos.OwnerEmailLookupModel;
@@ -347,6 +348,14 @@ public class ClinicController {
         return success(clinicService.addPetToOwner(uuid, ownerUuid, request, email()));
     }
 
+    @PostMapping(ApiUrl.CLINIC_OWNER_PETS_ADMIT)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ClinicOwnerModel>> admitOwnerPets(@PathVariable String uuid,
+            @PathVariable String ownerUuid, @RequestBody @Valid AdmitOwnerPetsRequest request) {
+        return success(clinicService.admitOwnerPets(uuid, ownerUuid, request.petUuids(), email()));
+    }
+
     @GetMapping(ApiUrl.CLINIC_PETS)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<PaginationModel<ClinicPetListModel>>> pets(@PathVariable String uuid,
@@ -423,8 +432,11 @@ public class ClinicController {
 
     @GetMapping(ApiUrl.CLINIC_RETENTION_ALERTS)
     @PreAuthorize(CLINIC_ACCESS)
-    public ResponseEntity<SuccessResponse<List<RetentionAlertModel>>> retentionAlerts(@PathVariable String uuid) {
-        return success(clinicService.retentionAlerts(uuid, email()));
+    public ResponseEntity<SuccessResponse<PaginationModel<RetentionAlertModel>>> retentionAlerts(@PathVariable String uuid,
+            @RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) Integer pageNumber,
+            @RequestParam(defaultValue = KeyConstant.PAGE_SIZE) Integer pageSize,
+            @RequestParam(required = false) String status, @RequestParam(required = false) String type) {
+        return success(clinicService.retentionAlerts(uuid, pageNumber, pageSize, status, type, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_RETENTION_ALERT_NOTIFY)

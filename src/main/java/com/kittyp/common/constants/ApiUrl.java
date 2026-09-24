@@ -137,6 +137,7 @@ public class ApiUrl {
 	public static final String CLINIC_BASE_URL = "/clinic";
 	public static final String CLINIC_MINE = CLINIC_BASE_URL + "/mine";
 	public static final String CLINIC_BY_UUID = CLINIC_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String CLINIC_REPORTS = CLINIC_BY_UUID + "/reports";
 	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
 	public static final String CLINIC_DOCTOR_BY_UUID = CLINIC_DOCTORS + "/{doctorUuid}";
 	public static final String CLINIC_DOCTOR_INVITE = CLINIC_DOCTORS + "/invite";
@@ -161,6 +162,7 @@ public class ApiUrl {
 	public static final String CLINIC_OWNERS = CLINIC_BY_UUID + "/owners";
 	public static final String CLINIC_OWNER_DETAIL = CLINIC_OWNERS + "/{ownerUuid}";
 	public static final String CLINIC_OWNER_PETS = CLINIC_OWNER_DETAIL + "/pets";
+	public static final String CLINIC_OWNER_PETS_ADMIT = CLINIC_OWNER_PETS + "/admit";
 	public static final String CLINIC_OWNER_HIDE = CLINIC_OWNER_DETAIL + "/hide";
 	public static final String CLINIC_OWNER_FROM_USER = CLINIC_OWNERS + "/from-user";
 	public static final String CLINIC_OWNER_LOOKUP = CLINIC_OWNERS + "/lookup";
@@ -189,6 +191,8 @@ public class ApiUrl {
 	public static final String CLINIC_SHUTDOWN = CLINIC_BY_UUID + "/shutdown";
 	public static final String CLINIC_REOPEN = CLINIC_BY_UUID + "/reopen";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
+	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
+	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";
 	public static final String CLINIC_INVOICES = CLINIC_BY_UUID + "/invoices";
 	public static final String CLINIC_INVOICE_BY_UUID = CLINIC_INVOICES + "/{invoiceUuid}";
 	public static final String CLINIC_INVOICE_GENERATE_PDF = CLINIC_INVOICE_BY_UUID + "/generate-pdf";

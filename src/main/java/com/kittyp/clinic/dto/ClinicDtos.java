@@ -11,6 +11,7 @@ import com.kittyp.health.enums.HealthEventType;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -174,7 +175,7 @@ public final class ClinicDtos {
 
     public record ClinicOwnerPetModel(String petUuid, String globalPetId, String name, String species, String breed,
             String gender, LocalDate dateOfBirth, String weight, String microchipNumber, String photoUrl,
-            String patientNumber, LocalDateTime lastVisit) {
+            String patientNumber, LocalDateTime lastVisit, boolean clinicPatient) {
     }
 
     public record ClinicOwnerModel(String ownerUuid, String name, String firstName, String lastName, String email,
@@ -193,6 +194,10 @@ public final class ClinicDtos {
     }
 
     public record EnsureOwnerFromUserRequest(@NotBlank String userUuid) {
+    }
+
+    /** Existing KittyP pets to enroll at this clinic for an already-linked client. */
+    public record AdmitOwnerPetsRequest(@NotEmpty List<String> petUuids) {
     }
 
     public record AdmitPlatformPetRequest(@NotBlank String petUuid) {

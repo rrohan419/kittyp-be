@@ -22,6 +22,7 @@ import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -1295,7 +1296,7 @@ public class ClinicServiceImpl implements ClinicService {
         ClinicPetOwner owner = clinicPetOwnerRepository
                 .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
                 .orElse(null);
-        if (owner != null && activePetCount(owner) > 0) {
+        if (owner != null && (owner.getLinkedUser() != null || activePetCount(owner) > 0)) {
             requirePetConsentVerified(clinic, owner, request.petName());
         }
 
@@ -1500,9 +1501,8 @@ public class ClinicServiceImpl implements ClinicService {
             owner.setLinkedUser(platformUser);
             owner = clinicPetOwnerRepository.save(owner);
         }
-        // Soft-link only — do not force-attach pets here (parent may have hidden them).
-        // Still sync CRM phone from the linked parent account when available.
         owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
+        attachSolePlatformPet(clinic, owner);
         return toOwnerModel(owner);
     }
 
@@ -1560,6 +1560,14 @@ public class ClinicServiceImpl implements ClinicService {
                 .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", key));
         if (!Boolean.TRUE.equals(pet.getIsActive()) || Boolean.TRUE.equals(pet.getHiddenFromParent())) {
             throw new CustomException("Pet is not available to admit", HttpStatus.BAD_REQUEST);
+        }
+        if (petAtClinic(clinic, pet)) {
+            return toAppointmentPetModel(clinic, pet);
+        }
+        ClinicPetOwner linkedOwner = clinicOwnerForPlatformPet(clinic, pet);
+        if (linkedOwner != null && linkedOwner.getLinkedUser() != null
+                && clinicPatientCount(clinic, linkedOwner) > 0) {
+            requirePetConsentVerified(clinic, linkedOwner, pet.getName());
         }
         parentBookingEnrollmentService.admitPetToClinic(clinic, pet);
         pet = petsRepository.findByUuidIgnoreCase(key).orElse(pet);
@@ -1745,10 +1753,12 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
+    @Transactional
     public ClinicOwnerProfileModel ownerProfile(String clinicUuid, String ownerUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
+        attachSolePlatformPet(clinic, owner);
         ClinicOwnerModel model = toOwnerModel(owner);
         long invoiceCount = 0;
         String billingStatus = "NONE";
@@ -1773,7 +1783,7 @@ public class ClinicServiceImpl implements ClinicService {
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
 
-        if (activePetCount(owner) > 0) {
+        if (owner.getLinkedUser() != null || activePetCount(owner) > 0) {
             requirePetConsentVerified(clinic, owner, request.name());
         }
 
@@ -1848,7 +1858,9 @@ public class ClinicServiceImpl implements ClinicService {
         }
         boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(viewer.getId());
         boolean staff = clinicStaffDao.isActiveMember(clinic.getId(), viewer.getId());
-        return !owner && !staff;
+        boolean affiliatedDoctor = clinicDoctorRepository
+                .existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), viewer.getId());
+        return !owner && !staff && !affiliatedDoctor;
     }
 
     private Set<String> visitedPetUuids(Clinic clinic) {
@@ -2233,17 +2245,131 @@ public class ClinicServiceImpl implements ClinicService {
                 .orElse(null);
         boolean linked = owner.getLinkedUser() != null;
         String linkedUuid = linked ? owner.getLinkedUser().getUuid() : null;
+        Clinic clinic = owner.getClinic();
         List<ClinicOwnerPetModel> petModels = pets.stream()
                 .sorted(Comparator.comparing(Pet::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .map(p -> new ClinicOwnerPetModel(p.getUuid(), p.resolveGlobalPetId(), p.getName(), p.getType(),
                         p.getBreed(), p.getGender(), p.getDateOfBirth(), p.getWeight(), p.getMicrochipNumber(),
                         p.getProfilePicture(), p.getPatientNumber(),
-                        p.getRegisteredAt() == null ? null : p.getRegisteredAt().atStartOfDay()))
+                        p.getRegisteredAt() == null ? null : p.getRegisteredAt().atStartOfDay(),
+                        petAtClinic(clinic, p)))
                 .toList();
+        int patientCount = (int) petModels.stream().filter(ClinicOwnerPetModel::clinicPatient).count();
         return new ClinicOwnerModel(owner.getUuid(), clinicOwnerName(owner), owner.getFirstName(), owner.getLastName(),
                 owner.getEmail(), formatClinicPhone(preferredOwnerPhone(owner)), formatClinicPhone(owner.getAlternatePhone()),
-                owner.getAddress(), sanitizeOwnerNotes(owner.getNotes()), linked, linkedUuid, petModels.size(), lastVisit,
+                owner.getAddress(), sanitizeOwnerNotes(owner.getNotes()), linked, linkedUuid, patientCount, lastVisit,
                 petModels);
+    }
+
+    /**
+     * First time a KittyP client is linked and they have exactly one pet, enroll that pet.
+     * Several pets stay unattached until staff choose. Pets the owner adds later stay unattached
+     * until staff verify a pet-consent OTP.
+     */
+    private void attachSolePlatformPet(Clinic clinic, ClinicPetOwner owner) {
+        if (owner == null || owner.getLinkedUser() == null || clinicPatientCount(clinic, owner) > 0) {
+            return;
+        }
+        List<Pet> pending = pendingPlatformPets(clinic, owner);
+        if (pending.size() == 1) {
+            parentBookingEnrollmentService.admitPetToClinic(clinic, pending.get(0));
+        }
+    }
+
+    @Override
+    @Transactional
+    public ClinicOwnerModel admitOwnerPets(String clinicUuid, String ownerUuid, List<String> petUuids, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        requireOrgClinicClientWrite(clinic);
+        ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
+        if (owner.getLinkedUser() == null) {
+            throw new CustomException("Only a KittyP-linked client can associate existing pets", HttpStatus.BAD_REQUEST);
+        }
+        if (petUuids == null || petUuids.isEmpty()) {
+            throw new CustomException("Select at least one pet", HttpStatus.BAD_REQUEST);
+        }
+        Set<String> owned = platformPetsOf(owner.getLinkedUser()).stream()
+                .map(Pet::getUuid)
+                .collect(Collectors.toSet());
+        boolean initialSelection = clinicPatientCount(clinic, owner) == 0;
+        for (String raw : petUuids) {
+            String petUuid = raw == null ? "" : raw.trim();
+            if (!owned.contains(petUuid)) {
+                throw new CustomException("Pet does not belong to this client", HttpStatus.BAD_REQUEST);
+            }
+            Pet pet = petsRepository.findByUuidIgnoreCase(petUuid)
+                    .orElseThrow(() -> new ResourceNotFoundException("pet", "uuid", petUuid));
+            if (!platformPetSelectableForAppointment(pet)) {
+                throw new CustomException("Pet is not available to associate", HttpStatus.BAD_REQUEST);
+            }
+            if (petAtClinic(clinic, pet)) {
+                continue;
+            }
+            if (!initialSelection) {
+                requirePetConsentVerified(clinic, owner, pet.getName());
+            }
+            parentBookingEnrollmentService.admitPetToClinic(clinic, pet);
+        }
+        return toOwnerModel(owner);
+    }
+
+    private List<Pet> pendingPlatformPets(Clinic clinic, ClinicPetOwner owner) {
+        if (owner.getLinkedUser() == null) {
+            return List.of();
+        }
+        return platformPetsOf(owner.getLinkedUser()).stream()
+                .filter(ClinicServiceImpl::platformPetSelectableForAppointment)
+                .filter(pet -> !petAtClinic(clinic, pet))
+                .toList();
+    }
+
+    private int clinicPatientCount(Clinic clinic, ClinicPetOwner owner) {
+        Set<String> ids = new HashSet<>();
+        for (Pet pet : petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId())) {
+            if (!isLegacyDoctorImport(pet) && petAtClinic(clinic, pet) && pet.getUuid() != null) {
+                ids.add(pet.getUuid());
+            }
+        }
+        if (owner.getLinkedUser() != null) {
+            for (Pet pet : platformPetsOf(owner.getLinkedUser())) {
+                if (platformPetSelectableForAppointment(pet) && petAtClinic(clinic, pet) && pet.getUuid() != null) {
+                    ids.add(pet.getUuid());
+                }
+            }
+        }
+        return ids.size();
+    }
+
+    private boolean petAtClinic(Clinic clinic, Pet pet) {
+        if (clinic == null || pet == null || pet.getUuid() == null || !Boolean.TRUE.equals(pet.getIsActive())) {
+            return false;
+        }
+        if (pet.getClinic() != null && clinic.getId().equals(pet.getClinic().getId())) {
+            return true;
+        }
+        return clinicPetEnrollmentRepository.existsByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid());
+    }
+
+    private ClinicPetOwner clinicOwnerForPlatformPet(Clinic clinic, Pet pet) {
+        if (pet.getClinicOwner() != null && pet.getClinicOwner().getClinic() != null
+                && clinic.getId().equals(pet.getClinicOwner().getClinic().getId())) {
+            return pet.getClinicOwner();
+        }
+        User user = null;
+        if (pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
+            user = userRepository.findByUuidIgnoreCase(pet.getParentUserUuid()).orElse(null);
+        }
+        if (user == null) {
+            user = userDao.findOptionalByPetUuid(pet.getUuid()).orElse(null);
+        }
+        if (user == null) {
+            return null;
+        }
+        return clinicPetOwnerRepository
+                .findByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(), user.getId())
+                .orElse(null);
     }
 
     private ClinicPetListModel toPetListModel(Pet pet) {
@@ -2506,15 +2632,35 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
-    public List<RetentionAlertModel> retentionAlerts(String clinicUuid, String email) {
+        public PaginationModel<RetentionAlertModel> retentionAlerts(String clinicUuid, Integer pageNumber, Integer pageSize,
+            String status, String type, String email) {
+        List<RetentionAlertModel> alerts = filterAndSortRetentionAlerts(retentionAlertCandidates(clinicUuid, email),
+            status, type);
+        return PaginationSupport.slice(alerts, pageNumber, pageSize);
+        }
+
+        static List<RetentionAlertModel> filterAndSortRetentionAlerts(List<RetentionAlertModel> alerts, String status,
+            String type) {
+        return alerts.stream()
+            .filter(alert -> status == null || status.isBlank() || status.equalsIgnoreCase(alert.status()))
+            .filter(alert -> type == null || type.isBlank() || type.equalsIgnoreCase(alert.type()))
+            .sorted(Comparator.comparing(RetentionAlertModel::dueInDays)
+                .thenComparing(RetentionAlertModel::type, Comparator.nullsLast(String::compareTo))
+                .thenComparing(RetentionAlertModel::petName, Comparator.nullsLast(String::compareTo))
+                .thenComparing(RetentionAlertModel::id))
+            .toList();
+        }
+
+        private List<RetentionAlertModel> retentionAlertCandidates(String clinicUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
-        Set<String> patientUuids = patientMap(clinic).keySet();
+            Map<String, PatientModel> patients = patientMapPaged(clinic);
+            Set<String> patientUuids = patients.keySet();
         LocalDate today = LocalDate.now();
-        List<RetentionAlertModel> alerts = petVaccineScheduleDao.findDueOnOrBefore(today.plusDays(90)).stream()
+            List<RetentionAlertModel> alerts = pagedDueSchedules(today.plusDays(90)).stream()
                 .filter(schedule -> patientUuids.contains(schedule.getPet().getUuid())).map(schedule -> vaccineAlert(schedule, today))
                 .collect(Collectors.toList());
 
-        patientMap(clinic).values().stream().filter(patient -> patient.lastVisit() != null
+            patients.values().stream().filter(patient -> patient.lastVisit() != null
                 && patient.lastVisit().toLocalDate().isBefore(today.minusDays(180))).forEach(patient -> alerts.add(
                         new RetentionAlertModel("lapsed-" + patient.petUuid(), patient.petUuid(), patient.petName(),
                                 patient.ownerName(), "LAPSED_VISIT", "No clinic visit in more than 180 days.",
@@ -2522,12 +2668,65 @@ public class ClinicServiceImpl implements ClinicService {
         return alerts;
     }
 
+    private List<PetVaccineSchedule> pagedDueSchedules(LocalDate dueDate) {
+        List<PetVaccineSchedule> schedules = new ArrayList<>();
+        Pageable pageable = PageRequest.of(0, PaginationSupport.MAX_SIZE, Sort.by(Sort.Direction.ASC, "dueDate"));
+        Page<PetVaccineSchedule> page;
+        do {
+            page = petVaccineScheduleDao.findDueOnOrBefore(dueDate, pageable);
+            schedules.addAll(page.getContent());
+            pageable = pageable.next();
+        } while (page.hasNext());
+        return schedules;
+    }
+
+    private Map<String, PatientModel> patientMapPaged(Clinic clinic) {
+        Map<String, LocalDateTime> lastVisits = new HashMap<>();
+        Pageable pageable = PageRequest.of(0, PaginationSupport.MAX_SIZE, Sort.by(Sort.Direction.ASC, "id"));
+        Page<Booking> bookingPage;
+        do {
+            bookingPage = bookingDao.findByClinic(clinic.getId(), pageable);
+            bookingPage.forEach(booking -> {
+                if (booking.getPet() != null) {
+                    lastVisits.merge(booking.getPet().getUuid(), booking.getSlotStart(),
+                            (left, right) -> left.isAfter(right) ? left : right);
+                }
+            });
+            pageable = pageable.next();
+        } while (bookingPage.hasNext());
+
+        pageable = PageRequest.of(0, PaginationSupport.MAX_SIZE, Sort.by(Sort.Direction.ASC, "id"));
+        Page<HealthEvent> healthPage;
+        Set<String> petUuids = new HashSet<>();
+        do {
+            healthPage = healthEventDao.findByClinic(clinic.getId(), pageable);
+            healthPage.forEach(event -> {
+                if (event.getPet() != null) {
+                    petUuids.add(event.getPet().getUuid());
+                    if (event.getDate() != null) {
+                        lastVisits.merge(event.getPet().getUuid(), event.getDate().atStartOfDay(),
+                                (left, right) -> left.isAfter(right) ? left : right);
+                    }
+                }
+            });
+            pageable = pageable.next();
+        } while (healthPage.hasNext());
+
+        petUuids.addAll(lastVisits.keySet());
+        Map<String, PatientModel> result = new HashMap<>();
+        for (String uuid : petUuids) {
+            Pet pet = requirePet(uuid);
+            result.put(uuid, patientModelForPet(pet, lastVisits.get(uuid)));
+        }
+        return result;
+    }
+
     @Override
     @Transactional
     public void notifyAlert(String clinicUuid, String alertId, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        RetentionAlertModel alert = retentionAlerts(clinic.getUuid(), email).stream()
+        RetentionAlertModel alert = retentionAlertCandidates(clinic.getUuid(), email).stream()
                 .filter(candidate -> candidate.id().equals(alertId)).findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("retention alert", "id", alertId));
         Pet pet = requirePet(alert.petUuid());

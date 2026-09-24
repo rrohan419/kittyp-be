@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import com.kittyp.vaccine.entity.PetVaccineSchedule;
@@ -25,6 +27,11 @@ public class PetVaccineScheduleDaoImpl implements PetVaccineScheduleDao {
     @Override
     public List<PetVaccineSchedule> findDueOnOrBefore(LocalDate date) {
         return petVaccineScheduleRepository.findByCompletedFalseAndDueDateLessThanEqual(date);
+    }
+
+    @Override
+    public Page<PetVaccineSchedule> findDueOnOrBefore(LocalDate date, Pageable pageable) {
+        return petVaccineScheduleRepository.findPageByCompletedFalseAndDueDateLessThanEqual(date, pageable);
     }
 
     @Override

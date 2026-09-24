@@ -25,6 +25,50 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
     List<Visit> findByClinic_IdAndCreatedAtBetweenOrderByCreatedAtDesc(
             Long clinicId, LocalDateTime from, LocalDateTime to);
 
+    List<Visit> findByClinic_IdAndIsActiveTrueAndCreatedAtBetweenOrderByCreatedAtDesc(
+            Long clinicId, LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+            SELECT v.status AS status, COUNT(v) AS visitCount
+            FROM Visit v
+            WHERE v.clinic.id = :clinicId
+              AND v.isActive = true
+              AND v.createdAt BETWEEN :from AND :to
+            GROUP BY v.status
+            """)
+    List<ReportStatusCount> countForClinicReport(
+            @Param("clinicId") Long clinicId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    @Query("""
+            SELECT v.doctor.id AS doctorId, v.status AS status, COUNT(v) AS visitCount
+            FROM Visit v
+            WHERE v.clinic.id = :clinicId
+              AND v.isActive = true
+              AND v.createdAt BETWEEN :from AND :to
+              AND v.doctor IS NOT NULL
+            GROUP BY v.doctor.id, v.status
+            """)
+    List<ReportDoctorVisitCount> countByDoctorForClinicReport(
+            @Param("clinicId") Long clinicId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    interface ReportStatusCount {
+        VisitStatus getStatus();
+
+        long getVisitCount();
+    }
+
+    interface ReportDoctorVisitCount {
+        Long getDoctorId();
+
+        VisitStatus getStatus();
+
+        long getVisitCount();
+    }
+
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
     List<Visit> findByClinic_IdAndStatusAndCreatedAtBetweenOrderByUrgencyDescCreatedAtAsc(
             Long clinicId, VisitStatus status, LocalDateTime from, LocalDateTime to);
