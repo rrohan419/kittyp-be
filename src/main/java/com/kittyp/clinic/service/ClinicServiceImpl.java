@@ -252,8 +252,26 @@ public class ClinicServiceImpl implements ClinicService {
         if (clinic.getStatus() == ClinicStatus.SHUTDOWN) {
             throw new CustomException("Reopen the clinic before changing verification status", HttpStatus.BAD_REQUEST);
         }
+        ClinicStatus previous = clinic.getStatus();
         clinic.setStatus(status);
-        return clinicModel(clinicDao.saveClinic(clinic));
+        Clinic saved = clinicDao.saveClinic(clinic);
+        if (status == ClinicStatus.VERIFIED && previous != ClinicStatus.VERIFIED) {
+            notifyClinicVerified(saved);
+        }
+        return clinicModel(saved);
+    }
+
+    private void notifyClinicVerified(Clinic clinic) {
+        User owner = clinic.getOwner();
+        String email = owner != null && owner.getEmail() != null && !owner.getEmail().isBlank()
+                ? owner.getEmail()
+                : clinic.getEmail();
+        String customerName = owner != null ? owner.getFirstName() : null;
+        String base = frontendBaseUrl == null || frontendBaseUrl.isBlank()
+                ? "http://localhost:8080"
+                : frontendBaseUrl.replaceAll("/$", "");
+        String clinicUrl = base + "/clinic";
+        zeptoMailService.sendClinicProfileVerified(email, customerName, clinic.getName(), clinicUrl);
     }
 
     @Override

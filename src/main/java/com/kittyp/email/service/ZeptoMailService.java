@@ -44,4 +44,11 @@ public interface ZeptoMailService {
 	/** Notify clinic that a doctor accepted or declined an invite. */
 	void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
 			String doctorEmail, boolean accepted);
+
+	void sendDoctorProfileVerified(String email, String doctorName, String dashboardUrl);
+
+	void sendClinicProfileVerified(String email, String customerName, String clinicName, String clinicUrl);
+
+	void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
+			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename);
 }

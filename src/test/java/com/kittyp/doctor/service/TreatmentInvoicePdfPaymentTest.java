@@ -19,7 +19,7 @@ class TreatmentInvoicePdfPaymentTest {
 
 	private final TreatmentInvoiceService service = new TreatmentInvoiceService(
 			null, null, null, null, null, null, null, null, null, null, null,
-			new ObjectMapper(), null, null, null, null);
+			new ObjectMapper(), null, null, null, null, null);
 
 	@Test
 	void paidInvoice_showsRazorpayDetails() {
