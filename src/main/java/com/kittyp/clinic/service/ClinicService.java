@@ -116,6 +116,10 @@ public interface ClinicService {
     /** Ensure a clinic client row exists for the given platform user and return it. */
     ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email);
 
+    void sendClientAttachOtp(String clinicUuid, String userUuid, String email);
+
+    void verifyClientAttachOtp(String clinicUuid, String userUuid, String code, String email);
+
     /** Admit an existing KittyP (platform) pet into this clinic; idempotent. */
     ClinicPetListModel admitPlatformPet(String clinicUuid, String petUuid, String email);
 

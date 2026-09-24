@@ -23,6 +23,8 @@ import com.kittyp.clinic.dto.ClinicDtos.VaccineCatalogModel;
 import com.kittyp.clinic.dto.ClinicDtos.VaccineScheduleModel;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
+import com.kittyp.clinic.dto.ClinicDtos.ClientAttachSendRequest;
+import com.kittyp.clinic.dto.ClinicDtos.ClientAttachVerifyRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
@@ -277,6 +279,24 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<ClinicOwnerModel>> ownerFromUser(@PathVariable String uuid,
             @RequestBody @Valid EnsureOwnerFromUserRequest request) {
         return success(clinicService.ensureOwnerFromUser(uuid, request.userUuid(), email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNER_ATTACH_CONSENT_SEND)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<MessageResponse>> sendClientAttach(@PathVariable String uuid,
+            @RequestBody @Valid ClientAttachSendRequest request) {
+        clinicService.sendClientAttachOtp(uuid, request.userUuid(), email());
+        return success(new MessageResponse("Confirmation code sent to the owner's email"));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_OWNER_ATTACH_CONSENT_VERIFY)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<MessageResponse>> verifyClientAttach(@PathVariable String uuid,
+            @RequestBody @Valid ClientAttachVerifyRequest request) {
+        clinicService.verifyClientAttachOtp(uuid, request.userUuid(), request.code(), email());
+        return success(new MessageResponse("Owner confirmed clinic attachment"));
     }
 
     @GetMapping(ApiUrl.CLINIC_OWNER_LOOKUP)

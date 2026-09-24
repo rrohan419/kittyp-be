@@ -164,6 +164,8 @@ public class ApiUrl {
 	public static final String CLINIC_OWNER_HIDE = CLINIC_OWNER_DETAIL + "/hide";
 	public static final String CLINIC_OWNER_FROM_USER = CLINIC_OWNERS + "/from-user";
 	public static final String CLINIC_OWNER_LOOKUP = CLINIC_OWNERS + "/lookup";
+	public static final String CLINIC_OWNER_ATTACH_CONSENT_SEND = CLINIC_OWNERS + "/attach-consent/send";
+	public static final String CLINIC_OWNER_ATTACH_CONSENT_VERIFY = CLINIC_OWNERS + "/attach-consent/verify";
 	public static final String CLINIC_OWNER_PET_CONSENT_SEND = CLINIC_OWNER_DETAIL + "/pets/consent/send";
 	public static final String CLINIC_OWNER_PET_CONSENT_VERIFY = CLINIC_OWNER_DETAIL + "/pets/consent/verify";
 	public static final String CLINIC_USERS_SEARCH = CLINIC_BY_UUID + "/users/search";

@@ -140,6 +140,15 @@ public class VerificationCodeService {
                 + normalizePetName(petName);
     }
 
+    /** Parent must confirm before a clinic attaches their existing KittyP account. */
+    public static String clinicClientAttachOtpKey(String clinicUuid, String userUuid) {
+        return "clinic-client-attach:" + clinicUuid.trim() + ":" + (userUuid == null ? "" : userUuid.trim());
+    }
+
+    public static String clinicClientAttachVerifiedKey(String clinicUuid, String userUuid) {
+        return "clinic-client-attach-ok:" + clinicUuid.trim() + ":" + (userUuid == null ? "" : userUuid.trim());
+    }
+
     private static String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }

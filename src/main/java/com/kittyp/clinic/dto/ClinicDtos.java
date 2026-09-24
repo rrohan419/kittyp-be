@@ -212,6 +212,12 @@ public final class ClinicDtos {
     public record PetConsentVerifyRequest(@NotBlank String petName, @NotBlank String code) {
     }
 
+    public record ClientAttachSendRequest(@NotBlank String userUuid) {
+    }
+
+    public record ClientAttachVerifyRequest(@NotBlank String userUuid, @NotBlank String code) {
+    }
+
     public record ClinicOwnerProfileModel(ClinicOwnerModel owner, String billingStatus, long invoiceCount) {
     }
 

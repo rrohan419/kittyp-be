@@ -28,6 +28,9 @@ public interface ZeptoMailService {
 	void sendClinicPetConsentOtpEmail(String recipientEmail, String ownerName, String clinicName, String petName,
 			String code);
 
+	/** Parent must confirm before their KittyP account is attached as a clinic client. */
+	void sendClinicClientAttachOtpEmail(String recipientEmail, String ownerName, String clinicName, String code);
+
 	/** Clinic doctor invitation with accept link. */
 	void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);
 

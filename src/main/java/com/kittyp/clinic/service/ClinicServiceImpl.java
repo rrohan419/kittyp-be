@@ -1283,17 +1283,21 @@ public class ClinicServiceImpl implements ClinicService {
     public PatientDetailModel addPatient(String clinicUuid, AddPatientRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireOrgClinicClientWrite(clinic);
 
         String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(request.ownerEmail());
         String phoneDigits = ClinicOwnerUserLinkService.normalizePhoneDigits(request.ownerPhone());
         if (phoneDigits == null || !phoneDigits.matches("\\d{10}")) {
             throw new CustomException("Owner phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
         }
+        rejectUnattachedKittypContact(clinic, ownerEmail, phoneDigits);
 
         ClinicPetOwner owner = clinicPetOwnerRepository
                 .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
                 .orElse(null);
+        if (owner != null && activePetCount(owner) > 0) {
+            requirePetConsentVerified(clinic, owner, request.petName());
+        }
 
         if (owner == null) {
             owner = ClinicPetOwner.builder()
@@ -1326,7 +1330,9 @@ public class ClinicServiceImpl implements ClinicService {
             }
         }
         owner = clinicPetOwnerRepository.save(owner);
-        owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
+        if (owner.getLinkedUser() != null) {
+            owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
+        }
 
         Pet pet = saveClinicPet(clinic, owner, request.petName().trim(), blankToNull(request.petType()),
                 blankToNull(request.petBreed()), blankToNull(request.petGender()), request.petDateOfBirth(),
@@ -1438,6 +1444,7 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
+        requireOrgClinicClientWrite(clinic);
         if (userUuid == null || userUuid.isBlank() || userUuid.length() > 64) {
             throw new CustomException("Invalid user id", HttpStatus.BAD_REQUEST);
         }
@@ -1463,6 +1470,11 @@ public class ClinicServiceImpl implements ClinicService {
                         .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
                         .orElse(null);
             }
+        }
+        boolean alreadyLinked = owner != null && owner.getLinkedUser() != null
+                && owner.getLinkedUser().getId().equals(platformUser.getId());
+        if (!alreadyLinked) {
+            requireClientAttachVerified(clinic, platformUser.getUuid());
         }
         if (owner == null) {
             String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
@@ -1496,6 +1508,47 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     @Transactional
+    public void sendClientAttachOtp(String clinicUuid, String userUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+        requireOrgClinicClientWrite(clinic);
+        User platformUser = requireActivePetParent(userUuid);
+        if (isAlreadyLinkedClient(clinic, platformUser)) {
+            throw new CustomException("This KittyP user is already a client of this clinic", HttpStatus.CONFLICT);
+        }
+        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            throw new CustomException("User has no email on file for confirmation OTP", HttpStatus.BAD_REQUEST);
+        }
+        String otpKey = VerificationCodeService.clinicClientAttachOtpKey(clinic.getUuid(), platformUser.getUuid());
+        String code = verificationCodeService.generateCode(otpKey);
+        String name = Stream.of(platformUser.getFirstName(), platformUser.getLastName())
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.joining(" "));
+        if (name.isBlank()) {
+            name = ownerEmail;
+        }
+        log.info("Clinic client-attach OTP generated clinic={} user={}", clinic.getUuid(), platformUser.getUuid());
+        zeptoMailService.sendClinicClientAttachOtpEmail(ownerEmail, name, clinic.getName(), code);
+    }
+
+    @Override
+    @Transactional
+    public void verifyClientAttachOtp(String clinicUuid, String userUuid, String code, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOrgClinicClientWrite(clinic);
+        User platformUser = requireActivePetParent(userUuid);
+        String otpKey = VerificationCodeService.clinicClientAttachOtpKey(clinic.getUuid(), platformUser.getUuid());
+        boolean ok = verificationCodeService.verifyCode(otpKey, code, true);
+        if (!ok) {
+            throw new CustomException("Invalid or expired confirmation code", HttpStatus.BAD_REQUEST);
+        }
+        verificationCodeService.markVerified(
+                VerificationCodeService.clinicClientAttachVerifiedKey(clinic.getUuid(), platformUser.getUuid()));
+    }
+
+    @Override
+    @Transactional
     public ClinicPetListModel admitPlatformPet(String clinicUuid, String petUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
@@ -1516,14 +1569,36 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     public OwnerEmailLookupModel lookupOwnerByEmail(String clinicUuid, String ownerEmail, String email) {
         Clinic clinic = access(clinicUuid, email);
-        String normalized = ClinicOwnerUserLinkService.normalizeEmail(ownerEmail);
+        String raw = ownerEmail == null ? "" : ownerEmail.trim();
+        String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(raw);
+        boolean looksLikePhone = !raw.contains("@") && phone != null && phone.matches("\\d{10}");
+        if (looksLikePhone) {
+            return lookupOwnerContact(clinic, null, phone);
+        }
+        String normalized = ClinicOwnerUserLinkService.normalizeEmail(raw);
         if (normalized == null || normalized.isBlank()) {
             return new OwnerEmailLookupModel(false, null, null, null);
         }
-        ClinicPetOwner clinicOwner = clinicPetOwnerRepository
-                .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), normalized)
-                .orElse(null);
-        User platformUser = userRepository.findByEmailIgnoreCase(normalized).orElse(null);
+        return lookupOwnerContact(clinic, normalized, null);
+    }
+
+    private OwnerEmailLookupModel lookupOwnerContact(Clinic clinic, String normalizedEmail, String phoneDigits) {
+        ClinicPetOwner clinicOwner = null;
+        User platformUser = null;
+        if (normalizedEmail != null) {
+            clinicOwner = clinicPetOwnerRepository
+                    .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), normalizedEmail)
+                    .orElse(null);
+            platformUser = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+        } else if (phoneDigits != null) {
+            List<ClinicPetOwner> owners = clinicPetOwnerRepository
+                    .findByClinic_IdAndIsActiveTrueAndPhone(clinic.getId(), phoneDigits);
+            clinicOwner = owners.isEmpty() ? null : owners.get(0);
+            List<User> byPhone = userRepository.findByPhoneDigits(phoneDigits);
+            if (byPhone.size() == 1) {
+                platformUser = byPhone.get(0);
+            }
+        }
         if (platformUser != null && (Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled())) {
             platformUser = null;
         }
@@ -1641,13 +1716,14 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireOrgClinicClientWrite(clinic);
 
         String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
         String phoneDigits = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
         if (phoneDigits == null || !phoneDigits.matches("\\d{10}")) {
             throw new CustomException("Owner phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
         }
+        rejectUnattachedKittypContact(clinic, ownerEmail, phoneDigits);
         if (clinicPetOwnerRepository.findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
                 .isPresent()) {
             throw new CustomException("An owner with this email already exists at this clinic", HttpStatus.CONFLICT);
@@ -1665,7 +1741,6 @@ public class ClinicServiceImpl implements ClinicService {
                 .notes(blankToNull(request.notes()))
                 .build();
         owner = clinicPetOwnerRepository.save(owner);
-        owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
         return toOwnerModel(owner);
     }
 
@@ -1693,12 +1768,14 @@ public class ClinicServiceImpl implements ClinicService {
             String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireOrgClinicClientWrite(clinic);
 
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
 
-        requirePetConsentVerified(clinic, owner, request.name());
+        if (activePetCount(owner) > 0) {
+            requirePetConsentVerified(clinic, owner, request.name());
+        }
 
         Pet pet = saveClinicPet(clinic, owner, request.name().trim(), blankToNull(request.species()),
                 blankToNull(request.breed()), blankToNull(request.gender()), request.dateOfBirth(),
@@ -2675,6 +2752,111 @@ public class ClinicServiceImpl implements ClinicService {
         }
         throw new CustomException("You do not have permission to manage this clinic",
                 HttpStatus.FORBIDDEN);
+    }
+
+    private void requireOrgClinicClientWrite(Clinic clinic) {
+        if (isPersonalPracticeClinic(clinic)) {
+            throw new CustomException("Add client is only available at a clinic, not on personal practice",
+                    HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    /** Personal practice: the clinic owner is an active doctor on this same clinic. */
+    private boolean isPersonalPracticeClinic(Clinic clinic) {
+        Long ownerUserId = resolveOwnerUserId(clinic);
+        if (ownerUserId == null || clinic.getId() == null) {
+            return false;
+        }
+        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), ownerUserId);
+    }
+
+    private void requireClientAttachVerified(Clinic clinic, String userUuid) {
+        String verifiedKey = VerificationCodeService.clinicClientAttachVerifiedKey(clinic.getUuid(), userUuid);
+        if (!verificationCodeService.isVerified(verifiedKey)) {
+            throw new CustomException(
+                    "Owner confirmation required: send and verify the email OTP before attaching this KittyP account",
+                    HttpStatus.BAD_REQUEST);
+        }
+        verificationCodeService.clearVerified(verifiedKey);
+    }
+
+    private User requireActivePetParent(String userUuid) {
+        if (userUuid == null || userUuid.isBlank() || userUuid.length() > 64) {
+            throw new CustomException("Invalid user id", HttpStatus.BAD_REQUEST);
+        }
+        User platformUser = userRepository.findByUuid(userUuid.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("user", "uuid", userUuid));
+        if (Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled()) {
+            throw new CustomException("User account is not active", HttpStatus.BAD_REQUEST);
+        }
+        boolean isPetParent = platformUser.getUserRoles() != null && platformUser.getUserRoles().stream()
+                .anyMatch(ur -> ur.getRole() != null && ERole.ROLE_USER.equals(ur.getRole().getName()));
+        if (!isPetParent) {
+            throw new CustomException("Only pet-parent KittyP accounts can be added as clients",
+                    HttpStatus.BAD_REQUEST);
+        }
+        return platformUser;
+    }
+
+    private boolean isAlreadyLinkedClient(Clinic clinic, User platformUser) {
+        return clinicPetOwnerRepository
+                .findByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(), platformUser.getId())
+                .isPresent();
+    }
+
+    private void rejectUnattachedKittypContact(Clinic clinic, String ownerEmail, String phoneDigits) {
+        rejectUnattachedKittypEmail(clinic, ownerEmail);
+        if (phoneDigits == null || !phoneDigits.matches("\\d{10}")) {
+            return;
+        }
+        List<User> byPhone = userRepository.findByPhoneDigits(phoneDigits);
+        if (byPhone.size() != 1) {
+            return;
+        }
+        User platformUser = byPhone.get(0);
+        if (platformUser == null || Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled()) {
+            return;
+        }
+        boolean isPetParent = platformUser.getUserRoles() != null && platformUser.getUserRoles().stream()
+                .anyMatch(ur -> ur.getRole() != null && ERole.ROLE_USER.equals(ur.getRole().getName()));
+        if (!isPetParent) {
+            return;
+        }
+        if (isAlreadyLinkedClient(clinic, platformUser)) {
+            return;
+        }
+        throw new CustomException(
+                "This phone belongs to a KittyP account. Search and select the user, then verify the OTP sent to them before attaching.",
+                HttpStatus.BAD_REQUEST);
+    }
+
+    private void rejectUnattachedKittypEmail(Clinic clinic, String ownerEmail) {
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            return;
+        }
+        User platformUser = userRepository.findByEmailIgnoreCase(ownerEmail).orElse(null);
+        if (platformUser == null || Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled()) {
+            return;
+        }
+        boolean isPetParent = platformUser.getUserRoles() != null && platformUser.getUserRoles().stream()
+                .anyMatch(ur -> ur.getRole() != null && ERole.ROLE_USER.equals(ur.getRole().getName()));
+        if (!isPetParent) {
+            return;
+        }
+        if (isAlreadyLinkedClient(clinic, platformUser)) {
+            return;
+        }
+        throw new CustomException(
+                "This email belongs to a KittyP account. Search and select the user, then verify the OTP sent to them before attaching.",
+                HttpStatus.BAD_REQUEST);
+    }
+
+    private int activePetCount(ClinicPetOwner owner) {
+        if (owner == null || owner.getId() == null) {
+            return 0;
+        }
+        List<Pet> pets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId());
+        return pets == null ? 0 : pets.size();
     }
 
     private Map<String, PatientModel> patientMap(Clinic clinic) {

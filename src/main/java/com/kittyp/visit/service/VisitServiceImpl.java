@@ -1410,6 +1410,17 @@ public class VisitServiceImpl implements VisitService {
         if (!existingClinicOwner && !existingPlatformUser) {
             return;
         }
+        if (existingClinicOwner) {
+            var owner = clinicPetOwnerRepository
+                    .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
+                    .orElse(null);
+            if (owner != null) {
+                List<Pet> pets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId());
+                if (pets == null || pets.isEmpty()) {
+                    return;
+                }
+            }
+        }
         String petName = petReq.name() == null ? "" : petReq.name().trim();
         String verifiedKey = VerificationCodeService.clinicPetConsentVerifiedKey(clinic.getUuid(), ownerEmail, petName);
         if (!verificationCodeService.isVerified(verifiedKey)) {
