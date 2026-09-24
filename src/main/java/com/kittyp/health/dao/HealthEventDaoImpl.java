@@ -3,6 +3,8 @@ package com.kittyp.health.dao;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import com.kittyp.health.entity.HealthEvent;
@@ -34,6 +36,11 @@ public class HealthEventDaoImpl implements HealthEventDao {
     @Override
     public List<HealthEvent> findByClinic(Long clinicId) {
         return healthEventRepository.findByClinic_Id(clinicId);
+    }
+
+    @Override
+    public Page<HealthEvent> findByClinic(Long clinicId, Pageable pageable) {
+        return healthEventRepository.findPageByClinic_Id(clinicId, pageable);
     }
 
     @Override

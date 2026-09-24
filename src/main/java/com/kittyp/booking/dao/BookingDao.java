@@ -13,4 +13,6 @@ public interface BookingDao {
     Page<Booking> findByClinic(Long clinicId, BookingStatus status, Pageable pageable);
 
     List<Booking> findByClinic(Long clinicId);
+
+    Page<Booking> findByClinic(Long clinicId, Pageable pageable);
 }

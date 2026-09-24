@@ -2,6 +2,7 @@ package com.kittyp.clinic.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -24,6 +25,8 @@ public interface ClinicPatientPetRepository extends JpaRepository<ClinicPatientP
 	List<ClinicPatientPet> findByOwner_IdAndIsActiveTrue(Long ownerId);
 
 	long countByClinic_IdAndIsActiveTrue(Long clinicId);
+
+	long countByClinic_IdAndIsActiveTrueAndCreatedAtBetween(Long clinicId, LocalDateTime from, LocalDateTime to);
 
 	long countByOwner_IdAndIsActiveTrue(Long ownerId);
 

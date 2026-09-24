@@ -38,6 +38,8 @@ public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, 
 
 	Optional<ClinicPetOwner> findByClinic_IdAndLinkedUser_IdAndIsActiveTrue(Long clinicId, Long linkedUserId);
 
+	List<ClinicPetOwner> findByClinic_IdAndIsActiveTrueAndPhone(Long clinicId, String phone);
+
 	@Query("""
 			SELECT o FROM ClinicPetOwner o
 			WHERE o.clinic.id = :clinicId AND o.isActive = true
