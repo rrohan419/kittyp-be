@@ -18,6 +18,8 @@ public class CreateInvoiceResultDto {
 	private ConsultationInvoice invoice;
 	private boolean whatsappSent;
 	private String whatsappError;
+	private boolean emailSent;
+	private String emailError;
 
 	public static CreateInvoiceResultDto of(ConsultationInvoice invoice) {
 		return CreateInvoiceResultDto.builder()
@@ -42,4 +44,15 @@ public class CreateInvoiceResultDto {
 				.whatsappError(error)
 				.build();
 	}
+
+	public static CreateInvoiceResultDto channels(ConsultationInvoice invoice, boolean whatsappSent, String whatsappError,
+		boolean emailSent, String emailError) {
+	return CreateInvoiceResultDto.builder()
+			.invoice(invoice)
+			.whatsappSent(whatsappSent)
+			.whatsappError(whatsappError)
+			.emailSent(emailSent)
+			.emailError(emailError)
+			.build();
+}
 }

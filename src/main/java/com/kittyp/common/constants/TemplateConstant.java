@@ -23,4 +23,7 @@ public class TemplateConstant {
 	public static final String ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID = "zoho.password.reset.code.email.template.id";
 	public static final String ZEPTO_ORDER_CONFIRMATION_EMAIL_TEMPLATE_ID = "zoho.order.confirmation.email.template.id";
 	public static final String ZEPTO_CLINIC_CLIENT_CONSENT_EMAIL_TEMPLATE_ID = "zoho.clinic.client.consent.email.template.id";
+	public static final String ZOHO_DOCTOR_PROFILE_VERIFIED_TEMPLATE_ID = "zoho.doctor.profile.verified.template.id";
+	public static final String ZOHO_CLINIC_PROFILE_VERIFIED_TEMPLATE_ID = "zoho.clinic.profile.verified.template.id";
+	public static final String ZOHO_TREATMENT_INVOICE_EMAIL_TEMPLATE_ID = "zoho.treatment.invoice.email.template.id";
 }

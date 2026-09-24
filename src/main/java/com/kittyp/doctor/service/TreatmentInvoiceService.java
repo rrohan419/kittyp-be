@@ -33,6 +33,7 @@ import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.PaginationSupport;
 import com.kittyp.common.service.S3StorageService;
 import com.kittyp.common.util.AlphanumericIdService;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.doctor.dto.CreateConsultationInvoiceDto;
 import com.kittyp.doctor.dto.CreateInvoiceResultDto;
 import com.kittyp.doctor.dto.OwnerInvoiceModel;
@@ -84,6 +85,7 @@ public class TreatmentInvoiceService {
     private final S3StorageService s3StorageService;
     private final OutboundMessageService outboundMessageService;
     private final AlphanumericIdService alphanumericIdService;
+    private final ZeptoMailService zeptoMailService;
 
     @Transactional
     public ConsultationInvoice create(User doctor, CreateConsultationInvoiceDto request) {
@@ -100,7 +102,8 @@ public class TreatmentInvoiceService {
         BigDecimal sgst = nz(request.getSgst());
         BigDecimal igst = nz(request.getIgst());
         BigDecimal paid = nz(request.getPaidAmount());
-        // Always derive money server-side — never trust client amount/balance/subtotal/tax totals.
+        // Always derive money server-side — never trust client
+        // amount/balance/subtotal/tax totals.
         BigDecimal subtotal = computed;
         rejectNegativeMoney(discount, cgst, sgst, igst, paid);
         if (discount.compareTo(subtotal) > 0) {
@@ -169,7 +172,8 @@ public class TreatmentInvoiceService {
                 .igst(igst)
                 .paidAmount(paid)
                 .balance(balance)
-                .paymentStatus(blankTo(request.getPaymentStatus(), paid.compareTo(BigDecimal.ZERO) > 0 ? "PARTIAL" : "UNPAID"))
+                .paymentStatus(
+                        blankTo(request.getPaymentStatus(), paid.compareTo(BigDecimal.ZERO) > 0 ? "PARTIAL" : "UNPAID"))
                 .paymentMode(request.getPaymentMode())
                 .transactionId(request.getTransactionId())
                 .currency(blankTo(request.getCurrency(), "INR").toUpperCase())
@@ -254,21 +258,12 @@ public class TreatmentInvoiceService {
 
     public CreateInvoiceResultDto createForClinicAndOptionallySend(
             Clinic clinic, User actor, CreateConsultationInvoiceDto request) {
-        boolean sendWa = Boolean.TRUE.equals(request.getSendWhatsApp());
-        ConsultationInvoice invoice = resolveOrCreateClinicInvoice(clinic, actor, request, sendWa);
-        if (!sendWa) {
+        boolean sendToOwner = Boolean.TRUE.equals(request.getSendWhatsApp());
+        ConsultationInvoice invoice = resolveOrCreateClinicInvoice(clinic, actor, request, sendToOwner);
+        if (!sendToOwner) {
             return CreateInvoiceResultDto.of(invoice);
         }
-        try {
-            invoice = sendInvoiceWhatsApp(invoice, null, clinicSender(clinic));
-            return CreateInvoiceResultDto.sent(invoice);
-        } catch (Exception e) {
-            String msg = e.getMessage() != null && !e.getMessage().isBlank()
-                    ? e.getMessage()
-                    : "WhatsApp send failed";
-            log.warn("Clinic invoice {} saved but WhatsApp send failed: {}", invoice.getUuid(), msg);
-            return CreateInvoiceResultDto.sendFailed(invoice, msg);
-        }
+        return sendInvoiceToOwner(invoice, null, clinicSender(clinic));
     }
 
     private ConsultationInvoice resolveOrCreateClinicInvoice(
@@ -292,14 +287,74 @@ public class TreatmentInvoiceService {
     @Transactional
     public ConsultationInvoice sendInvoiceWhatsApp(
             ConsultationInvoice invoice, String overridePhone, WhatsAppSenderCredentials sender) {
-        outboundMessageService.requireSenderReady(sender, senderOwnerLabel(invoice));
+        CreateInvoiceResultDto result = sendInvoiceToOwner(invoice, overridePhone, sender);
+        if (!result.isWhatsappSent()) {
+            String msg = result.getWhatsappError();
+            throw new CustomException(
+                    msg != null && !msg.isBlank() ? msg : "WhatsApp send failed",
+                    HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        return result.getInvoice();
+    }
+
+    private String canonicalOwnerPhoneOrNull(ConsultationInvoice invoice) {
+        Map<String, Object> ownerSnap = readMap(invoice.getOwnerSnapshot());
+        String fromSnap = stringVal(ownerSnap.get("ownerPhone"), null);
+        if (fromSnap != null && !fromSnap.isBlank()) {
+            return fromSnap;
+        }
+        if (invoice.getOwner() != null && invoice.getOwner().getPhoneNumber() != null
+                && !invoice.getOwner().getPhoneNumber().isBlank()) {
+            return invoice.getOwner().getPhoneNumber();
+        }
+        return null;
+    }
+
+    private String findOwnerPhone(ConsultationInvoice invoice, String overridePhone) {
+        String canonical = canonicalOwnerPhoneOrNull(invoice);
+        if (overridePhone == null || overridePhone.isBlank()) {
+            return canonical;
+        }
+        if (canonical == null) {
+            return null;
+        }
+        String overrideDigits = WhatsAppPhones.toE164Digits(overridePhone, "91");
+        String canonicalDigits = WhatsAppPhones.toE164Digits(canonical, "91");
+        if (overrideDigits == null || canonicalDigits == null || !overrideDigits.equals(canonicalDigits)) {
+            throw new CustomException(
+                    "WhatsApp destination must match the invoice owner phone",
+                    HttpStatus.BAD_REQUEST);
+        }
+        return canonical;
+    }
+
+    private String findOwnerEmail(ConsultationInvoice invoice) {
+        Map<String, Object> ownerSnap = readMap(invoice.getOwnerSnapshot());
+        String fromSnap = stringVal(ownerSnap.get("ownerEmail"), null);
+        if (fromSnap != null && !fromSnap.isBlank()) {
+            return fromSnap.trim();
+        }
+        if (invoice.getOwner() != null && invoice.getOwner().getEmail() != null
+                && !invoice.getOwner().getEmail().isBlank()) {
+            return invoice.getOwner().getEmail().trim();
+        }
+        return null;
+    }
+
+    /** Send the invoice PDF on WhatsApp. Email is sent separately when the invoice is paid. */
+    public CreateInvoiceResultDto sendInvoiceToOwner(
+            ConsultationInvoice invoice, String overridePhone, WhatsAppSenderCredentials sender) {
         ConsultationInvoice managed = invoice.getUuid() != null
                 ? invoiceRepository.findByUuid(invoice.getUuid()).orElse(invoice)
                 : invoice;
         if (managed.getPdfUrl() == null || managed.getPdfUrl().isBlank()) {
             managed = generateAndAttachPdf(managed);
         }
-        String phone = resolveOwnerPhone(managed, overridePhone);
+        String phone = findOwnerPhone(managed, overridePhone);
+        if (phone == null) {
+            throw new CustomException("Owner phone is required to send the invoice on WhatsApp", HttpStatus.BAD_REQUEST);
+        }
+
         String objectKey = InvoicePdfFileNamer.resolveObjectKey(managed.getPdfUrl(), managed.getUuid());
         byte[] pdf = s3StorageService.downloadTreatmentInvoice(objectKey);
         String filename = InvoicePdfFileNamer.baseName(objectKey);
@@ -315,23 +370,87 @@ public class TreatmentInvoiceService {
                 ? managed.getAmount().setScale(2, RoundingMode.HALF_UP).toPlainString()
                 : "0.00";
 
-        Pet petEntity = null;
-        if (managed.getPetUuid() != null) {
-            petEntity = petsRepository.findByUuid(managed.getPetUuid());
+        boolean whatsappSent = false;
+        String whatsappError = null;
+        if (phone != null) {
+            try {
+                outboundMessageService.requireSenderReady(sender, senderOwnerLabel(managed));
+                Pet petEntity = null;
+                if (managed.getPetUuid() != null) {
+                    petEntity = petsRepository.findByUuid(managed.getPetUuid());
+                }
+                outboundMessageService.sendInvoicePdfWhatsApp(
+                        sender,
+                        phone,
+                        pdf,
+                        filename,
+                        List.of(ownerName, clinicName, petName, invoiceNo, amount),
+                        managed.getOwner(),
+                        petEntity);
+                whatsappSent = true;
+            } catch (Exception e) {
+                whatsappError = e.getMessage() != null && !e.getMessage().isBlank()
+                        ? e.getMessage()
+                        : "WhatsApp send failed";
+                log.warn("Invoice {} WhatsApp send failed: {}", managed.getUuid(), whatsappError);
+            }
         }
 
-        outboundMessageService.sendInvoicePdfWhatsApp(
-                sender,
-                phone,
-                pdf,
-                filename,
-                List.of(ownerName, clinicName, petName, invoiceNo, amount),
-                managed.getOwner(),
-                petEntity);
-        return managed;
+        return CreateInvoiceResultDto.channels(managed, whatsappSent, whatsappError, false, null);
     }
 
-    /** Doctor send: clinic WhatsApp for affiliated-clinic invoices, else doctor credentials. */
+    /** Email the paid invoice PDF to the owner. Failures are logged and do not undo payment. */
+    public void emailPaidInvoiceQuietly(ConsultationInvoice invoice) {
+        try {
+            ConsultationInvoice managed = invoice.getUuid() != null
+                    ? invoiceRepository.findByUuid(invoice.getUuid()).orElse(invoice)
+                    : invoice;
+            if (managed.getStatus() != ConsultationInvoiceStatus.PAID
+                    && !"PAID".equalsIgnoreCase(managed.getPaymentStatus())) {
+                return;
+            }
+            String email = findOwnerEmail(managed);
+            if (email == null) {
+                log.warn("Skipping paid invoice email for {}: owner email is blank", managed.getUuid());
+                return;
+            }
+            if (managed.getPdfUrl() == null || managed.getPdfUrl().isBlank()) {
+                managed = generateAndAttachPdf(managed);
+            }
+            String objectKey = InvoicePdfFileNamer.resolveObjectKey(managed.getPdfUrl(), managed.getUuid());
+            byte[] pdf = s3StorageService.downloadTreatmentInvoice(objectKey);
+            String filename = InvoicePdfFileNamer.baseName(objectKey);
+            Map<String, Object> pet = readMap(managed.getPetSnapshot());
+            Map<String, Object> ownerSnap = readMap(managed.getOwnerSnapshot());
+            String ownerName = stringVal(ownerSnap.get("ownerName"), "Pet parent");
+            String clinicName = managed.getClinic() != null && managed.getClinic().getName() != null
+                    ? managed.getClinic().getName()
+                    : "KittyP Clinic";
+            String petName = stringVal(pet.get("petName"), "your pet");
+            String invoiceNo = managed.getInvoiceNumber() != null ? managed.getInvoiceNumber() : managed.getUuid();
+            String amount = managed.getAmount() != null
+                    ? managed.getAmount().setScale(2, RoundingMode.HALF_UP).toPlainString()
+                    : "0.00";
+            String invoiceUrl = "";
+            try {
+                invoiceUrl = s3StorageService
+                        .presignedTreatmentInvoiceUrl(objectKey, java.time.Duration.ofDays(7))
+                        .toString();
+            } catch (Exception e) {
+                log.warn("Paid invoice {} email will be sent without a download link: {}", managed.getUuid(),
+                        e.getMessage());
+            }
+            zeptoMailService.sendInvoiceEmail(email, ownerName, clinicName, petName, invoiceNo, amount, invoiceUrl,
+                    pdf, filename);
+        } catch (Exception e) {
+            log.warn("Invoice {} paid but email failed: {}", invoice.getUuid(), e.getMessage());
+        }
+    }
+
+    /**
+     * Doctor send: clinic WhatsApp for affiliated-clinic invoices, else doctor
+     * credentials.
+     */
     public ConsultationInvoice sendInvoiceWhatsApp(ConsultationInvoice invoice, String overridePhone) {
         return sendInvoiceWhatsApp(invoice, overridePhone, senderFor(invoice, invoice.getDoctor()));
     }
@@ -527,7 +646,9 @@ public class TreatmentInvoiceService {
         invoice.setStatus(ConsultationInvoiceStatus.PAID);
         invoice = invoiceRepository.save(invoice);
         completeLinkedVisitAfterPayment(invoice);
-        return refreshPdfQuietly(invoice);
+        invoice = refreshPdfQuietly(invoice);
+        emailPaidInvoiceQuietly(invoice);
+        return invoice;
     }
 
     @Transactional
@@ -598,7 +719,8 @@ public class TreatmentInvoiceService {
         if (clinic == null) {
             return WhatsAppSenderCredentials.of(null, null);
         }
-        // Reload so WhatsApp token/phone id are current (invoice association can be stale).
+        // Reload so WhatsApp token/phone id are current (invoice association can be
+        // stale).
         Clinic managed = clinic.getUuid() != null ? clinicRepository.findByUuid(clinic.getUuid()) : null;
         Clinic source = managed != null ? managed : clinic;
         return WhatsAppSenderCredentials.of(
@@ -674,7 +796,8 @@ public class TreatmentInvoiceService {
         BigDecimal sgst = nz(request.getSgst());
         BigDecimal igst = nz(request.getIgst());
         BigDecimal paid = nz(request.getPaidAmount());
-        // Always derive money server-side — never trust client amount/balance/subtotal/tax totals.
+        // Always derive money server-side — never trust client
+        // amount/balance/subtotal/tax totals.
         BigDecimal subtotal = computed;
         rejectNegativeMoney(discount, cgst, sgst, igst, paid);
         if (discount.compareTo(subtotal) > 0) {
@@ -735,7 +858,8 @@ public class TreatmentInvoiceService {
                 .igst(igst)
                 .paidAmount(paid)
                 .balance(balance)
-                .paymentStatus(blankTo(request.getPaymentStatus(), paid.compareTo(BigDecimal.ZERO) > 0 ? "PARTIAL" : "UNPAID"))
+                .paymentStatus(
+                        blankTo(request.getPaymentStatus(), paid.compareTo(BigDecimal.ZERO) > 0 ? "PARTIAL" : "UNPAID"))
                 .paymentMode(request.getPaymentMode())
                 .transactionId(request.getTransactionId())
                 .currency(blankTo(request.getCurrency(), "INR").toUpperCase())
@@ -761,8 +885,10 @@ public class TreatmentInvoiceService {
     }
 
     /**
-     * WhatsApp destination must be the invoice owner phone (snapshot or linked user).
-     * A client-supplied override is allowed only when it normalizes to the same E.164 digits
+     * WhatsApp destination must be the invoice owner phone (snapshot or linked
+     * user).
+     * A client-supplied override is allowed only when it normalizes to the same
+     * E.164 digits
      * (formatting differences), never an arbitrary third-party number.
      */
     private String resolveOwnerPhone(ConsultationInvoice invoice, String overridePhone) {
@@ -913,9 +1039,11 @@ public class TreatmentInvoiceService {
                 .petWeight(str(pet, "petWeight"))
                 .petMicrochip(str(pet, "petMicrochip"))
                 .patientId(friendlyPatientId(str(pet, "patientId", invoice.getPetUuid())))
-                .ownerName(str(ownerSnap, "ownerName", invoice.getOwner() != null ? fullName(invoice.getOwner()) : null))
+                .ownerName(
+                        str(ownerSnap, "ownerName", invoice.getOwner() != null ? fullName(invoice.getOwner()) : null))
                 .ownerPhone(str(ownerSnap, "ownerPhone"))
-                .ownerEmail(str(ownerSnap, "ownerEmail", invoice.getOwner() != null ? invoice.getOwner().getEmail() : null))
+                .ownerEmail(
+                        str(ownerSnap, "ownerEmail", invoice.getOwner() != null ? invoice.getOwner().getEmail() : null))
                 .ownerAddress(str(ownerSnap, "ownerAddress"));
 
         if (clinic != null) {
@@ -1020,7 +1148,8 @@ public class TreatmentInvoiceService {
         if (request.getLineItems() != null && !request.getLineItems().isBlank()) {
             try {
                 List<Map<String, Object>> raw = objectMapper.readValue(request.getLineItems(),
-                        new TypeReference<List<Map<String, Object>>>() {});
+                        new TypeReference<List<Map<String, Object>>>() {
+                        });
                 List<TreatmentLineItemDto> parsed = new ArrayList<>();
                 for (Map<String, Object> row : raw) {
                     TreatmentLineItemDto dto = new TreatmentLineItemDto();
@@ -1083,7 +1212,8 @@ public class TreatmentInvoiceService {
     }
 
     /**
-     * When a linked platform user exists, prefer their phone and reject a mismatched client value
+     * When a linked platform user exists, prefer their phone and reject a
+     * mismatched client value
      * so create+send cannot retarget WhatsApp to an arbitrary number.
      */
     private String resolveSnapshotPhone(CreateConsultationInvoiceDto request, User owner) {
@@ -1102,7 +1232,10 @@ public class TreatmentInvoiceService {
         return fromOwner != null ? fromOwner : fromReq;
     }
 
-    /** Always derive line total from qty × rate − discount — never trust client {@code total}. */
+    /**
+     * Always derive line total from qty × rate − discount — never trust client
+     * {@code total}.
+     */
     private BigDecimal lineTotal(TreatmentLineItemDto item) {
         BigDecimal qty = nz(item.getQuantity(), BigDecimal.ONE);
         if (qty.signum() <= 0) {
@@ -1197,7 +1330,8 @@ public class TreatmentInvoiceService {
 
     private List<TreatmentLineItemDto> readItems(String json) {
         try {
-            return objectMapper.readValue(json, new TypeReference<List<TreatmentLineItemDto>>() {});
+            return objectMapper.readValue(json, new TypeReference<List<TreatmentLineItemDto>>() {
+            });
         } catch (Exception e) {
             return List.of();
         }
@@ -1208,7 +1342,8 @@ public class TreatmentInvoiceService {
             return Map.of();
         }
         try {
-            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
+            });
         } catch (Exception e) {
             return Map.of();
         }

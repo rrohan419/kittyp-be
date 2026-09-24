@@ -13,10 +13,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.kittyp.clinic.dao.ClinicDao;
+import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.user.entity.User;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,6 +29,12 @@ class ClinicServiceImplListAllTest {
 
 	@Mock
 	private ClinicDoctorRepository clinicDoctorRepository;
+
+	@Mock
+	private ZeptoMailService zeptoMailService;
+
+	@Mock
+	private DoctorProfileDao doctorProfileDao;
 
 	@InjectMocks
 	private ClinicServiceImpl clinicService;
