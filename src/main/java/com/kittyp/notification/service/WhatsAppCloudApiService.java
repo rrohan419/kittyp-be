@@ -62,7 +62,7 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         }
         String safeName = (filename == null || filename.isBlank()) ? "invoice.pdf" : filename;
         MultipartBodyBuilder body = new MultipartBodyBuilder();
-        body.part(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, KeyConstant.WHATSAPP_MESSAGE_PRODUCT);
+        body.part(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, KeyConstant.WHATSAPP);
         body.part(KeyConstant.WHATSAPP_MESSAGE_TYPE, "application/pdf");
         body.part(KeyConstant.WHATSAPP_MESSAGE_FILE, new ByteArrayResource(pdfBytes) {
             @Override
