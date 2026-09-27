@@ -1,8 +1,5 @@
 package com.kittyp.ai.controller;
 
-import java.time.LocalDate;
-import java.util.List;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +15,7 @@ import com.kittyp.ai.dto.NutritionistRecommendationRequest;
 import com.kittyp.ai.model.NutritionRecommendationResponse;
 import com.kittyp.ai.model.TipOfTheDayModel;
 import com.kittyp.ai.service.AiNutritionRecommendationService;
+import com.kittyp.ai.service.DailyPetTipService;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -39,6 +37,7 @@ public class AiController {
 
     private final ApiResponse<?> responseBuilder;
     private final AiNutritionRecommendationService aiNutritionRecommendationService;
+    private final DailyPetTipService dailyPetTipService;
     private final UserDao userDao;
     private final PetAccessGuard petAccessGuard;
 
@@ -73,17 +72,12 @@ public class AiController {
 
     @GetMapping(ApiUrl.AI_TIP_OF_THE_DAY)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<TipOfTheDayModel>> tipOfTheDay(@RequestParam String petUuid) {
-        assertPetOwner(petUuid);
-        LocalDate today = LocalDate.now();
-        List<String> tips = List.of(
-                "Keep fresh water available and wash the bowl daily.",
-                "A short daily play session supports a healthy weight and reduces stress.",
-                "Use treats sparingly and include their calories in your pet's daily food allowance.",
-                "Check your pet's coat, ears, and paws during regular grooming.",
-                "Sudden changes in appetite, thirst, or energy are worth discussing with a veterinarian.");
-        int index = Math.floorMod((petUuid + today).hashCode(), tips.size());
-        return responseBuilder.buildSuccessResponse(new TipOfTheDayModel(tips.get(index), today),
+    public ResponseEntity<SuccessResponse<TipOfTheDayModel>> tipOfTheDay(
+            @RequestParam(required = false) String petUuid) {
+        if (petUuid != null && !petUuid.isBlank()) {
+            assertPetOwner(petUuid);
+        }
+        return responseBuilder.buildSuccessResponse(dailyPetTipService.tipForToday(),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

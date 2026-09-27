@@ -33,6 +33,13 @@ public class TreatmentInvoiceData {
     private boolean paid;
     private boolean partial;
 
+    /** Clinic name when clinic-linked; otherwise doctor display name. */
+    private String issuerName;
+    private boolean issuerIsClinic;
+    /** data:image/png;base64,... for openhtmltopdf. */
+    private String kittypLogoSrc;
+    private String amountInWords;
+
     private String clinicName;
     private String clinicAddress;
     private String clinicPhone;
@@ -74,6 +81,9 @@ public class TreatmentInvoiceData {
     private List<LineItem> hospitalization = new ArrayList<>();
     @Builder.Default
     private List<LineItem> other = new ArrayList<>();
+    /** Flat list for a single compact table. */
+    @Builder.Default
+    private List<LineItem> allLines = new ArrayList<>();
 
     private BigDecimal subtotal;
     private BigDecimal discount;
@@ -101,5 +111,7 @@ public class TreatmentInvoiceData {
         private BigDecimal rate;
         private BigDecimal amount;
         private String itemType;
+        /** Services / Medicines / etc. for one-table layout. */
+        private String section;
     }
 }

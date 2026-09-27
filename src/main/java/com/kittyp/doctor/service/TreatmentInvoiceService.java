@@ -2,6 +2,7 @@ package com.kittyp.doctor.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -10,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,8 @@ import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicRepository;
+import com.kittyp.clinic.service.ClinicInventoryStockService;
+import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
@@ -46,6 +50,7 @@ import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorProfileRepository;
 import com.kittyp.email.service.ZeptoMailService;
+import com.kittyp.payment.util.AmountInWords;
 import com.kittyp.payment.util.InvoicePdfFileNamer;
 import com.kittyp.payment.util.PdfGenerator;
 import com.kittyp.notification.service.OutboundMessageService;
@@ -68,6 +73,12 @@ public class TreatmentInvoiceService {
 
     private static final Logger log = LoggerFactory.getLogger(TreatmentInvoiceService.class);
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
+    /** Short-lived URL for in-app View PDF. */
+    private static final Duration PDF_VIEW_TTL = Duration.ofMinutes(15);
+    /** Longer-lived URL embedded in invoice emails. */
+    private static final Duration PDF_EMAIL_TTL = Duration.ofDays(7);
+    private static final Pattern EMAIL_SHAPE = Pattern
+            .compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
     private final ConsultationInvoiceRepository invoiceRepository;
     private final ClinicRepository clinicRepository;
@@ -86,9 +97,11 @@ public class TreatmentInvoiceService {
     private final OutboundMessageService outboundMessageService;
     private final AlphanumericIdService alphanumericIdService;
     private final ZeptoMailService zeptoMailService;
+    private final ClinicInventoryStockService clinicInventoryStockService;
 
     @Transactional
     public ConsultationInvoice create(User doctor, CreateConsultationInvoiceDto request) {
+        validateOptionalContactAndPetFields(request);
         List<TreatmentLineItemDto> items = normalizeItems(request);
         if (items.isEmpty()) {
             throw new CustomException("At least one invoice line item is required", HttpStatus.BAD_REQUEST);
@@ -182,6 +195,7 @@ public class TreatmentInvoiceService {
                 .build();
 
         invoice = invoiceRepository.save(invoice);
+        deductInventoryForInvoice(clinic, invoice, items, doctor);
 
         if (visitUuid != null) {
             Visit visit = visitDao.findByUuid(visitUuid)
@@ -279,12 +293,11 @@ public class TreatmentInvoiceService {
      */
     public CreateInvoiceResultDto sendInvoiceToOwner(
             ConsultationInvoice invoice, String overridePhone, WhatsAppSenderCredentials sender) {
+        // Always regenerate so email/WhatsApp use the latest PDF template and payment state.
         ConsultationInvoice managed = invoice.getUuid() != null
                 ? invoiceRepository.findByUuid(invoice.getUuid()).orElse(invoice)
                 : invoice;
-        if (managed.getPdfUrl() == null || managed.getPdfUrl().isBlank()) {
-            managed = generateAndAttachPdf(managed);
-        }
+        managed = generateAndAttachPdf(managed);
         String phone = findOwnerPhone(managed, overridePhone);
         String email = findOwnerEmail(managed);
         if (phone == null && email == null) {
@@ -336,7 +349,7 @@ public class TreatmentInvoiceService {
         String emailError = null;
         if (email != null) {
             try {
-                String invoiceUrl = getPresignedPdfUrl(managed);
+                String invoiceUrl = getPresignedPdfUrl(managed, PDF_EMAIL_TTL);
                 zeptoMailService.sendInvoiceEmail(
                         email, ownerName, clinicName, petName, invoiceNo, amount, invoiceUrl, pdf, filename);
                 emailSent = true;
@@ -750,6 +763,7 @@ public class TreatmentInvoiceService {
     @Transactional
     protected ConsultationInvoice createAsClinicBilling(
             User doctor, Clinic clinic, CreateConsultationInvoiceDto request) {
+        validateOptionalContactAndPetFields(request);
         List<TreatmentLineItemDto> items = normalizeItems(request);
         if (items.isEmpty()) {
             throw new CustomException("At least one invoice line item is required", HttpStatus.BAD_REQUEST);
@@ -835,6 +849,7 @@ public class TreatmentInvoiceService {
                 .build();
 
         invoice = invoiceRepository.save(invoice);
+        deductInventoryForInvoice(clinic, invoice, items, doctor);
 
         if (visitUuid != null) {
             Visit visit = visitDao.findByUuid(visitUuid)
@@ -914,6 +929,33 @@ public class TreatmentInvoiceService {
         return canonical;
     }
 
+    private void deductInventoryForInvoice(
+            Clinic clinic, ConsultationInvoice invoice, List<TreatmentLineItemDto> items, User actor) {
+        if (clinic == null || invoice == null || items == null) {
+            return;
+        }
+        int idx = 0;
+        for (TreatmentLineItemDto item : items) {
+            idx++;
+            if (item == null || item.getInventoryItemUuid() == null || item.getInventoryItemUuid().isBlank()) {
+                continue;
+            }
+            TreatmentInvoiceItemType type = item.getItemType();
+            if (type != TreatmentInvoiceItemType.MEDICINE && type != TreatmentInvoiceItemType.CONSUMABLE) {
+                continue;
+            }
+            String lineKey = "L" + idx + ":" + item.getInventoryItemUuid();
+            clinicInventoryStockService.deductForInvoiceLine(
+                    clinic,
+                    item.getInventoryItemUuid().trim(),
+                    item.getLotUuid(),
+                    item.getQuantity(),
+                    invoice.getUuid(),
+                    lineKey,
+                    actor);
+        }
+    }
+
     private static void rejectNegativeMoney(BigDecimal... amounts) {
         for (BigDecimal amount : amounts) {
             if (amount != null && amount.signum() < 0) {
@@ -967,12 +1009,16 @@ public class TreatmentInvoiceService {
     }
 
     public String getPresignedPdfUrl(ConsultationInvoice invoice) {
+        return getPresignedPdfUrl(invoice, PDF_VIEW_TTL);
+    }
+
+    public String getPresignedPdfUrl(ConsultationInvoice invoice, Duration ttl) {
         if (invoice.getPdfUrl() == null || invoice.getPdfUrl().isBlank()) {
             throw new CustomException("PDF not generated for this invoice yet", HttpStatus.NOT_FOUND);
         }
+        Duration signatureTtl = ttl == null || ttl.isZero() || ttl.isNegative() ? PDF_VIEW_TTL : ttl;
         String key = InvoicePdfFileNamer.resolveObjectKey(invoice.getPdfUrl(), invoice.getUuid());
-        return s3StorageService.presignedTreatmentInvoiceUrl(key, java.time.Duration.ofMinutes(15))
-                .toString();
+        return s3StorageService.presignedTreatmentInvoiceUrl(key, signatureTtl).toString();
     }
 
     public TreatmentInvoiceData toPdfData(ConsultationInvoice invoice) {
@@ -1044,15 +1090,23 @@ public class TreatmentInvoiceService {
                     .clinicAddress(clinic.getAddress())
                     .clinicPhone(clinic.getPhone())
                     .clinicEmail(clinic.getEmail())
-                    .clinicRegistrationNumber(clinic.getLicenseNumber());
+                    .clinicRegistrationNumber(clinic.getLicenseNumber())
+                    .issuerName(clinic.getName())
+                    .issuerIsClinic(true);
         } else {
+            String doctorDisplay = fullName(doctor);
             builder.clinicName("Kittyp Veterinary Practice")
                     .clinicEmail(doctor != null ? doctor.getEmail() : null)
-                    .clinicPhone(doctor != null ? doctor.getPhoneNumber() : null);
+                    .clinicPhone(doctor != null ? doctor.getPhoneNumber() : null)
+                    .issuerName(doctorDisplay != null && !doctorDisplay.isBlank() ? doctorDisplay : "Doctor")
+                    .issuerIsClinic(false);
         }
 
-        TreatmentInvoiceData data = builder.build();
+        TreatmentInvoiceData data = builder
+                .amountInWords(AmountInWords.ofInr(invoice.getAmount()))
+                .build();
         for (TreatmentLineItemDto item : items) {
+            String section = sectionLabel(item.getItemType());
             TreatmentInvoiceData.LineItem line = TreatmentInvoiceData.LineItem.builder()
                     .description(item.getDescription())
                     .quantity(item.getQuantity())
@@ -1060,7 +1114,9 @@ public class TreatmentInvoiceService {
                     .rate(item.getUnitPrice())
                     .amount(lineTotal(item))
                     .itemType(item.getItemType() != null ? item.getItemType().name() : "OTHER")
+                    .section(section)
                     .build();
+            data.getAllLines().add(line);
             switch (item.getItemType() != null ? item.getItemType() : TreatmentInvoiceItemType.OTHER) {
                 case MEDICINE -> data.getMedicines().add(line);
                 case CONSUMABLE -> data.getConsumables().add(line);
@@ -1072,6 +1128,21 @@ public class TreatmentInvoiceService {
             }
         }
         return data;
+    }
+
+    private static String sectionLabel(TreatmentInvoiceItemType type) {
+        if (type == null) {
+            return "Other";
+        }
+        return switch (type) {
+            case MEDICINE -> "Medicines";
+            case CONSUMABLE -> "Consumables";
+            case LAB_TEST -> "Laboratory";
+            case SURGERY -> "Surgery";
+            case HOSPITALIZATION -> "Hospitalization";
+            case CONSULTATION, SERVICE, VACCINATION -> "Services";
+            default -> "Other";
+        };
     }
 
     String derivedPaymentStatus(ConsultationInvoice invoice) {
@@ -1159,6 +1230,12 @@ public class TreatmentInvoiceService {
                             row.getOrDefault("amount", row.getOrDefault("price", 0)))));
                     dto.setUnit(row.get("unit") != null ? String.valueOf(row.get("unit")) : null);
                     dto.setTotal(toBd(row.get("total")));
+                    if (row.get("inventoryItemUuid") != null) {
+                        dto.setInventoryItemUuid(String.valueOf(row.get("inventoryItemUuid")));
+                    }
+                    if (row.get("lotUuid") != null) {
+                        dto.setLotUuid(String.valueOf(row.get("lotUuid")));
+                    }
                     parsed.add(dto);
                 }
                 return parsed;
@@ -1292,6 +1369,38 @@ public class TreatmentInvoiceService {
                 doctor.getId());
         if (!owner && !affiliated) {
             throw new AccessDeniedException("You are not affiliated with this clinic.");
+        }
+    }
+
+    /**
+     * Light guards for optional snapshot fields. Empty is allowed; non-empty must be well-formed.
+     * Normalizes ownerPhone to 10 local digits when present.
+     */
+    private void validateOptionalContactAndPetFields(CreateConsultationInvoiceDto request) {
+        String email = blankToNull(request.getOwnerEmail());
+        if (email != null && !EMAIL_SHAPE.matcher(email).matches()) {
+            throw new CustomException("Enter a valid email address", HttpStatus.BAD_REQUEST);
+        }
+
+        String phone = blankToNull(request.getOwnerPhone());
+        if (phone != null) {
+            String digits = ClinicOwnerUserLinkService.normalizePhoneDigits(phone);
+            if (digits == null || digits.length() != 10) {
+                throw new CustomException("Phone number must be exactly 10 digits", HttpStatus.BAD_REQUEST);
+            }
+            request.setOwnerPhone(digits);
+        }
+
+        String weight = blankToNull(request.getPetWeight());
+        if (weight != null) {
+            try {
+                double n = Double.parseDouble(weight);
+                if (!Double.isFinite(n) || n < 0.1 || n > 500) {
+                    throw new CustomException("Weight must be between 0.1 and 500 kg", HttpStatus.BAD_REQUEST);
+                }
+            } catch (NumberFormatException e) {
+                throw new CustomException("Weight must be a valid number (kg)", HttpStatus.BAD_REQUEST);
+            }
         }
     }
 

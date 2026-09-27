@@ -90,4 +90,9 @@ public class Clinic extends BaseEntity implements HasPublicId {
     @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "whatsapp_token", columnDefinition = "TEXT")
     private String whatsappToken;
+
+    /** Days before expiry to treat a lot as EXPIRING_SOON (default 90). */
+    @Column(name = "inventory_expiring_soon_days")
+    @Builder.Default
+    private Integer inventoryExpiringSoonDays = 90;
 }

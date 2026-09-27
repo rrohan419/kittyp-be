@@ -24,5 +24,10 @@ public enum NotificationType {
     /** Parent booked an appointment with a doctor. */
     BOOKING_CREATED,
     /** Doctor or parent started the Jitsi video consult. */
-    VIDEO_CALL_STARTED
+    VIDEO_CALL_STARTED,
+    INVENTORY_LOW_STOCK,
+    INVENTORY_OUT_OF_STOCK,
+    INVENTORY_EXPIRING_SOON,
+    INVENTORY_EXPIRED,
+    INVENTORY_WEEKLY_REPORT
 }

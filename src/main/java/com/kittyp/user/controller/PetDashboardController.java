@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.ai.dao.NutritionPlanDao;
+import com.kittyp.ai.service.DailyPetTipService;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
@@ -45,13 +46,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PetDashboardController {
 
-    private static final List<String> DAILY_TIPS = List.of(
-            "Keep fresh water available and wash the bowl daily.",
-            "A short daily play session supports a healthy weight and reduces stress.",
-            "Use treats sparingly and include their calories in your pet's daily food allowance.",
-            "Check your pet's coat, ears, and paws during regular grooming.",
-            "Sudden changes in appetite, thirst, or energy are worth discussing with a veterinarian.");
-
     private final ApiResponse<?> responseBuilder;
     private final UserDao userDao;
     private final PetDao petDao;
@@ -59,6 +53,7 @@ public class PetDashboardController {
     private final PetVaccineScheduleDao petVaccineScheduleDao;
     private final NutritionPlanDao nutritionPlanDao;
     private final PetFeedingLogDao petFeedingLogDao;
+    private final DailyPetTipService dailyPetTipService;
 
     @PostMapping(ApiUrl.PET_WEIGHT)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
@@ -96,13 +91,14 @@ public class PetDashboardController {
     public ResponseEntity<SuccessResponse<PetDashboardModel>> dashboard(@PathVariable String uuid) {
         Pet pet = ownedPet(uuid);
         LocalDate today = LocalDate.now();
+        var tip = dailyPetTipService.tipFor(today);
         PetDashboardModel response = new PetDashboardModel(
                 toPetModel(pet),
                 petWeightLogRepository.findFirstByPet_UuidOrderByRecordedAtDesc(uuid).map(this::toWeightModel).orElse(null),
                 vaccineDues(uuid, today),
                 activeNutritionPlan(uuid),
                 completedFeedingsToday(uuid, today),
-                tipFor(uuid, today));
+                new PetDashboardModel.TipOfTheDay(tip.tip(), tip.date()));
         return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
@@ -139,11 +135,6 @@ public class PetDashboardController {
         return (int) petFeedingLogDao.findForDay(petUuid, today.atStartOfDay(), today.plusDays(1).atStartOfDay()).stream()
                 .filter(log -> log.getStatus() == FeedingStatus.COMPLETED)
                 .count();
-    }
-
-    private PetDashboardModel.TipOfTheDay tipFor(String petUuid, LocalDate today) {
-        int index = Math.floorMod((petUuid + today).hashCode(), DAILY_TIPS.size());
-        return new PetDashboardModel.TipOfTheDay(DAILY_TIPS.get(index), today);
     }
 
     private PetWeightLogModel toWeightModel(PetWeightLog log) {

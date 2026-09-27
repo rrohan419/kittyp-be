@@ -115,7 +115,9 @@ public class WhatsAppEmbeddedSignupService {
 
     VerifiedCredentials exchangeAndVerify(String code, String wabaId, String phoneNumberId) {
         if (!StringUtils.hasText(appId) || !StringUtils.hasText(appSecret)) {
-            throw new CustomException("WhatsApp Meta app credentials are not configured", HttpStatus.SERVICE_UNAVAILABLE);
+            throw new CustomException(
+                    "WhatsApp Meta app credentials are not configured. Set WHATSAPP_META_APP_ID and WHATSAPP_META_APP_SECRET on the server, then restart.",
+                    HttpStatus.SERVICE_UNAVAILABLE);
         }
         if (!StringUtils.hasText(code) || !StringUtils.hasText(wabaId) || !StringUtils.hasText(phoneNumberId)) {
             throw new CustomException("code, wabaId, and phoneNumberId are required", HttpStatus.BAD_REQUEST);

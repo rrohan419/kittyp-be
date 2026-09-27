@@ -199,6 +199,15 @@ public class ApiUrl {
 	public static final String CLINIC_INVOICE_MARK_PAID = CLINIC_INVOICE_BY_UUID + "/mark-paid";
 	public static final String CLINIC_WHATSAPP_SETTINGS = CLINIC_BY_UUID + "/whatsapp-settings";
 	public static final String CLINIC_WHATSAPP_EMBEDDED_SIGNUP = CLINIC_BY_UUID + "/whatsapp-embedded-signup";
+	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
+	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";
+	public static final String CLINIC_INVENTORY_DASHBOARD = CLINIC_INVENTORY + "/dashboard";
+	public static final String CLINIC_INVENTORY_MOVEMENTS = CLINIC_INVENTORY + "/movements";
+	public static final String CLINIC_INVENTORY_SCAN = CLINIC_INVENTORY + "/scan";
+	public static final String CLINIC_INVENTORY_ALERTS = CLINIC_INVENTORY + "/alerts";
+	public static final String CLINIC_INVENTORY_WEEKLY_REPORT = CLINIC_INVENTORY + "/reports/weekly";
+	public static final String CLINIC_INVENTORY_CONSUMPTION = CLINIC_INVENTORY + "/consumption";
+	public static final String CLINIC_INVENTORY_LOTS = CLINIC_INVENTORY_ITEM + "/lots";
 	public static final String DOCTOR_WHATSAPP_SETTINGS = "/doctor/whatsapp-settings";
 	public static final String DOCTOR_WHATSAPP_EMBEDDED_SIGNUP = "/doctor/whatsapp-embedded-signup";
 	public static final String WHATSAPP_WEBHOOK = "/whatsapp/webhook";
