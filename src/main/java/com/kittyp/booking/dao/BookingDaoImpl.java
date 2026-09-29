@@ -28,4 +28,9 @@ public class BookingDaoImpl implements BookingDao {
     public List<Booking> findByClinic(Long clinicId) {
         return bookingRepository.findByClinic_Id(clinicId);
     }
+
+    @Override
+    public Page<Booking> findByClinic(Long clinicId, Pageable pageable) {
+        return bookingRepository.findByClinic_Id(clinicId, pageable);
+    }
 }

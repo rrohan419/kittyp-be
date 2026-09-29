@@ -28,6 +28,9 @@ public interface ZeptoMailService {
 	void sendClinicPetConsentOtpEmail(String recipientEmail, String ownerName, String clinicName, String petName,
 			String code);
 
+	/** Parent must confirm before their KittyP account is attached as a clinic client. */
+	void sendClinicClientAttachOtpEmail(String recipientEmail, String ownerName, String clinicName, String code);
+
 	/** Clinic doctor invitation with accept link. */
 	void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);
 
@@ -38,18 +41,9 @@ public interface ZeptoMailService {
 	void sendClinicDoctorInviteReminderEmail(String recipientEmail, String doctorName, String clinicName,
 			String acceptUrl);
 
-	void sendDoctorInviteReminder(String email, String doctorName, String clinicName, String acceptUrl);
-
 	/** Notify clinic that a doctor accepted or declined an invite. */
 	void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
 			String doctorEmail, boolean accepted);
-
-	void sendPasswordChangedNotification(String email, String customerName, String clinicName, String changeTime);
-
-	void sendPhoneChangedNotification(String email, String customerName, String clinicName, String newPhone,
-			String loginUrl);
-
-	void sendEmailChangeOtp(String email, String customerName, String clinicName, String otp);
 
 	void sendDoctorProfileVerified(String email, String doctorName, String dashboardUrl);
 

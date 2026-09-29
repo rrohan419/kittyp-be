@@ -32,6 +32,8 @@ import com.kittyp.doctor.dto.CreateInvoiceResultDto;
 import com.kittyp.doctor.dto.MarkInvoicePaidDto;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.service.TreatmentInvoiceService;
+import com.kittyp.notification.service.WhatsAppConnectionService;
+import com.kittyp.notification.service.WhatsAppConnectionStatuses;
 import com.kittyp.notification.service.WhatsAppCredentialsVerifier;
 import com.kittyp.notification.service.WhatsAppEmbeddedSignupService;
 import com.kittyp.notification.service.WhatsAppSettingsSupport;
@@ -57,6 +59,7 @@ public class ClinicInvoiceController {
     private final TreatmentInvoiceService treatmentInvoiceService;
     private final UserRepository userRepository;
     private final WhatsAppCredentialsVerifier whatsAppCredentialsVerifier;
+    private final WhatsAppConnectionService whatsAppConnectionService;
     private final WhatsAppEmbeddedSignupService whatsAppEmbeddedSignupService;
 
     @GetMapping(ApiUrl.CLINIC_INVOICES)
@@ -75,7 +78,7 @@ public class ClinicInvoiceController {
     @PreAuthorize(CLINIC_BILLING)
     public ResponseEntity<SuccessResponse<CreateInvoiceResultDto>> create(
             @PathVariable String uuid, @Valid @RequestBody CreateConsultationInvoiceDto request) {
-        Clinic clinic = requireBillingClinic(uuid);
+        Clinic clinic = requireAccessibleClinic(uuid);
         CreateInvoiceResultDto result = treatmentInvoiceService.createForClinicAndOptionallySend(
                 clinic, currentUser(), request);
         return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.CREATED);
@@ -86,10 +89,11 @@ public class ClinicInvoiceController {
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> markPaid(
             @PathVariable String uuid, @PathVariable String invoiceUuid,
             @Valid @RequestBody MarkInvoicePaidDto request) {
-        Clinic clinic = requireBillingClinic(uuid);
+        Clinic clinic = requireAccessibleClinic(uuid);
         ConsultationInvoice invoice = treatmentInvoiceService.requireClinicInvoice(clinic, invoiceUuid);
         invoice = treatmentInvoiceService.markPaid(invoice, request.getPaymentMode(), request.getTransactionId());
         invoice = treatmentInvoiceService.refreshPdfQuietly(invoice);
+        treatmentInvoiceService.emailPaidInvoiceQuietly(invoice);
         return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
@@ -115,24 +119,50 @@ public class ClinicInvoiceController {
 
     @PostMapping(ApiUrl.CLINIC_INVOICE_SEND_WHATSAPP)
     @PreAuthorize(CLINIC_BILLING)
-    public ResponseEntity<SuccessResponse<CreateInvoiceResultDto>> sendWhatsApp(
+    public ResponseEntity<SuccessResponse<ConsultationInvoice>> sendWhatsApp(
             @PathVariable String uuid, @PathVariable String invoiceUuid) {
         Clinic clinic = requireAccessibleClinic(uuid);
         ConsultationInvoice invoice = treatmentInvoiceService.requireClinicInvoice(clinic, invoiceUuid);
-        CreateInvoiceResultDto result = treatmentInvoiceService.sendInvoiceToOwner(
+        invoice = treatmentInvoiceService.sendInvoiceWhatsApp(
                 invoice, null, treatmentInvoiceService.clinicSender(clinic));
-        return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.OK);
+        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.CLINIC_WHATSAPP_SETTINGS)
     @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
     public ResponseEntity<SuccessResponse<Map<String, Object>>> getWhatsApp(@PathVariable String uuid) {
         Clinic clinic = requireManagedClinic(uuid);
+        if (!WhatsAppSettingsSupport.isConfigured(
+                clinic.getWhatsappPhoneNumberId(),
+                clinic.getWhatsappBusinessAccountId(),
+                clinic.getWhatsappToken())) {
+            return responseBuilder.buildSuccessResponse(
+                    WhatsAppSettingsSupport.publicViewFull(
+                            clinic.getWhatsappPhoneNumberId(),
+                            clinic.getWhatsappBusinessAccountId(),
+                            clinic.getWhatsappToken(),
+                            WhatsAppConnectionStatuses.DISCONNECTED,
+                            clinic.getWhatsappInvoiceTemplateStatus(),
+                            null),
+                    ResponseMessage.SUCCESS,
+                    HttpStatus.OK);
+        }
         return responseBuilder.buildSuccessResponse(
-                WhatsAppSettingsSupport.publicView(
-                        clinic.getWhatsappPhoneNumberId(),
-                        clinic.getWhatsappBusinessAccountId(),
-                        clinic.getWhatsappToken()),
+                whatsAppConnectionService.refreshClinicTemplates(clinic, false),
+                ResponseMessage.SUCCESS,
+                HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.CLINIC_WHATSAPP_CONNECT_EMBEDDED)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> connectWhatsAppEmbedded(
+            @PathVariable String uuid, @Valid @RequestBody EmbeddedConnectRequest request) {
+        Clinic clinic = requireManagedClinic(uuid);
+        WhatsAppEmbeddedSignupService.EmbeddedConnectResult result = whatsAppEmbeddedSignupService.complete(
+                request.getCode(), request.getWabaId(), request.getPhoneNumberId());
+        return responseBuilder.buildSuccessResponse(
+                whatsAppConnectionService.connectClinic(
+                        clinic, result.accessToken(), result.phoneNumberId(), result.wabaId(), true),
                 ResponseMessage.SUCCESS,
                 HttpStatus.OK);
     }
@@ -153,42 +183,32 @@ public class ClinicInvoiceController {
             throw new CustomException("token is required for first-time WhatsApp setup", HttpStatus.BAD_REQUEST);
         }
         whatsAppCredentialsVerifier.verifyOrThrow(tokenToStore, phoneNumberId, businessAccountId);
-        clinic.setWhatsappPhoneNumberId(phoneNumberId);
-        clinic.setWhatsappBusinessAccountId(businessAccountId);
-        clinic.setWhatsappToken(tokenToStore);
-        clinicRepository.save(clinic);
         return responseBuilder.buildSuccessResponse(
-                WhatsAppSettingsSupport.publicView(
-                        clinic.getWhatsappPhoneNumberId(),
-                        clinic.getWhatsappBusinessAccountId(),
-                        clinic.getWhatsappToken()),
+                whatsAppConnectionService.connectClinic(
+                        clinic, tokenToStore, phoneNumberId, businessAccountId, true),
                 ResponseMessage.SUCCESS,
                 HttpStatus.OK);
     }
 
-    @PostMapping(ApiUrl.CLINIC_WHATSAPP_EMBEDDED_SIGNUP)
+    @PostMapping(ApiUrl.CLINIC_WHATSAPP_SETUP_TEMPLATES)
     @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
-    public ResponseEntity<SuccessResponse<Map<String, Object>>> embeddedSignup(
-            @PathVariable String uuid, @Valid @RequestBody EmbeddedSignupRequest request) {
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> setupWhatsAppTemplates(@PathVariable String uuid) {
         Clinic clinic = requireManagedClinic(uuid);
-        Map<String, Object> view = whatsAppEmbeddedSignupService.complete(
-                clinic, request.getCode(), request.getWabaId(), request.getPhoneNumberId());
-        return responseBuilder.buildSuccessResponse(view, ResponseMessage.SUCCESS, HttpStatus.OK);
+        if (!WhatsAppSettingsSupport.isConfigured(
+                clinic.getWhatsappPhoneNumberId(),
+                clinic.getWhatsappBusinessAccountId(),
+                clinic.getWhatsappToken())) {
+            throw new CustomException("Connect WhatsApp credentials first", HttpStatus.BAD_REQUEST);
+        }
+        return responseBuilder.buildSuccessResponse(
+                whatsAppConnectionService.refreshClinicTemplates(clinic, true),
+                ResponseMessage.SUCCESS,
+                HttpStatus.OK);
     }
 
     private Clinic requireAccessibleClinic(String clinicUuid) {
         // Ensures caller is affiliated / staff for this clinic
         clinicService.get(clinicUuid, email());
-        Clinic clinic = clinicRepository.findByUuid(clinicUuid);
-        if (clinic == null) {
-            throw new ResourceNotFoundException("Clinic", "uuid", clinicUuid);
-        }
-        return clinic;
-    }
-
-    /** Mutating invoice/pay: affiliation + VERIFIED (personal practice exempt). */
-    private Clinic requireBillingClinic(String clinicUuid) {
-        clinicService.requireActivatedClinic(clinicUuid, email());
         Clinic clinic = clinicRepository.findByUuid(clinicUuid);
         if (clinic == null) {
             throw new ResourceNotFoundException("Clinic", "uuid", clinicUuid);
@@ -216,13 +236,12 @@ public class ClinicInvoiceController {
     }
 
     @Data
-    public static class EmbeddedSignupRequest {
+    public static class EmbeddedConnectRequest {
         @NotBlank
+        @jakarta.validation.constraints.Size(max = 4096)
         private String code;
-        @NotBlank
         @jakarta.validation.constraints.Size(max = 64)
         private String wabaId;
-        @NotBlank
         @jakarta.validation.constraints.Size(max = 64)
         private String phoneNumberId;
     }

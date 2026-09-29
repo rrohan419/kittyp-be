@@ -17,14 +17,11 @@ import lombok.Setter;
 public class ZeptoMailDto implements IEmailDto{
 
 	private String templateKey;
-	private String templateAlias;
-	private String subject;
 	private String type;
 	private String recipientName;
 	private String recipientEmail;
 	private String message;
 //	private String provider;
 	private Map<String, Object> mergeInfo;
-	private String htmlBody;
 	private List<EmailAttachment> attachments;
 }

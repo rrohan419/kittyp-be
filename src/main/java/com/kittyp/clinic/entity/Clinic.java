@@ -91,8 +91,17 @@ public class Clinic extends BaseEntity implements HasPublicId {
     @Column(name = "whatsapp_token", columnDefinition = "TEXT")
     private String whatsappToken;
 
-    /** Days before expiry to treat a lot as EXPIRING_SOON (default 90). */
-    @Column(name = "inventory_expiring_soon_days")
-    @Builder.Default
-    private Integer inventoryExpiringSoonDays = 90;
+    /** DISCONNECTED | CONNECTED | ERROR */
+    @Column(name = "whatsapp_connection_status", length = 32)
+    private String whatsappConnectionStatus;
+
+    @Column(name = "whatsapp_connected_at")
+    private java.time.LocalDateTime whatsappConnectedAt;
+
+    @Column(name = "whatsapp_last_verified_at")
+    private java.time.LocalDateTime whatsappLastVerifiedAt;
+
+    /** MISSING | PENDING | APPROVED | REJECTED | ERROR */
+    @Column(name = "whatsapp_invoice_template_status", length = 32)
+    private String whatsappInvoiceTemplateStatus;
 }

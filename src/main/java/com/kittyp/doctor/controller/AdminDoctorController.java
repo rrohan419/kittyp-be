@@ -2,7 +2,6 @@ package com.kittyp.doctor.controller;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -46,8 +45,8 @@ public class AdminDoctorController {
 
     private final DoctorProfileDao doctorProfileDao;
     private final ClinicDoctorRepository clinicDoctorRepository;
-    private final ApiResponse<?> responseBuilder;
     private final ZeptoMailService zeptoMailService;
+    private final ApiResponse<?> responseBuilder;
 
     @Value("${app.frontend.base-url:http://localhost:8080}")
     private String frontendBaseUrl;
@@ -127,37 +126,29 @@ public class AdminDoctorController {
             profile.setReviewedAt(LocalDateTime.now());
         }
 
-        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         DoctorProfile saved = doctorProfileDao.save(profile);
-        notifyDoctorProfileVerified(saved, previous, next);
+        if (next == DoctorStatus.VERIFIED && previous != DoctorStatus.VERIFIED) {
+            notifyDoctorVerified(saved);
+        }
+
+        Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         return responseBuilder.buildSuccessResponse(toModel(saved, clinicLinkedIds),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
-    private void notifyDoctorProfileVerified(DoctorProfile profile, DoctorStatus previous, DoctorStatus next) {
-        boolean becomingVisible = next == DoctorStatus.VERIFIED || next == DoctorStatus.PUBLISHED;
-        boolean alreadyVisible = previous == DoctorStatus.VERIFIED || previous == DoctorStatus.PUBLISHED;
-        if (!becomingVisible || alreadyVisible) {
-            return;
-        }
+    private void notifyDoctorVerified(DoctorProfile profile) {
         User user = profile.getUser();
         if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
             return;
         }
-        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
-        String last = user.getLastName() == null ? "" : user.getLastName().trim();
-        String doctorName = (first + " " + last).trim();
-        if (doctorName.isBlank()) {
-            doctorName = "Doctor";
-        }
+        String name = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
+                + (user.getLastName() != null ? user.getLastName() : "")).trim();
         String base = frontendBaseUrl == null || frontendBaseUrl.isBlank()
                 ? "http://localhost:8080"
                 : frontendBaseUrl.replaceAll("/$", "");
-        try {
-            zeptoMailService.sendDoctorProfileVerified(user.getEmail(), doctorName, base + "/doctor");
-        } catch (Exception e) {
-            log.warn("Failed to send doctor-verified email to {}: {}", user.getEmail(), e.getMessage());
-        }
+        String dashboardUrl = base + "/doctor";
+        zeptoMailService.sendDoctorProfileVerified(user.getEmail(), name, dashboardUrl);
+        log.info("Doctor profile verified email queued for {}", user.getEmail());
     }
 
     private boolean anyChecked(DoctorProfile p) {
@@ -193,13 +184,13 @@ public class AdminDoctorController {
 
     /**
      * True when the doctor's linked clinic is a solo personal practice (owner = doctor user
-     * and that user is an active affiliated doctor on that clinic). Org clinics are not personal.
+     * and that user is an active affiliated doctor). Org clinics are not personal.
      */
     private boolean isPersonalPracticeClinic(Clinic clinic, DoctorProfile p) {
         if (clinic == null || clinic.getOwner() == null || p.getUser() == null) {
             return false;
         }
-        if (!Objects.equals(clinic.getOwner().getId(), p.getUser().getId())) {
+        if (!java.util.Objects.equals(clinic.getOwner().getId(), p.getUser().getId())) {
             return false;
         }
         return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
@@ -248,7 +239,6 @@ public class AdminDoctorController {
                 p.isCheckClinicPhotos(),
                 p.getSubmittedAt(),
                 p.getReviewedAt(),
-                p.getReviewNotes(),
-                p.getExperienceYears());
+                p.getReviewNotes());
     }
 }

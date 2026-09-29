@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Active when WhatsApp Cloud API is disabled. Rejects real sends so FE gets a clear error.
+ * Credential checks still reflect whether the clinic/doctor saved Meta IDs + token.
  */
 @Slf4j
 @Service
@@ -19,9 +20,13 @@ import lombok.extern.slf4j.Slf4j;
 public class LoggingWhatsAppService implements WhatsAppService {
 
     @Override
-    public boolean isConfigured(WhatsAppSenderCredentials sender) {
-        // Credentials may be saved in Settings, but Cloud API is off — report not ready to send.
+    public boolean isDeliveryEnabled() {
         return false;
+    }
+
+    @Override
+    public boolean isConfigured(WhatsAppSenderCredentials sender) {
+        return sender != null && sender.isConfigured();
     }
 
     @Override
@@ -60,9 +65,21 @@ public class LoggingWhatsAppService implements WhatsAppService {
         throw notConfigured();
     }
 
+        @Override
+        public void sendAuthenticationTemplate(
+            WhatsAppSenderCredentials sender,
+            String toE164Digits,
+            String templateName,
+            String languageCode,
+            String code) {
+        log.warn("WhatsApp disabled — would send authentication template {} to {}", templateName,
+            WhatsAppPhones.redact(toE164Digits));
+        throw notConfigured();
+        }
+
     private CustomException notConfigured() {
         return new CustomException(
-                "WhatsApp sending is disabled on this server. Set whatsapp.enabled=true (or WHATSAPP_ENABLED=true).",
+                "WhatsApp sending is disabled on the server. Set WHATSAPP_ENABLED=true, then use the Meta credentials saved in Clinic/Doctor settings.",
                 HttpStatus.SERVICE_UNAVAILABLE);
     }
 }

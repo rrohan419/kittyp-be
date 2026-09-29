@@ -15,7 +15,7 @@ import com.google.firebase.messaging.Notification;
 import com.kittyp.common.constants.AppConstant;
 import com.kittyp.user.dao.UserFcmTokenDao;
 
-import lombok.RequiredArgsConstructor;
+import lombok.RequiredArgsConstructor;  
 
 @Service
 @RequiredArgsConstructor

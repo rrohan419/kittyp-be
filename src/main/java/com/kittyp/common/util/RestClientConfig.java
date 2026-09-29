@@ -1,3 +1,6 @@
+/**
+ * @author rrohan419@gmail.com
+ */
 package com.kittyp.common.util;
 
 import java.net.http.HttpClient;
@@ -5,16 +8,20 @@ import java.time.Duration;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+/**
+ * @author rrohan419@gmail.com 
+ */
 @Configuration
 public class RestClientConfig {
 
 	@Bean
-	@org.springframework.context.annotation.Primary
+	@Primary
 	RestClient restClient() {
 		return RestClient
 				.builder()

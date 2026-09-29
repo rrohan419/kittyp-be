@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -37,7 +39,7 @@ import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.dto.SignupRequestDto;
 import com.kittyp.common.enums.SignupRole;
 import com.kittyp.common.exception.CustomException;
-import com.kittyp.common.geo.GeoBounds;
+import com.kittyp.common.exception.ResourceAlreadyExistsException;
 import com.kittyp.common.model.JwtResponseModel;
 import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.util.VerificationCodeService;
@@ -45,14 +47,14 @@ import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.email.service.ZeptoMailService;
-import com.kittyp.notification.service.SmsService;
+import com.kittyp.notification.service.Msg91OtpVerifyService;
+import com.kittyp.notification.service.WhatsappOtpService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Role;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserRole;
 import com.kittyp.user.enums.ERole;
-import com.kittyp.user.service.PhoneAvailabilityService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +63,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+	private final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
 	private final UserDao userDao;
 	private final PasswordEncoder encoder;
 	private final RoleDao roleDao;
@@ -73,14 +76,10 @@ public class AuthServiceImpl implements AuthService {
 	private final ClinicDoctorInviteRepository clinicDoctorInviteRepository;
 	private final DoctorProfileDao doctorProfileDao;
 	private final VerificationCodeService verificationCodeService;
-	private final SmsService smsService;
-	private final MasterTotpService masterTotpService;
+	private final WhatsappOtpService whatsappOtpService;
+	private final Msg91OtpVerifyService msg91OtpVerifyService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 	private final LoginRateLimiter loginRateLimiter;
-	private final PhoneAvailabilityService phoneAvailabilityService;
-
-	private static final String EMAIL_ALREADY_REGISTERED =
-			"This email is already registered. Sign in or use a different email.";
 
 	@Transactional
 	@Override
@@ -98,7 +97,7 @@ public class AuthServiceImpl implements AuthService {
 	public MessageResponse registerUser(SignupRequestDto signupRequestDto) {
 
 		if (userDao.userPresentByEmail(signupRequestDto.getEmail())) {
-			throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
+			throw new ResourceAlreadyExistsException("User", "email", signupRequestDto.getEmail());
 		}
 
 		// Create new user
@@ -108,7 +107,8 @@ public class AuthServiceImpl implements AuthService {
 
 		user = userDao.saveUser(user);
 
-		// Pet-parent path only. Client SignupRole.DOCTOR/CLINIC is dispatched in register().
+		// Pet-parent path only. Client SignupRole.DOCTOR/CLINIC is dispatched in
+		// register().
 		// The legacy Set<String> roles field is ignored and cannot escalate privileges.
 		Role userRole = roleDao.roleByName(ERole.ROLE_USER);
 		if (userRole == null) {
@@ -125,7 +125,7 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public MessageResponse registerDoctor(SignupDoctorRequestDto req) {
 		if (userDao.userPresentByEmail(req.getEmail())) {
-			throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
+			throw new ResourceAlreadyExistsException("User", "email", req.getEmail());
 		}
 		if (req.getPhoneNumber() == null || req.getPhoneNumber().isBlank()) {
 			throw new CustomException("Phone number is required", HttpStatus.BAD_REQUEST);
@@ -135,7 +135,8 @@ public class AuthServiceImpl implements AuthService {
 		}
 		if (req.getDegreeCertificateUrl() == null || req.getDegreeCertificateUrl().isBlank()
 				|| req.getRegistrationCertificateUrl() == null || req.getRegistrationCertificateUrl().isBlank()) {
-			throw new CustomException("Degree and registration certificate uploads are required", HttpStatus.BAD_REQUEST);
+			throw new CustomException("Degree and registration certificate uploads are required",
+					HttpStatus.BAD_REQUEST);
 		}
 		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
@@ -151,7 +152,8 @@ public class AuthServiceImpl implements AuthService {
 		user.setPhoneCountryCode("+91");
 		user = userDao.saveUser(user);
 
-		// Doctor signup is a personal account for online consultation. Clinic name/address/photos
+		// Doctor signup is a personal account for online consultation. Clinic
+		// name/address/photos
 		// on the payload are ignored — clinics register and verify on their own path.
 		ClinicDoctorInvite invite = null;
 		if (req.getInviteToken() != null && !req.getInviteToken().isBlank()) {
@@ -229,16 +231,13 @@ public class AuthServiceImpl implements AuthService {
 			}
 			String email = request.getEmail().trim().toLowerCase();
 			if (userDao.userPresentByEmail(email)) {
-				throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
+				throw new ResourceAlreadyExistsException("User", "email", email);
 			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
-			String purpose = request.getRole() == null || request.getRole().isBlank()
-					? "EMAIL"
-					: request.getRole().trim().toUpperCase();
-			zeptoMailService.sendSignupOtpEmail(email, code, purpose, null);
+			zeptoMailService.sendSignupOtpEmail(email, code, "EMAIL", null);
 			return new MessageResponse("OTP sent to email");
 		}
-		if ("PHONE".equals(channel)) {
+		if ("WHATSAPP".equals(channel)) {
 			if (request.getPhone() == null || request.getPhone().isBlank()) {
 				throw new CustomException("Phone is required", HttpStatus.BAD_REQUEST);
 			}
@@ -248,52 +247,44 @@ public class AuthServiceImpl implements AuthService {
 				throw new CustomException("Phone number must include a valid 10-digit local number",
 						HttpStatus.BAD_REQUEST);
 			}
-			phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), null);
 			String code = verificationCodeService.generateCode(VerificationCodeService.phoneOtpKey(phone));
-			boolean emailed = smsService.sendOtp(phone, code, request.getEmail());
-			if (emailed) {
-				return new MessageResponse("SMS unavailable; OTP sent to email");
-			}
-			return new MessageResponse("OTP sent to phone");
+			whatsappOtpService.sendOtp(digits, code);
+			return new MessageResponse("OTP sent to whatsapp");
 		}
-		throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
+		
+		throw new CustomException("channel must be EMAIL, WHATSAPP", HttpStatus.BAD_REQUEST);
 	}
 
 	@Override
 	public Map<String, Boolean> verifySignupOtp(SignupOtpVerifyRequest request) {
 		String channel = request.getChannel() == null ? "" : request.getChannel().trim().toUpperCase();
 		boolean ok;
+		System.out.println("request.getCode() = " + request.getCode());
 
 		if ("EMAIL".equals(channel)) {
 			String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
-			String phoneForCrossCheck = request.getPhone() == null ? "" : request.getPhone().trim();
-			if (!phoneForCrossCheck.isBlank()
-					&& verificationCodeService.codeMatches(VerificationCodeService.phoneOtpKey(phoneForCrossCheck),
-							request.getCode())
-					&& !verificationCodeService.codeMatches(VerificationCodeService.emailOtpKey(email),
-							request.getCode())) {
-				throw new CustomException(
-						"That code is for phone verification. Enter the email OTP from your inbox.",
-						HttpStatus.BAD_REQUEST);
-			}
-			ok = verificationCodeService.verifyCode(VerificationCodeService.emailOtpKey(email), request.getCode(), true);
+			ok = verificationCodeService.verifyCode(VerificationCodeService.emailOtpKey(email), request.getCode(),
+					true);
 			if (ok) {
 				verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(email));
 			}
 		} else if ("PHONE".equals(channel)) {
 			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
-			String otpKey = VerificationCodeService.phoneOtpKey(phone);
-			// Reject email-channel OTP pasted into the phone field (common when SMS fails over to email).
-			String emailForCrossCheck = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
-			if (!emailForCrossCheck.isBlank()
-					&& verificationCodeService.codeMatches(VerificationCodeService.emailOtpKey(emailForCrossCheck),
-							request.getCode())
-					&& !verificationCodeService.codeMatches(otpKey, request.getCode())) {
-				throw new CustomException(
-						"That code is for email verification. Enter the phone OTP from SMS or the Phone verify email.",
-						HttpStatus.BAD_REQUEST);
+			ok = msg91OtpVerifyService.verifyOtp(request.getAccessToken());
+			if (ok) {
+				verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(phone));
+				// Also mark digits-only / +91 forms so registerDoctor phoneNumber checks match
+				String digits = phone.replaceAll("\\D", "");
+				if (digits.length() >= 10) {
+					String local10 = digits.substring(digits.length() - 10);
+					verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(local10));
+					verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey("+91" + local10));
+				}
 			}
-			ok = verifySmsOrMaster(otpKey, request.getCode());
+		} else if ("WHATSAPP".equals(channel)) {
+			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
+			ok = verificationCodeService.verifyCode(VerificationCodeService.phoneOtpKey(phone), request.getCode(),
+					true);
 			if (ok) {
 				verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(phone));
 				// Also mark digits-only / +91 forms so registerDoctor phoneNumber checks match
@@ -305,8 +296,9 @@ public class AuthServiceImpl implements AuthService {
 				}
 			}
 		} else {
-			throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
+			throw new CustomException("channel must be EMAIL, WHATSAPP, or PHONE", HttpStatus.BAD_REQUEST);
 		}
+		System.out.println("ok? = " + ok);
 		if (!ok) {
 			throw new CustomException("Invalid or expired OTP", HttpStatus.BAD_REQUEST);
 		}
@@ -317,31 +309,22 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public MessageResponse registerClinic(SignupClinicRequestDto signupClinicRequestDto) {
 		if (userDao.userPresentByEmail(signupClinicRequestDto.getEmail())) {
-			throw new CustomException(EMAIL_ALREADY_REGISTERED, HttpStatus.CONFLICT);
+			throw new ResourceAlreadyExistsException("User", "email", signupClinicRequestDto.getEmail());
 		}
 		if (signupClinicRequestDto.getClinicName() == null || signupClinicRequestDto.getClinicName().isBlank()) {
 			throw new CustomException("Clinic name is required", HttpStatus.BAD_REQUEST);
 		}
-		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()))) {
+		if (!verificationCodeService
+				.isVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
-		}
-		if (signupClinicRequestDto.getPhone() != null && !signupClinicRequestDto.getPhone().isBlank()) {
-			String digits = signupClinicRequestDto.getPhone().replaceAll("\\D", "");
-			if (digits.length() >= 10) {
-				phoneAvailabilityService.assertAvailable(digits.substring(digits.length() - 10), null);
-			}
 		}
 
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
 
-		GeoBounds.validate(signupClinicRequestDto.getLatitude(), signupClinicRequestDto.getLongitude());
 		clinicDao.saveClinic(Clinic.builder()
 				.name(signupClinicRequestDto.getClinicName())
 				.licenseNumber(signupClinicRequestDto.getLicenseNumber())
 				.address(signupClinicRequestDto.getAddress())
-				.city(signupClinicRequestDto.getCity())
-				.latitude(signupClinicRequestDto.getLatitude())
-				.longitude(signupClinicRequestDto.getLongitude())
 				.phone(signupClinicRequestDto.getPhone())
 				.timezone(signupClinicRequestDto.getTimezone())
 				.email(user.getEmail())
@@ -349,7 +332,8 @@ public class AuthServiceImpl implements AuthService {
 				.status(ClinicStatus.PENDING)
 				.build());
 
-		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
+		verificationCodeService
+				.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
 		zeptoMailService.sendWelcomeEmailforClinicAdmin(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
@@ -434,7 +418,7 @@ public class AuthServiceImpl implements AuthService {
 		try {
 			// Get user info directly from Google using access token
 			GoogleUserInfo googleUserInfo = googleOAuth2Service.getUserInfo(socialSso.getToken());
-			
+
 			// Check if user exists by email
 			User existingUser = null;
 			try {
@@ -442,7 +426,7 @@ public class AuthServiceImpl implements AuthService {
 			} catch (Exception e) {
 				// User doesn't exist, will create new one
 			}
-			
+
 			if (existingUser == null) {
 				// Create new user
 				existingUser = User.builder()
@@ -452,16 +436,16 @@ public class AuthServiceImpl implements AuthService {
 						.password(encoder.encode(UUID.randomUUID().toString())) // Generate random password
 						.enabled(true)
 						.build();
-				
+
 				// Assign default role
 				Role userRole = roleDao.roleByName(ERole.ROLE_USER);
 				if (userRole == null) {
 					throw new RuntimeException("Error: Default ROLE_USER not found.");
 				}
-				
+
 				existingUser.addRole(userRole);
 				existingUser = userDao.saveUser(existingUser);
-				
+
 				// Send welcome email
 				zeptoMailService.sendWelcomeEmailforParent(existingUser.getFirstName(), existingUser.getEmail());
 			}
@@ -471,40 +455,24 @@ public class AuthServiceImpl implements AuthService {
 			} catch (Exception ignored) {
 				// Do not fail Google sign-in on link edge cases
 			}
-			
+
 			// Create authentication token
 			UserDetailsImpl userDetails = (UserDetailsImpl) UserDetailsImpl.build(existingUser);
 			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
 					userDetails, null, userDetails.getAuthorities());
-			
+
 			SecurityContextHolder.getContext().setAuthentication(authentication);
 			String jwt = jwtUtils.generateJwtToken(authentication);
-			
+
 			List<String> roles = userDetails.getAuthorities().stream()
 					.map(GrantedAuthority::getAuthority)
 					.toList();
-			
+
 			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
-			
+
 		} catch (Exception e) {
 			throw new RuntimeException("Google authentication failed: " + e.getMessage(), e);
 		}
-	}
-
-	private boolean verifySmsOrMaster(String otpKey, String code) {
-		boolean ok = false;
-		try {
-			ok = verificationCodeService.verifyCode(otpKey, code, true);
-		} catch (CustomException ex) {
-			if (ex.getHttpStatus() != HttpStatus.TOO_MANY_REQUESTS) {
-				throw ex;
-			}
-		}
-		if (!ok && masterTotpService != null && masterTotpService.verifyMasterCode(code)) {
-			verificationCodeService.clearAttempts(otpKey);
-			ok = true;
-		}
-		return ok;
 	}
 
 }

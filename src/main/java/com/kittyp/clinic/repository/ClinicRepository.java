@@ -65,11 +65,5 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
             """)
     List<Clinic> findDiscoverable();
 
-	@Query(value = """
-			SELECT COUNT(*) FROM clinics
-			WHERE RIGHT(regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g'), 10) = :digits
-			AND (:exceptUserId IS NULL OR owner_user_id IS NULL OR owner_user_id <> :exceptUserId)
-			""", nativeQuery = true)
-	long countByLocal10ExcludingOwnerUserId(@Param("digits") String digits,
-			@Param("exceptUserId") Long exceptUserId);
+    List<Clinic> findByWhatsappBusinessAccountId(String whatsappBusinessAccountId);
 }

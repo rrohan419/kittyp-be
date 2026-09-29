@@ -45,4 +45,15 @@ public class CreateInvoiceResultDto {
 	public static CreateInvoiceResultDto sendFailed(ConsultationInvoice invoice, String error) {
 		return channels(invoice, false, error, false, null);
 	}
+
+	public static CreateInvoiceResultDto channels(ConsultationInvoice invoice, boolean whatsappSent, String whatsappError,
+		boolean emailSent, String emailError) {
+	return CreateInvoiceResultDto.builder()
+			.invoice(invoice)
+			.whatsappSent(whatsappSent)
+			.whatsappError(whatsappError)
+			.emailSent(emailSent)
+			.emailError(emailError)
+			.build();
+}
 }

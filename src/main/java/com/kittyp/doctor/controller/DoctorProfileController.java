@@ -25,6 +25,8 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.dto.DoctorVerificationModel;
 import com.kittyp.doctor.entity.DoctorProfile;
+import com.kittyp.notification.service.WhatsAppConnectionService;
+import com.kittyp.notification.service.WhatsAppConnectionStatuses;
 import com.kittyp.notification.service.WhatsAppCredentialsVerifier;
 import com.kittyp.notification.service.WhatsAppEmbeddedSignupService;
 import com.kittyp.notification.service.WhatsAppSettingsSupport;
@@ -46,6 +48,7 @@ public class DoctorProfileController {
     private final UserDao userDao;
     private final ApiResponse<?> responseBuilder;
     private final WhatsAppCredentialsVerifier whatsAppCredentialsVerifier;
+    private final WhatsAppConnectionService whatsAppConnectionService;
     private final WhatsAppEmbeddedSignupService whatsAppEmbeddedSignupService;
 
     @GetMapping(ApiUrl.DOCTOR_ME)
@@ -98,34 +101,45 @@ public class DoctorProfileController {
                 profile.isCheckClinicPhotos(),
                 profile.getSubmittedAt(),
                 profile.getReviewedAt(),
-                profile.getReviewNotes(),
-                profile.getExperienceYears());
+                profile.getReviewNotes());
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.OK);
-    }
-
-    @PutMapping(ApiUrl.DOCTOR_ME)
-    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<DoctorVerificationModel>> updateMyExperience(
-            @Valid @RequestBody ExperienceYearsRequest request) {
-        DoctorProfile profile = requireMyProfile();
-        Double years = request.getExperienceYears();
-        if (years != null && (years < 0 || years > 60)) {
-            throw new CustomException("Years of experience must be between 0 and 60", HttpStatus.BAD_REQUEST);
-        }
-        profile.setExperienceYears(years);
-        doctorProfileDao.save(profile);
-        return myProfile();
     }
 
     @GetMapping(ApiUrl.DOCTOR_WHATSAPP_SETTINGS)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
     public ResponseEntity<SuccessResponse<Map<String, Object>>> getWhatsAppSettings() {
         DoctorProfile profile = requireMyProfile();
+        if (!WhatsAppSettingsSupport.isConfigured(
+                profile.getWhatsappPhoneNumberId(),
+                profile.getWhatsappBusinessAccountId(),
+                profile.getWhatsappToken())) {
+            return responseBuilder.buildSuccessResponse(
+                    WhatsAppSettingsSupport.publicViewFull(
+                            profile.getWhatsappPhoneNumberId(),
+                            profile.getWhatsappBusinessAccountId(),
+                            profile.getWhatsappToken(),
+                            WhatsAppConnectionStatuses.DISCONNECTED,
+                            profile.getWhatsappInvoiceTemplateStatus(),
+                            null),
+                    ResponseMessage.SUCCESS,
+                    HttpStatus.OK);
+        }
         return responseBuilder.buildSuccessResponse(
-                WhatsAppSettingsSupport.publicView(
-                        profile.getWhatsappPhoneNumberId(),
-                        profile.getWhatsappBusinessAccountId(),
-                        profile.getWhatsappToken()),
+                whatsAppConnectionService.refreshDoctorTemplates(profile, false),
+                ResponseMessage.SUCCESS,
+                HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.DOCTOR_WHATSAPP_CONNECT_EMBEDDED)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> connectWhatsAppEmbedded(
+            @Valid @RequestBody EmbeddedConnectRequest request) {
+        DoctorProfile profile = requireMyProfile();
+        WhatsAppEmbeddedSignupService.EmbeddedConnectResult result = whatsAppEmbeddedSignupService.complete(
+                request.getCode(), request.getWabaId(), request.getPhoneNumberId());
+        return responseBuilder.buildSuccessResponse(
+                whatsAppConnectionService.connectDoctor(
+                        profile, result.accessToken(), result.phoneNumberId(), result.wabaId(), true),
                 ResponseMessage.SUCCESS,
                 HttpStatus.OK);
     }
@@ -146,27 +160,27 @@ public class DoctorProfileController {
             throw new CustomException("token is required for first-time WhatsApp setup", HttpStatus.BAD_REQUEST);
         }
         whatsAppCredentialsVerifier.verifyOrThrow(tokenToStore, phoneNumberId, businessAccountId);
-        profile.setWhatsappPhoneNumberId(phoneNumberId);
-        profile.setWhatsappBusinessAccountId(businessAccountId);
-        profile.setWhatsappToken(tokenToStore);
-        doctorProfileDao.save(profile);
         return responseBuilder.buildSuccessResponse(
-                WhatsAppSettingsSupport.publicView(
-                        profile.getWhatsappPhoneNumberId(),
-                        profile.getWhatsappBusinessAccountId(),
-                        profile.getWhatsappToken()),
+                whatsAppConnectionService.connectDoctor(
+                        profile, tokenToStore, phoneNumberId, businessAccountId, true),
                 ResponseMessage.SUCCESS,
                 HttpStatus.OK);
     }
 
-    @PostMapping(ApiUrl.DOCTOR_WHATSAPP_EMBEDDED_SIGNUP)
+    @PostMapping(ApiUrl.DOCTOR_WHATSAPP_SETUP_TEMPLATES)
     @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
-    public ResponseEntity<SuccessResponse<Map<String, Object>>> embeddedSignup(
-            @Valid @RequestBody EmbeddedSignupRequest request) {
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> setupWhatsAppTemplates() {
         DoctorProfile profile = requireMyProfile();
-        Map<String, Object> view = whatsAppEmbeddedSignupService.complete(
-                profile, request.getCode(), request.getWabaId(), request.getPhoneNumberId());
-        return responseBuilder.buildSuccessResponse(view, ResponseMessage.SUCCESS, HttpStatus.OK);
+        if (!WhatsAppSettingsSupport.isConfigured(
+                profile.getWhatsappPhoneNumberId(),
+                profile.getWhatsappBusinessAccountId(),
+                profile.getWhatsappToken())) {
+            throw new CustomException("Connect WhatsApp credentials first", HttpStatus.BAD_REQUEST);
+        }
+        return responseBuilder.buildSuccessResponse(
+                whatsAppConnectionService.refreshDoctorTemplates(profile, true),
+                ResponseMessage.SUCCESS,
+                HttpStatus.OK);
     }
 
     private DoctorProfile requireMyProfile() {
@@ -184,13 +198,12 @@ public class DoctorProfileController {
     }
 
     @Data
-    public static class EmbeddedSignupRequest {
+    public static class EmbeddedConnectRequest {
         @NotBlank
+        @jakarta.validation.constraints.Size(max = 4096)
         private String code;
-        @NotBlank
         @jakarta.validation.constraints.Size(max = 64)
         private String wabaId;
-        @NotBlank
         @jakarta.validation.constraints.Size(max = 64)
         private String phoneNumberId;
     }
@@ -206,12 +219,5 @@ public class DoctorProfileController {
         /** Optional on update if already set — omit to keep existing token. */
         @jakarta.validation.constraints.Size(max = 2048)
         private String token;
-    }
-
-    @Data
-    public static class ExperienceYearsRequest {
-        @jakarta.validation.constraints.DecimalMin("0")
-        @jakarta.validation.constraints.DecimalMax("60")
-        private Double experienceYears;
     }
 }

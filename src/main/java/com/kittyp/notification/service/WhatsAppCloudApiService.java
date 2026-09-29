@@ -19,6 +19,8 @@ import org.springframework.web.client.RestClientResponseException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.constants.ApiUrl;
+import com.kittyp.common.constants.KeyConstant;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,10 +35,10 @@ public class WhatsAppCloudApiService implements WhatsAppService {
 
     public WhatsAppCloudApiService(
             ObjectMapper objectMapper,
-            @Value("${whatsapp.api-version:v21.0}") String apiVersion,
+            @Value("${whatsapp.api-version:v26.0}") String apiVersion,
             @Value("${whatsapp.default-country-code:91}") String defaultCountryCode) {
         this.objectMapper = objectMapper;
-        this.apiVersion = apiVersion == null || apiVersion.isBlank() ? "v21.0" : apiVersion.trim();
+        this.apiVersion = apiVersion == null || apiVersion.isBlank() ? "v26.0" : apiVersion.trim();
         this.defaultCountryCode = defaultCountryCode == null || defaultCountryCode.isBlank()
                 ? "91"
                 : defaultCountryCode.replace("+", "").trim();
@@ -60,9 +62,9 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         }
         String safeName = (filename == null || filename.isBlank()) ? "invoice.pdf" : filename;
         MultipartBodyBuilder body = new MultipartBodyBuilder();
-        body.part("messaging_product", "whatsapp");
-        body.part("type", "application/pdf");
-        body.part("file", new ByteArrayResource(pdfBytes) {
+        body.part(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, KeyConstant.WHATSAPP);
+        body.part(KeyConstant.WHATSAPP_MESSAGE_TYPE, "application/pdf");
+        body.part(KeyConstant.WHATSAPP_MESSAGE_FILE, new ByteArrayResource(pdfBytes) {
             @Override
             public String getFilename() {
                 return safeName;
@@ -83,12 +85,9 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             }
             return id;
         } catch (RestClientResponseException e) {
-            String detail = metaErrorDetail(e);
-            log.error("WhatsApp media upload failed: status={} detail={}", e.getStatusCode().value(), detail);
-            throw new CustomException(
-                    "WhatsApp media upload failed: " + detail,
-                    HttpStatus.BAD_GATEWAY,
-                    e);
+            log.error("WhatsApp media upload failed: status={} body={}",
+                    e.getStatusCode().value(), e.getResponseBodyAsString());
+            throw metaFailure("WhatsApp media upload failed", e);
         } catch (CustomException e) {
             throw e;
         } catch (Exception e) {
@@ -107,14 +106,14 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             List<String> bodyParams) {
         WhatsAppSenderCredentials creds = requireSender(sender);
         Map<String, Object> headerParam = new LinkedHashMap<>();
-        headerParam.put("type", "document");
+        headerParam.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "document");
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("id", mediaId);
         document.put("filename", filename == null || filename.isBlank() ? "invoice.pdf" : filename);
         headerParam.put("document", document);
 
         Map<String, Object> headerComponent = new LinkedHashMap<>();
-        headerComponent.put("type", "header");
+        headerComponent.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "header");
         headerComponent.put("parameters", List.of(headerParam));
 
         List<Map<String, Object>> components = new ArrayList<>();
@@ -123,12 +122,12 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             List<Map<String, Object>> params = new ArrayList<>();
             for (String p : bodyParams) {
                 Map<String, Object> tp = new LinkedHashMap<>();
-                tp.put("type", "text");
+                tp.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text");
                 tp.put("text", WhatsAppPhones.sanitizeTemplateText(p));
                 params.add(tp);
             }
             Map<String, Object> bodyComponent = new LinkedHashMap<>();
-            bodyComponent.put("type", "body");
+            bodyComponent.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "body");
             bodyComponent.put("parameters", params);
             components.add(bodyComponent);
         }
@@ -140,12 +139,12 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         template.put("components", components);
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("messaging_product", "whatsapp");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, "whatsapp");
         payload.put("to", toE164Digits);
-        payload.put("type", "template");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "template");
         payload.put("template", template);
 
-        postMessage(creds, payload, templateName, languageCode);
+        postMessage(creds, payload);
     }
 
     @Override
@@ -161,12 +160,12 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             List<Map<String, Object>> params = new ArrayList<>();
             for (String p : bodyParams) {
                 Map<String, Object> tp = new LinkedHashMap<>();
-                tp.put("type", "text");
+                tp.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text");
                 tp.put("text", WhatsAppPhones.sanitizeTemplateText(p));
                 params.add(tp);
             }
             Map<String, Object> bodyComponent = new LinkedHashMap<>();
-            bodyComponent.put("type", "body");
+            bodyComponent.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "body");
             bodyComponent.put("parameters", params);
             components.add(bodyComponent);
         }
@@ -180,20 +179,51 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("messaging_product", "whatsapp");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, "whatsapp");
         payload.put("to", toE164Digits);
-        payload.put("type", "template");
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "template");
         payload.put("template", template);
 
-        postMessage(creds, payload, templateName, languageCode);
+        postMessage(creds, payload);
     }
 
-    private void postMessage(
-            WhatsAppSenderCredentials creds,
-            Map<String, Object> payload,
+    @Override
+    public void sendAuthenticationTemplate(
+            WhatsAppSenderCredentials sender,
+            String toE164Digits,
             String templateName,
-            String languageCode) {
-        String lang = languageCode == null || languageCode.isBlank() ? "en" : languageCode;
+            String languageCode,
+            String code) {
+        WhatsAppSenderCredentials creds = requireSender(sender);
+        String safeCode = WhatsAppPhones.sanitizeTemplateText(code);
+
+        Map<String, Object> bodyParameter = Map.of(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text", "text", safeCode);
+        Map<String, Object> body = Map.of(
+                KeyConstant.WHATSAPP_MESSAGE_TYPE, "body",
+                "parameters", List.of(bodyParameter));
+
+        Map<String, Object> buttonParameter = Map.of(KeyConstant.WHATSAPP_MESSAGE_TYPE, "text", "text", safeCode);
+        Map<String, Object> button = Map.of(
+                KeyConstant.WHATSAPP_MESSAGE_TYPE, "button",
+            "sub_type", "url",
+                "index", "0",
+                "parameters", List.of(buttonParameter));
+
+        Map<String, Object> template = new LinkedHashMap<>();
+        template.put("name", templateName);
+        template.put("language", Map.of("code", languageCode == null || languageCode.isBlank() ? "en" : languageCode));
+        template.put("components", List.of(body, button));
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_PRODUCT, "whatsapp");
+        payload.put("to", toE164Digits);
+        payload.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "template");
+        payload.put("template", template);
+
+        postMessage(creds, payload);
+    }
+
+    private void postMessage(WhatsAppSenderCredentials creds, Map<String, Object> payload) {
         try {
             client(creds).post()
                     .uri("/{phoneNumberId}/messages", creds.phoneNumberId())
@@ -201,24 +231,14 @@ public class WhatsAppCloudApiService implements WhatsAppService {
                     .body(payload)
                     .retrieve()
                     .toBodilessEntity();
-            log.info("WhatsApp template message accepted for {} template={}/{}",
-                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))),
-                    templateName,
-                    lang);
+            log.info("WhatsApp template message accepted for {}",
+                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))));
         } catch (RestClientResponseException e) {
-            String detail = metaErrorDetail(e);
-            log.error("WhatsApp send failed: status={} phoneNumberId={} to={} template={}/{} detail={}",
+            log.error("WhatsApp send failed: status={} to={} body={}",
                     e.getStatusCode().value(),
-                    creds.phoneNumberId(),
                     WhatsAppPhones.redact(String.valueOf(payload.get("to"))),
-                    templateName,
-                    lang,
-                    detail);
-            throw new CustomException(
-                    "WhatsApp send failed: " + detail
-                            + " [template=" + templateName + ", lang=" + lang + "]",
-                    HttpStatus.BAD_GATEWAY,
-                    e);
+                    e.getResponseBodyAsString());
+            throw metaFailure("WhatsApp send failed", e);
         } catch (Exception e) {
             throw new CustomException("WhatsApp send failed", HttpStatus.BAD_GATEWAY, e);
         }
@@ -226,7 +246,7 @@ public class WhatsAppCloudApiService implements WhatsAppService {
 
     private RestClient client(WhatsAppSenderCredentials creds) {
         return RestClient.builder()
-                .baseUrl("https://graph.facebook.com/" + apiVersion)
+                .baseUrl(ApiUrl.FACEBOOK_BASE_URL + apiVersion)
                 .defaultHeader("Authorization", "Bearer " + creds.token())
                 .build();
     }
@@ -240,31 +260,51 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         return sender;
     }
 
-    /** Prefer Meta's error.message so operators see the real Graph reason, not only HTTP status. */
-    private String metaErrorDetail(RestClientResponseException e) {
-        String body = e.getResponseBodyAsString();
+    private CustomException metaFailure(String prefix, RestClientResponseException e) {
+        int status = e.getStatusCode().value();
+        String detail = extractMetaError(e.getResponseBodyAsString());
+        String hint = metaHint(status, detail);
+        String message = prefix + " (Meta HTTP " + status + ")"
+                + (detail != null ? ": " + detail : "")
+                + (hint != null ? " — " + hint : "");
+        return new CustomException(message, HttpStatus.BAD_GATEWAY, e);
+    }
+
+    private String extractMetaError(String responseBody) {
         try {
-            JsonNode err = objectMapper.readTree(body == null ? "{}" : body).path("error");
+            JsonNode err = objectMapper.readTree(responseBody == null ? "{}" : responseBody).path("error");
             String message = err.path("message").asText(null);
-            int code = err.path("code").asInt(0);
-            int subcode = err.path("error_subcode").asInt(0);
-            if (StringUtils.hasText(message)) {
-                StringBuilder sb = new StringBuilder(message);
-                if (code > 0) {
-                    sb.append(" (code ").append(code);
-                    if (subcode > 0) {
-                        sb.append("/").append(subcode);
-                    }
-                    sb.append(')');
-                }
-                return sb.length() > 280 ? sb.substring(0, 280) + "…" : sb.toString();
+            String code = err.path("code").asText(null);
+            String subcode = err.path("error_subcode").asText(null);
+            if (!StringUtils.hasText(message)) {
+                return null;
             }
+            StringBuilder sb = new StringBuilder(message);
+            if (StringUtils.hasText(code)) {
+                sb.append(" [code=").append(code);
+                if (StringUtils.hasText(subcode)) {
+                    sb.append(", subcode=").append(subcode);
+                }
+                sb.append(']');
+            }
+            String out = sb.toString();
+            return out.length() > 280 ? out.substring(0, 280) + "…" : out;
         } catch (Exception ignored) {
-            // fall through
+            return null;
         }
-        if (StringUtils.hasText(body) && body.length() < 200) {
-            return "HTTP " + e.getStatusCode().value() + " " + body;
+    }
+
+    private static String metaHint(int httpStatus, String detail) {
+        String lower = detail == null ? "" : detail.toLowerCase();
+        if (httpStatus == 404 || lower.contains("does not exist") || lower.contains("object with id")) {
+            return "Check Phone Number ID (not the display phone or WABA ID) in Clinic WhatsApp settings";
         }
-        return "HTTP " + e.getStatusCode().value();
+        if (lower.contains("template") || lower.contains("translation")) {
+            return "Create and approve template 'invoice_receipt' (DOCUMENT header, language en) in Meta WhatsApp Manager";
+        }
+        if (httpStatus == 401 || httpStatus == 403 || lower.contains("access token") || lower.contains("permission")) {
+            return "Token needs whatsapp_business_messaging on this WABA; regenerate a permanent token if needed";
+        }
+        return null;
     }
 }

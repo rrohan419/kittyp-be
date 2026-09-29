@@ -89,6 +89,7 @@ public class ConsultationInvoiceController {
         ConsultationInvoice invoice = treatmentInvoiceService.markPaid(
                 requireDoctorOperableInvoice(uuid), request.getPaymentMode(), request.getTransactionId());
         invoice = treatmentInvoiceService.refreshPdfQuietly(invoice);
+        treatmentInvoiceService.emailPaidInvoiceQuietly(invoice);
         return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

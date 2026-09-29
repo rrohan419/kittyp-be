@@ -56,6 +56,11 @@ public class DoctorProfileDaoImpl implements DoctorProfileDao {
         return prioritize(doctorProfileRepository.findByStatusWithUserAndClinic(status));
     }
 
+    @Override
+    public List<DoctorProfile> findByWhatsappBusinessAccountId(String whatsappBusinessAccountId) {
+        return doctorProfileRepository.findByWhatsappBusinessAccountId(whatsappBusinessAccountId);
+    }
+
     private List<DoctorProfile> prioritize(List<DoctorProfile> profiles) {
         Set<Long> orgAffiliatedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
         return profiles.stream()

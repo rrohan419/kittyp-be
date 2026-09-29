@@ -73,6 +73,20 @@ public class DoctorProfile extends BaseEntity implements HasPublicId {
     @Column(name = "whatsapp_token", columnDefinition = "TEXT")
     private String whatsappToken;
 
+    /** DISCONNECTED | CONNECTED | ERROR */
+    @Column(name = "whatsapp_connection_status", length = 32)
+    private String whatsappConnectionStatus;
+
+    @Column(name = "whatsapp_connected_at")
+    private LocalDateTime whatsappConnectedAt;
+
+    @Column(name = "whatsapp_last_verified_at")
+    private LocalDateTime whatsappLastVerifiedAt;
+
+    /** MISSING | PENDING | APPROVED | REJECTED | ERROR */
+    @Column(name = "whatsapp_invoice_template_status", length = 32)
+    private String whatsappInvoiceTemplateStatus;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 50)
     private DoctorSpecialization specialization;

@@ -41,7 +41,6 @@ public class ApiUrl {
 	public static final String ADMIN_CLINIC_STATUS = ADMIN_CLINIC_BY_UUID + "/status";
 	public static final String ADMIN_USERS = ADMIN + "/users";
 	public static final String ADMIN_PARENTS = ADMIN + "/parents";
-	public static final String ADMIN_MASTER_TOTP = ADMIN + "/master-totp";
 
 	public static final String DOCTOR_BASE_URL = "/doctor";
 	public static final String DOCTOR_ME = DOCTOR_BASE_URL + "/me";
@@ -114,10 +113,7 @@ public class ApiUrl {
 	// public controller
 	public static final String PUBLIC_BASE_URL = "/public";
 	public static final String SITEMAP = PUBLIC_BASE_URL + "/sitemap.xml";
-	public static final String PUBLIC_PLACES_AUTOCOMPLETE = PUBLIC_BASE_URL + "/places/autocomplete";
-	public static final String PUBLIC_PLACES_DETAILS = PUBLIC_BASE_URL + "/places/details";
-	public static final String PLACES_AUTOCOMPLETE = "/places/autocomplete";
-	public static final String PLACES_DETAILS = "/places/details";
+	public static final String PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG = PUBLIC_BASE_URL + "/whatsapp/embedded-signup-config";
 
 	// pet controller
 	public static final String PET_BASE_URL = "/pet";
@@ -141,6 +137,7 @@ public class ApiUrl {
 	public static final String CLINIC_BASE_URL = "/clinic";
 	public static final String CLINIC_MINE = CLINIC_BASE_URL + "/mine";
 	public static final String CLINIC_BY_UUID = CLINIC_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String CLINIC_REPORTS = CLINIC_BY_UUID + "/reports";
 	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
 	public static final String CLINIC_DOCTOR_BY_UUID = CLINIC_DOCTORS + "/{doctorUuid}";
 	public static final String CLINIC_DOCTOR_INVITE = CLINIC_DOCTORS + "/invite";
@@ -165,9 +162,12 @@ public class ApiUrl {
 	public static final String CLINIC_OWNERS = CLINIC_BY_UUID + "/owners";
 	public static final String CLINIC_OWNER_DETAIL = CLINIC_OWNERS + "/{ownerUuid}";
 	public static final String CLINIC_OWNER_PETS = CLINIC_OWNER_DETAIL + "/pets";
+	public static final String CLINIC_OWNER_PETS_ADMIT = CLINIC_OWNER_PETS + "/admit";
 	public static final String CLINIC_OWNER_HIDE = CLINIC_OWNER_DETAIL + "/hide";
 	public static final String CLINIC_OWNER_FROM_USER = CLINIC_OWNERS + "/from-user";
 	public static final String CLINIC_OWNER_LOOKUP = CLINIC_OWNERS + "/lookup";
+	public static final String CLINIC_OWNER_ATTACH_CONSENT_SEND = CLINIC_OWNERS + "/attach-consent/send";
+	public static final String CLINIC_OWNER_ATTACH_CONSENT_VERIFY = CLINIC_OWNERS + "/attach-consent/verify";
 	public static final String CLINIC_OWNER_PET_CONSENT_SEND = CLINIC_OWNER_DETAIL + "/pets/consent/send";
 	public static final String CLINIC_OWNER_PET_CONSENT_VERIFY = CLINIC_OWNER_DETAIL + "/pets/consent/verify";
 	public static final String CLINIC_USERS_SEARCH = CLINIC_BY_UUID + "/users/search";
@@ -191,6 +191,8 @@ public class ApiUrl {
 	public static final String CLINIC_SHUTDOWN = CLINIC_BY_UUID + "/shutdown";
 	public static final String CLINIC_REOPEN = CLINIC_BY_UUID + "/reopen";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
+	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
+	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";
 	public static final String CLINIC_INVOICES = CLINIC_BY_UUID + "/invoices";
 	public static final String CLINIC_INVOICE_BY_UUID = CLINIC_INVOICES + "/{invoiceUuid}";
 	public static final String CLINIC_INVOICE_GENERATE_PDF = CLINIC_INVOICE_BY_UUID + "/generate-pdf";
@@ -198,19 +200,12 @@ public class ApiUrl {
 	public static final String CLINIC_INVOICE_SEND_WHATSAPP = CLINIC_INVOICE_BY_UUID + "/send-whatsapp";
 	public static final String CLINIC_INVOICE_MARK_PAID = CLINIC_INVOICE_BY_UUID + "/mark-paid";
 	public static final String CLINIC_WHATSAPP_SETTINGS = CLINIC_BY_UUID + "/whatsapp-settings";
-	public static final String CLINIC_WHATSAPP_EMBEDDED_SIGNUP = CLINIC_BY_UUID + "/whatsapp-embedded-signup";
-	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
-	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";
-	public static final String CLINIC_INVENTORY_DASHBOARD = CLINIC_INVENTORY + "/dashboard";
-	public static final String CLINIC_INVENTORY_MOVEMENTS = CLINIC_INVENTORY + "/movements";
-	public static final String CLINIC_INVENTORY_SCAN = CLINIC_INVENTORY + "/scan";
-	public static final String CLINIC_INVENTORY_ALERTS = CLINIC_INVENTORY + "/alerts";
-	public static final String CLINIC_INVENTORY_WEEKLY_REPORT = CLINIC_INVENTORY + "/reports/weekly";
-	public static final String CLINIC_INVENTORY_CONSUMPTION = CLINIC_INVENTORY + "/consumption";
-	public static final String CLINIC_INVENTORY_LOTS = CLINIC_INVENTORY_ITEM + "/lots";
+	public static final String CLINIC_WHATSAPP_SETUP_TEMPLATES = CLINIC_WHATSAPP_SETTINGS + "/setup-templates";
+	public static final String CLINIC_WHATSAPP_CONNECT_EMBEDDED = CLINIC_BY_UUID + "/whatsapp/connect/embedded";
 	public static final String DOCTOR_WHATSAPP_SETTINGS = "/doctor/whatsapp-settings";
-	public static final String DOCTOR_WHATSAPP_EMBEDDED_SIGNUP = "/doctor/whatsapp-embedded-signup";
-	public static final String WHATSAPP_WEBHOOK = "/whatsapp/webhook";
+	public static final String DOCTOR_WHATSAPP_SETUP_TEMPLATES = DOCTOR_WHATSAPP_SETTINGS + "/setup-templates";
+	public static final String DOCTOR_WHATSAPP_CONNECT_EMBEDDED = DOCTOR_BASE_URL + "/whatsapp/connect/embedded";
+	public static final String WEBHOOK_WHATSAPP = "/webhook/whatsapp";
 
 	public static final String DOCTOR_VISITS = DOCTOR_BASE_URL + "/visits";
 	public static final String DOCTOR_VISITS_MINE = DOCTOR_VISITS + "/mine";
@@ -224,9 +219,6 @@ public class ApiUrl {
 	public static final String DOCTOR_BOOKING_BY_UUID = DOCTOR_BASE_URL + "/bookings/{bookingUuid}";
 	public static final String DOCTOR_BOOKING_START_TREATMENT = DOCTOR_BOOKING_BY_UUID + "/start-treatment";
 	public static final String DOCTOR_BOOKING_VIDEO = DOCTOR_BOOKING_BY_UUID + "/video";
-	public static final String DOCTOR_BOOKING_VIDEO_STATUS = DOCTOR_BOOKING_VIDEO + "/status";
-	public static final String DOCTOR_BOOKING_VIDEO_HEARTBEAT = DOCTOR_BOOKING_VIDEO + "/heartbeat";
-	public static final String DOCTOR_BOOKING_VIDEO_END = DOCTOR_BOOKING_VIDEO + "/end";
 
 	public static final String CLINIC_DOCTOR_BUSY = CLINIC_DOCTOR_BY_UUID + "/busy";
 
@@ -239,13 +231,8 @@ public class ApiUrl {
 	public static final String USER_VISIT_RATING = USER_VISIT_BY_UUID + "/rating";
 	public static final String USER_BOOKINGS_MINE = "/user/bookings/mine";
 	public static final String USER_BOOKINGS = "/user/bookings";
-	public static final String USER_BOOKING_BY_UUID = USER_BOOKINGS + "/{bookingUuid}";
 	public static final String USER_BOOKING_VIDEO = USER_BOOKINGS + "/{bookingUuid}/video";
-	public static final String USER_BOOKING_VIDEO_STATUS = USER_BOOKING_VIDEO + "/status";
-	public static final String USER_VIDEO_CALLS_INCOMING = "/user/video-calls/incoming";
-	public static final String USER_VIDEO_CALL_ACK = "/user/video-calls/{bookingUuid}/ack";
 	public static final String USER_DOCTOR_SLOTS = "/user/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
-	public static final String USER_INVOICES_MINE = "/user/invoices/mine";
 	public static final String USER_REMINDERS = "/user/reminders";
 	public static final String USER_REMINDER_BY_UUID = USER_REMINDERS + "/{reminderUuid}";
 
@@ -263,4 +250,7 @@ public class ApiUrl {
 	public static final String CONSULTATION_INVOICE_PDF = CONSULTATION_INVOICE_BY_UUID + "/pdf";
 	public static final String CONSULTATION_INVOICE_SEND_WHATSAPP = CONSULTATION_INVOICE_BY_UUID + "/send-whatsapp";
 	public static final String CONSULTATION_INVOICE_MARK_PAID = CONSULTATION_INVOICE_BY_UUID + "/mark-paid";
+
+	// Facebook URL
+	public static final String FACEBOOK_BASE_URL = "https://graph.facebook.com/";
 }
