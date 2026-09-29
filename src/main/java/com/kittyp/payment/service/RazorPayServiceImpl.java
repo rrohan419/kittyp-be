@@ -199,17 +199,10 @@ public class RazorPayServiceImpl implements RazorPayService {
 	private void requireInvoicePayAccess(ConsultationInvoice invoice, User caller) {
 		if (invoice.getDoctor() != null && invoice.getDoctor().getId() != null
 				&& invoice.getDoctor().getId().equals(caller.getId())) {
-			if (invoice.getClinic() != null && StringUtils.hasText(invoice.getClinic().getUuid())) {
-				clinicService.requireActivatedClinic(invoice.getClinic().getUuid(), caller.getEmail());
-			}
-			return;
-		}
-		// Pet parent self-pay before clinic membership check (parents are not clinic staff).
-		if (treatmentInvoiceService.isOwnerPayer(caller, invoice)) {
 			return;
 		}
 		if (invoice.getClinic() != null && StringUtils.hasText(invoice.getClinic().getUuid())) {
-			clinicService.requireActivatedClinic(invoice.getClinic().getUuid(), caller.getEmail());
+			clinicService.get(invoice.getClinic().getUuid(), caller.getEmail());
 			return;
 		}
 		throw new CustomException("Not authorized to collect payment for this invoice", HttpStatus.FORBIDDEN);
@@ -266,66 +259,8 @@ public class RazorPayServiceImpl implements RazorPayService {
 			throw new CustomException("Payment verification failed", HttpStatus.INTERNAL_SERVER_ERROR, e);
 		}
 
-		// Reconcile the actual captured amount server-side (never trust the client).
-		requireCapturedAmountMatches(verificationRequest.getOrderId(), verificationRequest.getPaymentId());
-
 		paymentCaptureService.completeCaptured(verificationRequest.getOrderId(), verificationRequest.getPaymentId());
 		return "Payment verified successfully";
-	}
-
-	/**
-	 * Fetches the payment from Razorpay and verifies the captured amount/currency
-	 * matches the server-side expected amount for the order, and that the payment
-	 * actually belongs to the submitted order. Revoked for any mismatch — this is
-	 * the defense against an attacker submitting a valid signature for a
-	 * different (lower) amount.
-	 */
-	private void requireCapturedAmountMatches(String orderId, String paymentId) {
-		JSONObject payment = razorpayGateway.fetchPayment(paymentId);
-
-		String paidOrderId = payment.optString("order_id");
-		if (!orderId.equals(paidOrderId)) {
-			throw new CustomException("Payment order mismatch", HttpStatus.BAD_REQUEST);
-		}
-
-		int paidPaise = payment.optInt("amount", -1);
-		if (paidPaise < 0) {
-			throw new CustomException("Payment amount missing", HttpStatus.BAD_REQUEST);
-		}
-
-		String paidCurrency = payment.optString("currency", "");
-		int expectedPaise = expectedOrderPaise(orderId, paidCurrency);
-		if (paidPaise != expectedPaise) {
-			throw new CustomException("Payment amount does not match order", HttpStatus.BAD_REQUEST);
-		}
-	}
-
-	/** Resolves the expected charge in paise for a store order or treatment invoice. */
-	private int expectedOrderPaise(String razorpayOrderId, String currency) {
-		com.kittyp.order.entity.Order order = orderDao.orderByAggregatorOrderNumber(razorpayOrderId);
-		if (order != null) {
-			BigDecimal amount = order.getTotalAmount();
-			if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-				throw new CustomException("Order amount is invalid", HttpStatus.BAD_REQUEST);
-			}
-			if (currency != null && !currency.isBlank()
-					&& order.getCurrency() != null && !currency.equalsIgnoreCase(order.getCurrency().name())) {
-				throw new CustomException("Payment currency mismatch", HttpStatus.BAD_REQUEST);
-			}
-			return toPaise(amount);
-		}
-
-		ConsultationInvoice invoice = consultationInvoiceRepository.findByRazorpayOrderId(razorpayOrderId)
-				.orElseThrow(() -> new CustomException("Order not found", HttpStatus.NOT_FOUND));
-		BigDecimal amount = treatmentInvoiceService.remainingBalance(invoice);
-		if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-			throw new CustomException("Invoice amount is invalid", HttpStatus.BAD_REQUEST);
-		}
-		if (currency != null && !currency.isBlank() && invoice.getCurrency() != null
-				&& !currency.equalsIgnoreCase(invoice.getCurrency())) {
-			throw new CustomException("Payment currency mismatch", HttpStatus.BAD_REQUEST);
-		}
-		return toPaise(amount);
 	}
 
 	@Transactional(propagation = Propagation.REQUIRED, isolation = Isolation.READ_COMMITTED)

@@ -239,6 +239,7 @@ public class AdminDoctorController {
                 p.isCheckClinicPhotos(),
                 p.getSubmittedAt(),
                 p.getReviewedAt(),
-                p.getReviewNotes());
+                p.getReviewNotes(),
+                p.getExperienceYears());
     }
 }

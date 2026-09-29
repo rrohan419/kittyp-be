@@ -309,6 +309,12 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
+    public void requireActivatedClinic(String clinicUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireActivated(clinic);
+    }
+
+    @Override
     public ClinicModel switchClinic(String clinicUuid, String email) {
         return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
     }
@@ -1113,6 +1119,11 @@ public class ClinicServiceImpl implements ClinicService {
 
         invite.setStatus(ClinicStaffInviteStatus.ACCEPTED);
         clinicStaffInviteRepository.save(invite);
+        try {
+            zeptoMailService.sendWelcomeEmailforClinicStaff(user.getFirstName(), user.getEmail(), clinic.getName());
+        } catch (Exception e) {
+            log.warn("Failed to send staff welcome email to {}: {}", user.getEmail(), e.getMessage());
+        }
         return staffMemberModel(membership);
     }
 
@@ -3342,7 +3353,9 @@ public class ClinicServiceImpl implements ClinicService {
                         : booking.getDoctor().getSpecialization().name(),
                 booking.getDoctor() == null ? null : booking.getDoctor().getPhotoUrl(),
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.isVideoLive(),
+                booking.isVideoJoinOpen());
     }
 
     private static String doctorDisplayName(com.kittyp.doctor.entity.DoctorProfile doctor) {

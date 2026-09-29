@@ -28,6 +28,7 @@ public class ApiUrl {
 	public static final String VERIFY_CODE = AUTH_BASE_URL + "/verify-code";
 	public static final String USER_PASSWORD_RESET = AUTH_BASE_URL + "/password-reset";
 
+	public static final String ADMIN_MASTER_TOTP = ADMIN + "/master-totp";
 	public static final String ADMIN_SYSTEM_HEALTH = ADMIN + "/system-health";
 	public static final String ADMIN_SYSTEM_HEALTH_OPTIMIZE = ADMIN_SYSTEM_HEALTH + "/optimize";
 	public static final String ADMIN_SYSTEM_HEALTH_LOAD_START = ADMIN_SYSTEM_HEALTH + "/load-test/start";
@@ -191,8 +192,6 @@ public class ApiUrl {
 	public static final String CLINIC_SHUTDOWN = CLINIC_BY_UUID + "/shutdown";
 	public static final String CLINIC_REOPEN = CLINIC_BY_UUID + "/reopen";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
-	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
-	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";
 	public static final String CLINIC_INVOICES = CLINIC_BY_UUID + "/invoices";
 	public static final String CLINIC_INVOICE_BY_UUID = CLINIC_INVOICES + "/{invoiceUuid}";
 	public static final String CLINIC_INVOICE_GENERATE_PDF = CLINIC_INVOICE_BY_UUID + "/generate-pdf";
@@ -219,6 +218,9 @@ public class ApiUrl {
 	public static final String DOCTOR_BOOKING_BY_UUID = DOCTOR_BASE_URL + "/bookings/{bookingUuid}";
 	public static final String DOCTOR_BOOKING_START_TREATMENT = DOCTOR_BOOKING_BY_UUID + "/start-treatment";
 	public static final String DOCTOR_BOOKING_VIDEO = DOCTOR_BOOKING_BY_UUID + "/video";
+	public static final String DOCTOR_BOOKING_VIDEO_STATUS = DOCTOR_BOOKING_VIDEO + "/status";
+	public static final String DOCTOR_BOOKING_VIDEO_HEARTBEAT = DOCTOR_BOOKING_VIDEO + "/heartbeat";
+	public static final String DOCTOR_BOOKING_VIDEO_END = DOCTOR_BOOKING_VIDEO + "/end";
 
 	public static final String CLINIC_DOCTOR_BUSY = CLINIC_DOCTOR_BY_UUID + "/busy";
 
@@ -231,7 +233,11 @@ public class ApiUrl {
 	public static final String USER_VISIT_RATING = USER_VISIT_BY_UUID + "/rating";
 	public static final String USER_BOOKINGS_MINE = "/user/bookings/mine";
 	public static final String USER_BOOKINGS = "/user/bookings";
+	public static final String USER_BOOKING_BY_UUID = USER_BOOKINGS + "/{bookingUuid}";
 	public static final String USER_BOOKING_VIDEO = USER_BOOKINGS + "/{bookingUuid}/video";
+	public static final String USER_BOOKING_VIDEO_STATUS = USER_BOOKING_VIDEO + "/status";
+	public static final String USER_VIDEO_CALLS_INCOMING = "/user/video-calls/incoming";
+	public static final String USER_VIDEO_CALL_ACK = "/user/video-calls/{bookingUuid}/ack";
 	public static final String USER_DOCTOR_SLOTS = "/user/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
 	public static final String USER_REMINDERS = "/user/reminders";
 	public static final String USER_REMINDER_BY_UUID = USER_REMINDERS + "/{reminderUuid}";
@@ -250,6 +256,11 @@ public class ApiUrl {
 	public static final String CONSULTATION_INVOICE_PDF = CONSULTATION_INVOICE_BY_UUID + "/pdf";
 	public static final String CONSULTATION_INVOICE_SEND_WHATSAPP = CONSULTATION_INVOICE_BY_UUID + "/send-whatsapp";
 	public static final String CONSULTATION_INVOICE_MARK_PAID = CONSULTATION_INVOICE_BY_UUID + "/mark-paid";
+
+	public static final String PLACES_AUTOCOMPLETE = "/places/autocomplete";
+	public static final String PLACES_DETAILS = "/places/details";
+	public static final String PUBLIC_PLACES_AUTOCOMPLETE = "/public/places/autocomplete";
+	public static final String PUBLIC_PLACES_DETAILS = "/public/places/details";
 
 	// Facebook URL
 	public static final String FACEBOOK_BASE_URL = "https://graph.facebook.com/";

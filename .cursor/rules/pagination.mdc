@@ -1,0 +1,7 @@
+# Pagination required for growing collections
+
+When building or changing APIs that return **collections that can grow** (admin lists, clinic clients/patients, bookings/visits history, search results):
+
+- Use **server-side pagination** (`page` / `size`, Spring `Page`, or existing `PaginationModel`).
+- Do **not** use unbounded `findAll()` / return full lists for those cases.
+- Tiny fixed sets (enums, static config) are fine without pagination.

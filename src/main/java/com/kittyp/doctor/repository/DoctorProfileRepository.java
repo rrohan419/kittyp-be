@@ -36,4 +36,11 @@ public interface DoctorProfileRepository extends JpaRepository<DoctorProfile, Lo
     long countByStatusIn(Collection<DoctorStatus> statuses);
 
     List<DoctorProfile> findByWhatsappBusinessAccountId(String whatsappBusinessAccountId);
+
+    @Query(value = """
+            SELECT COUNT(*) FROM doctor_profiles
+            WHERE RIGHT(regexp_replace(COALESCE(phone_number, ''), '[^0-9]', '', 'g'), 10) = :digits
+            AND (:exceptUuid IS NULL OR user_id NOT IN (SELECT id FROM users WHERE uuid = :exceptUuid))
+            """, nativeQuery = true)
+    long countByLocal10ExcludingUserUuid(@Param("digits") String digits, @Param("exceptUuid") String exceptUuid);
 }

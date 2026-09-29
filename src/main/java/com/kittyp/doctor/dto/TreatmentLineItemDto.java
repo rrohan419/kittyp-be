@@ -31,8 +31,4 @@ public class TreatmentLineItemDto {
     private BigDecimal discount;
     private BigDecimal tax;
     private BigDecimal total;
-    private String inventoryItemUuid;
-
-    /** Optional; when omitted, FEFO selects earliest-expiring lots. */
-    private String lotUuid;
 }

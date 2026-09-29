@@ -51,4 +51,20 @@ public interface ZeptoMailService {
 
 	void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
 			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename);
+
+	void sendPhoneChangedNotification(String email, String firstName, String clinicName, String phone, String loginUrl);
+
+	void sendEmailChangeOtp(String recipientEmail, String firstName, String clinicName, String code);
+
+	void sendPasswordChangedNotification(String email, String firstName, String clinicName, String changedAt);
+
+	/** Welcome for clinic CRM parent without a KittyP account yet. */
+	void sendClinicParentCrmWelcomeEmail(String firstName, String recipientEmail, String clinicName);
+
+	/** Confirm appointment/walk-in to the pet owner email. */
+	void sendAppointmentConfirmationEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName);
+
+	/** Welcome after clinic staff completes invite signup. */
+	void sendWelcomeEmailforClinicStaff(String firstName, String recipientEmail, String clinicName);
 }

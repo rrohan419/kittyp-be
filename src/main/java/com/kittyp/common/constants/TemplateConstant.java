@@ -26,4 +26,21 @@ public class TemplateConstant {
 	public static final String ZOHO_DOCTOR_PROFILE_VERIFIED_TEMPLATE_ID = "zoho.doctor.profile.verified.template.id";
 	public static final String ZOHO_CLINIC_PROFILE_VERIFIED_TEMPLATE_ID = "zoho.clinic.profile.verified.template.id";
 	public static final String ZOHO_TREATMENT_INVOICE_EMAIL_TEMPLATE_ID = "zoho.treatment.invoice.email.template.id";
+	/** CRM parent (no KittyP account yet) welcome after walk-in / schedule. */
+	public static final String ZEPTO_CLINIC_PARENT_CRM_WELCOME_EMAIL_TEMPLATE_ID =
+			"zoho.clinic.parent.crm.welcome.email.template.id";
+	/** Owner appointment confirmation (walk-in or scheduled). */
+	public static final String ZEPTO_APPOINTMENT_CONFIRMATION_EMAIL_TEMPLATE_ID =
+			"zoho.appointment.confirmation.email.template.id";
+	/** Staff account created after invite accept. */
+	public static final String ZEPTO_CLINIC_STAFF_WELCOME_EMAIL_TEMPLATE_ID =
+			"zoho.clinic.staff.welcome.email.template.id";
+	public static final String ZOHO_ACCOUNT_PHONE_CHANGED_TEMPLATE_ID = "zoho.phone.changed.email.template.id";
+	public static final String ZOHO_ACCOUNT_PASSWORD_CHANGED_TEMPLATE_ID = "zoho.password.changed.email.template.id";
+	public static final String ZOHO_EMAIL_CHANGE_OTP_TEMPLATE_ID = "zoho.email.change.otp.template.id";
+	public static final String ZEPTO_CLINIC_DOCTOR_INVITE_REMINDER_EMAIL_TEMPLATE_ID =
+			"zoho.clinic.doctor.invite.reminder.email.template.id";
+	public static final String ZEPTO_PHONE_CHANGED_EMAIL_TEMPLATE_ID = ZOHO_ACCOUNT_PHONE_CHANGED_TEMPLATE_ID;
+	public static final String ZEPTO_EMAIL_CHANGE_OTP_TEMPLATE_ID = ZOHO_EMAIL_CHANGE_OTP_TEMPLATE_ID;
+	public static final String ZEPTO_PASSWORD_CHANGED_EMAIL_TEMPLATE_ID = ZOHO_ACCOUNT_PASSWORD_CHANGED_TEMPLATE_ID;
 }

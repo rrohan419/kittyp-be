@@ -56,20 +56,17 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	@Async
 	@Override
 	public void sendWelcomeEmailforParent(String firstName, String recipientEmail) {
-		// User user = userDao.userByEmail(recipientEmail);
-
-		ZeptoMailDto mailDto = new ZeptoMailDto();
-		mailDto.setMergeInfo(
-				Map.of("Customer_Name", firstName));
-		mailDto.setRecipientEmail(recipientEmail);
-		mailDto.setRecipientName(firstName);
-		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID));
-		// mailDto.setProvider("Zepto Mail");
-
-		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
-		log.info("welcome email sent for email : " + recipientEmail);
-		addEmailAuditLog(responseModel, recipientEmail);
-
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			mailDto.setMergeInfo(Map.of("Customer_Name", firstName));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(firstName);
+			if (dispatch(mailDto, TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID)) {
+				log.info("welcome email sent for email : {}", recipientEmail);
+			}
+		} catch (Exception e) {
+			log.warn("Failed to send parent welcome to {}: {}", recipientEmail, e.getMessage());
+		}
 	}
 
 	@Override
@@ -94,7 +91,13 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		mailDto.setMergeInfo(Map.of("Customer_Name", user.getFirstName()));
 		mailDto.setRecipientEmail(recipientEmail);
 		mailDto.setRecipientName(user.getFirstName());
-		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZOHO_CLINIC_ADMIN_WELCOME_EMAIL_TEMPLATE_ID));
+		try {
+			if (dispatch(mailDto, TemplateConstant.ZOHO_CLINIC_ADMIN_WELCOME_EMAIL_TEMPLATE_ID)) {
+				log.info("welcome email sent for email : {}", recipientEmail);
+			}
+		} catch (Exception e) {
+			log.warn("Failed to send clinic admin welcome to {}: {}", recipientEmail, e.getMessage());
+		}
 	}
 
 	/**
@@ -448,6 +451,101 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		}
 	}
 
+	@Override
+	@Async
+	public void sendPhoneChangedNotification(String email, String firstName, String clinicName, String phone,
+			String loginUrl) {
+		String name = blankToDefault(firstName, "there");
+		sendDedicated(email, name, TemplateConstant.ZEPTO_PHONE_CHANGED_EMAIL_TEMPLATE_ID, Map.of(
+				"Customer_Name", name,
+				"Clinic_Name", blankToDefault(clinicName, "KittyP"),
+				"phone", blankToDefault(phone, ""),
+				"login_url", blankToDefault(loginUrl, "")));
+	}
+
+	@Override
+	public void sendEmailChangeOtp(String recipientEmail, String firstName, String clinicName, String code) {
+		String name = blankToDefault(firstName, "there");
+		sendDedicated(recipientEmail, name, TemplateConstant.ZEPTO_EMAIL_CHANGE_OTP_TEMPLATE_ID, Map.of(
+				"Customer_Name", name,
+				"Clinic_Name", blankToDefault(clinicName, "KittyP"),
+				"OTP", blankToDefault(code, "")));
+	}
+
+	@Override
+	@Async
+	public void sendPasswordChangedNotification(String email, String firstName, String clinicName, String changedAt) {
+		String name = blankToDefault(firstName, "there");
+		sendDedicated(email, name, TemplateConstant.ZEPTO_PASSWORD_CHANGED_EMAIL_TEMPLATE_ID, Map.of(
+				"Customer_Name", name,
+				"Clinic_Name", blankToDefault(clinicName, "KittyP"),
+				"changed_at", blankToDefault(changedAt, "")));
+	}
+
+	@Override
+	@Async
+	public void sendClinicParentCrmWelcomeEmail(String firstName, String recipientEmail, String clinicName) {
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		String name = blankToDefault(firstName, "there");
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(Map.of(
+				"Customer_Name", name,
+				"Clinic_Name", blankToDefault(clinicName, "Clinic"),
+				"clinic_name", blankToDefault(clinicName, "Clinic")));
+		mailDto.setRecipientEmail(recipientEmail.trim());
+		mailDto.setRecipientName(name);
+		String key = TemplateConstant.ZEPTO_CLINIC_PARENT_CRM_WELCOME_EMAIL_TEMPLATE_ID;
+		if (!dispatch(mailDto, key)) {
+			dispatch(mailDto, TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID);
+		}
+	}
+
+	@Override
+	@Async
+	public void sendAppointmentConfirmationEmail(String recipientEmail, String ownerName, String clinicName,
+			String petName, String when, String doctorName) {
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		String name = blankToDefault(ownerName, "there");
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(Map.of(
+				"Customer_Name", name,
+				"Clinic_Name", blankToDefault(clinicName, "Clinic"),
+				"clinic_name", blankToDefault(clinicName, "Clinic"),
+				"pet_name", blankToDefault(petName, "your pet"),
+				"appointment_when", blankToDefault(when, "soon"),
+				"doctor_name", blankToDefault(doctorName, "your veterinarian")));
+		mailDto.setRecipientEmail(recipientEmail.trim());
+		mailDto.setRecipientName(name);
+		String key = TemplateConstant.ZEPTO_APPOINTMENT_CONFIRMATION_EMAIL_TEMPLATE_ID;
+		if (!dispatch(mailDto, key)) {
+			dispatch(mailDto, TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID);
+		}
+	}
+
+	@Override
+	@Async
+	public void sendWelcomeEmailforClinicStaff(String firstName, String recipientEmail, String clinicName) {
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		String name = blankToDefault(firstName, "there");
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(Map.of(
+				"Customer_Name", name,
+				"Clinic_Name", blankToDefault(clinicName, "Clinic"),
+				"clinic_name", blankToDefault(clinicName, "Clinic")));
+		mailDto.setRecipientEmail(recipientEmail.trim());
+		mailDto.setRecipientName(name);
+		String key = TemplateConstant.ZEPTO_CLINIC_STAFF_WELCOME_EMAIL_TEMPLATE_ID;
+		if (!dispatch(mailDto, key)) {
+			dispatch(mailDto, TemplateConstant.ZOHO_CLINIC_ADMIN_WELCOME_EMAIL_TEMPLATE_ID);
+		}
+	}
+
 	private String resolveTemplateKey(String templateProperty) {
 		String templateKey = env.getProperty(templateProperty);
 		if (templateKey == null || templateKey.isBlank()) {
@@ -467,5 +565,4 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		addEmailAuditLog(responseModel, mailDto.getRecipientEmail());
 		return true;
 	}
-
 }

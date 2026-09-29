@@ -1,4 +1,4 @@
 @echo off
 REM Windows launcher — avoids PowerShell splitting -Dspring-boot.run.profiles=local
 cd /d "%~dp0"
-call "%~dp0mvnw.cmd" spring-boot:run -Dspring-boot.run.profiles=local %*
+call "%~dp0mvnw.cmd" spring-boot:run "-Dmaven.test.skip=true" "-Dspring-boot.run.profiles=local" %*

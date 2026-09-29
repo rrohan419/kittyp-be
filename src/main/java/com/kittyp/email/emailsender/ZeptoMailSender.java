@@ -3,6 +3,7 @@
  */
 package com.kittyp.email.emailsender;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,27 +41,17 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
 	@Override
 	public ZeptoMailResponseModel sendEmail(ZeptoMailDto zeptoMailDto) {
 		ZohoMailRequest request = new ZohoMailRequest();
-		String templateKey = zeptoMailDto.getTemplateKey();
-		String templateAlias = zeptoMailDto.getTemplateAlias();
-		if (templateKey != null && !templateKey.isBlank()) {
-			request.setTemplateKey(templateKey);
-		} else if (templateAlias != null && !templateAlias.isBlank()) {
-			request.setTemplateAlias(templateAlias);
-		}
-		if (zeptoMailDto.getSubject() != null && !zeptoMailDto.getSubject().isBlank()) {
-			request.setSubject(zeptoMailDto.getSubject());
-		}
+        request.setTemplateKey(zeptoMailDto.getTemplateKey());
+//        request.setBounceAddress("bounce@yourdomain.com");
         Map<String, Object> mergeInfo = new HashMap<>();
         if (zeptoMailDto.getMergeInfo() != null) {
             mergeInfo.putAll(zeptoMailDto.getMergeInfo());
         }
+        mergeInfo.put("current_year", LocalDate.now().getYear());
+        mergeInfo.put("logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO);
         request.setMergeInfo(mergeInfo);
         request.setFrom(new EmailAddress(env.getProperty(AppConstant.KITTYP_MAIL_ID), AppConstant.KITTYP));
-        request.setTo(List.of(new Recipient(
-                new EmailAddress(zeptoMailDto.getRecipientEmail(), zeptoMailDto.getRecipientName()))));
-        if (zeptoMailDto.getAttachments() != null && !zeptoMailDto.getAttachments().isEmpty()) {
-            request.setAttachments(zeptoMailDto.getAttachments());
-        }
+        request.setTo(List.of(new Recipient(new EmailAddress(zeptoMailDto.getRecipientEmail(), zeptoMailDto.getRecipientName()))));
 
         ResponseEntity<ZeptoMailResponseModel> responseEntity = restClient.post().uri(env.getProperty(AppConstant.ZOHO_EMAIL_SEND_URL))
         		.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)

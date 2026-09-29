@@ -9,7 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.Base64;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
@@ -17,9 +16,7 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
 import com.itextpdf.io.source.ByteArrayOutputStream;
-import com.kittyp.doctor.dto.TreatmentInvoiceData;
 import com.kittyp.payment.model.InvoiceData;
-import com.openhtmltopdf.outputdevice.helper.BaseRendererBuilder.FontStyle;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
 import lombok.RequiredArgsConstructor;
@@ -33,8 +30,6 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class PdfGenerator {
 
-	private static final String KITTYP_LOGO_CLASSPATH = "static/invoice/kittyp-logo.png";
-
 	private final SpringTemplateEngine thymeleaf;
 
 	/** Font family registered for Unicode (includes Indian Rupee ₹). */
@@ -45,11 +40,6 @@ public class PdfGenerator {
 	}
 
 	public byte[] generateTreatmentInvoicePdf(Object data) {
-		if (data instanceof TreatmentInvoiceData invoiceData) {
-			if (invoiceData.getKittypLogoSrc() == null || invoiceData.getKittypLogoSrc().isBlank()) {
-				invoiceData.setKittypLogoSrc(loadKittypLogoDataUri());
-			}
-		}
 		return generatePdf("treatment-invoice-template.html", "invoice", data);
 	}
 
@@ -60,9 +50,8 @@ public class PdfGenerator {
 
 		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 			PdfRendererBuilder builder = new PdfRendererBuilder();
-			// Avoid useFastMode — it softens text/glyph rasterization on many viewers.
-			registerUnicodeFonts(builder);
-			builder.useDefaultPageSize(210, 297, PdfRendererBuilder.PageSizeUnits.MM);
+			builder.useFastMode();
+			registerUnicodeFont(builder);
 			builder.withHtmlContent(html, null);
 			builder.toStream(out);
 			builder.run();
@@ -72,69 +61,24 @@ public class PdfGenerator {
 		}
 	}
 
-	private String loadKittypLogoDataUri() {
-		try {
-			ClassPathResource resource = new ClassPathResource(KITTYP_LOGO_CLASSPATH);
-			if (!resource.exists()) {
-				log.warn("KittyP invoice logo missing at classpath:{}", KITTYP_LOGO_CLASSPATH);
-				return null;
-			}
-			try (InputStream in = resource.getInputStream()) {
-				byte[] bytes = in.readAllBytes();
-				return "data:image/png;base64," + Base64.getEncoder().encodeToString(bytes);
-			}
-		} catch (Exception e) {
-			log.warn("Failed to load KittyP invoice logo: {}", e.getMessage());
-			return null;
-		}
-	}
-
 	/**
-	 * Helvetica cannot render ₹ (shows as #). Register regular + bold so titles are
-	 * not faux-bold (which looks blurry in PDF viewers).
+	 * Helvetica cannot render ₹ (shows as #). Register a Unicode-capable font.
 	 */
-	private void registerUnicodeFonts(PdfRendererBuilder builder) {
-		File regular = resolveUnicodeFontFile(false);
-		if (regular == null) {
+	private void registerUnicodeFont(PdfRendererBuilder builder) {
+		File fontFile = resolveUnicodeFontFile();
+		if (fontFile == null) {
 			log.warn("No Unicode font found for PDF; ₹ may render incorrectly. Add fonts/NotoSans-Regular.ttf to resources.");
 			return;
 		}
 		try {
-			builder.useFont(regular, UNICODE_FONT_FAMILY, 400, FontStyle.NORMAL, true);
-			File bold = resolveUnicodeFontFile(true);
-			if (bold != null) {
-				builder.useFont(bold, UNICODE_FONT_FAMILY, 700, FontStyle.NORMAL, true);
-			} else {
-				// Prefer real bold; fall back to same file at weight 700 if needed.
-				builder.useFont(regular, UNICODE_FONT_FAMILY, 700, FontStyle.NORMAL, true);
-			}
+			builder.useFont(fontFile, UNICODE_FONT_FAMILY);
 		} catch (Exception e) {
-			log.warn("Failed to register Unicode PDF fonts: {}", e.getMessage());
+			log.warn("Failed to register Unicode PDF font from {}: {}", fontFile, e.getMessage());
 		}
 	}
 
-	private File resolveUnicodeFontFile(boolean bold) {
-		if (bold) {
-			File bundledBold = copyClasspathFont("fonts/NotoSans-Bold.ttf");
-			if (bundledBold != null) {
-				return bundledBold;
-			}
-			String[] boldCandidates = {
-					"C:/Windows/Fonts/arialbd.ttf",
-					"C:/Windows/Fonts/segoeuib.ttf",
-					"C:/Windows/Fonts/NirmalaB.ttf",
-					"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-					"/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-			};
-			for (String path : boldCandidates) {
-				Path p = Paths.get(path);
-				if (Files.isRegularFile(p)) {
-					return p.toFile();
-				}
-			}
-			return null;
-		}
-
+	private File resolveUnicodeFontFile() {
+		// 1) Bundled classpath font (preferred for all environments)
 		File bundled = copyClasspathFont("fonts/NotoSans-Regular.ttf");
 		if (bundled != null) {
 			return bundled;
@@ -144,6 +88,7 @@ public class PdfGenerator {
 			return bundled;
 		}
 
+		// 2) Common OS fonts that include U+20B9 (₹)
 		String[] candidates = {
 				"C:/Windows/Fonts/Nirmala.ttf",
 				"C:/Windows/Fonts/NirmalaS.ttf",

@@ -8,7 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Create/send invoice response: invoice is always persisted; WhatsApp and email are best-effort.
+ * Create invoice response: invoice is always persisted; WhatsApp send is best-effort.
  */
 @Data
 @NoArgsConstructor
@@ -24,26 +24,25 @@ public class CreateInvoiceResultDto {
 	public static CreateInvoiceResultDto of(ConsultationInvoice invoice) {
 		return CreateInvoiceResultDto.builder()
 				.invoice(invoice)
-				.build();
-	}
-
-	public static CreateInvoiceResultDto channels(ConsultationInvoice invoice, boolean whatsappSent, String whatsappError,
-			boolean emailSent, String emailError) {
-		return CreateInvoiceResultDto.builder()
-				.invoice(invoice)
-				.whatsappSent(whatsappSent)
-				.whatsappError(whatsappError)
-				.emailSent(emailSent)
-				.emailError(emailError)
+				.whatsappSent(false)
+				.whatsappError(null)
 				.build();
 	}
 
 	public static CreateInvoiceResultDto sent(ConsultationInvoice invoice) {
-		return channels(invoice, true, null, false, null);
+		return CreateInvoiceResultDto.builder()
+				.invoice(invoice)
+				.whatsappSent(true)
+				.whatsappError(null)
+				.build();
 	}
 
 	public static CreateInvoiceResultDto sendFailed(ConsultationInvoice invoice, String error) {
-		return channels(invoice, false, error, false, null);
+		return CreateInvoiceResultDto.builder()
+				.invoice(invoice)
+				.whatsappSent(false)
+				.whatsappError(error)
+				.build();
 	}
 
 	public static CreateInvoiceResultDto channels(ConsultationInvoice invoice, boolean whatsappSent, String whatsappError,

@@ -56,6 +56,7 @@ import com.kittyp.doctor.entity.DoctorReview;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorReviewRepository;
 import com.kittyp.doctor.enums.DoctorStatus;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.health.dao.HealthEventDao;
 import com.kittyp.health.entity.HealthEvent;
 import com.kittyp.health.enums.HealthEventStatus;
@@ -136,6 +137,7 @@ public class VisitServiceImpl implements VisitService {
     private final VerificationCodeService verificationCodeService;
     private final UserRepository userRepository;
     private final TenantAccessService tenantAccessService;
+    private final ZeptoMailService zeptoMailService;
 
     @Override
     @Transactional
@@ -150,6 +152,7 @@ public class VisitServiceImpl implements VisitService {
             requireDoctorAvailableAt(doctor, DoctorHours.nowLocal(availabilityTimezone(doctor, clinic)));
         }
 
+        boolean newClinicOwner = isNewClinicOwnerEmail(clinic, request.petUuid(), request.owner());
         Pet pet = resolvePetForWalkIn(clinic, request);
         ClinicPetOwner owner = pet.getClinicOwner();
 
@@ -171,6 +174,7 @@ public class VisitServiceImpl implements VisitService {
         if (doctor != null) {
             notifyDoctorOfPatient(visit, "assigned");
         }
+        notifyOwnerEmails(clinic, owner, pet, doctor, "walk-in / now", newClinicOwner);
         return toModel(visit, true);
     }
 
@@ -216,6 +220,7 @@ public class VisitServiceImpl implements VisitService {
         }
         WalkInCreateRequest petRequest = new WalkInCreateRequest(
                 request.petUuid(), request.owner(), request.newPet(), null, null, null);
+        boolean newClinicOwner = isNewClinicOwnerEmail(clinic, request.petUuid(), request.owner());
         Pet pet = resolvePetForWalkIn(clinic, petRequest);
         ClinicPetOwner clinicOwner = pet.getClinicOwner();
         if (clinicOwner != null) {
@@ -249,6 +254,8 @@ public class VisitServiceImpl implements VisitService {
 
         parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         notifyDoctorOfBooking(booking);
+        String when = booking.getSlotStart() == null ? "soon" : booking.getSlotStart().toString();
+        notifyOwnerEmails(clinic, clinicOwner, pet, doctor, when, newClinicOwner);
         return toBookingModel(booking);
     }
 
@@ -648,6 +655,73 @@ public class VisitServiceImpl implements VisitService {
             });
         } else {
             notify.run();
+        }
+    }
+
+    private boolean isNewClinicOwnerEmail(Clinic clinic, String petUuid, WalkInOwnerRequest ownerReq) {
+        if (petUuid != null && !petUuid.isBlank()) {
+            return false;
+        }
+        if (ownerReq == null) {
+            return false;
+        }
+        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(ownerReq.email());
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            return false;
+        }
+        return clinicPetOwnerRepository
+                .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
+                .isEmpty();
+    }
+
+    private void notifyOwnerEmails(Clinic clinic, ClinicPetOwner owner, Pet pet, DoctorProfile doctor, String when,
+            boolean newClinicOwner) {
+        if (owner == null || owner.getEmail() == null || owner.getEmail().isBlank()) {
+            return;
+        }
+        String ownerEmail = owner.getEmail().trim();
+        String ownerName = ((owner.getFirstName() == null ? "" : owner.getFirstName()) + " "
+                + (owner.getLastName() == null ? "" : owner.getLastName())).trim();
+        if (ownerName.isBlank()) {
+            ownerName = "there";
+        }
+        String clinicName = clinic != null ? clinic.getName() : "Clinic";
+        String petName = pet != null && pet.getName() != null ? pet.getName() : "your pet";
+        String doctorName = "your veterinarian";
+        if (doctor != null && doctor.getUser() != null) {
+            String fn = doctor.getUser().getFirstName();
+            String ln = doctor.getUser().getLastName();
+            doctorName = ((fn == null ? "" : fn) + " " + (ln == null ? "" : ln)).trim();
+            if (doctorName.isBlank()) {
+                doctorName = "your veterinarian";
+            }
+        }
+        final String finalOwnerName = ownerName;
+        final String finalDoctorName = doctorName;
+        Runnable send = () -> {
+            try {
+                if (newClinicOwner) {
+                    zeptoMailService.sendClinicParentCrmWelcomeEmail(finalOwnerName, ownerEmail, clinicName);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to send CRM parent welcome to {}: {}", ownerEmail, e.getMessage());
+            }
+            try {
+                zeptoMailService.sendAppointmentConfirmationEmail(ownerEmail, finalOwnerName, clinicName, petName, when,
+                        finalDoctorName);
+            } catch (Exception e) {
+                log.warn("Failed to send appointment confirmation to {}: {}", ownerEmail, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
         }
     }
 
