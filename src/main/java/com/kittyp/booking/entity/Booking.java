@@ -101,6 +101,9 @@ public class Booking extends BaseEntity implements HasPublicId {
     @Column(length = 1024)
     private String invoiceUrl;
 
+    /** Set when the one-hour reminder email is claimed. Cleared on reschedule. */
+    private LocalDateTime reminderSentAt;
+
     public boolean isVideoLive() {
         return isVideoLive(LocalDateTime.now());
     }

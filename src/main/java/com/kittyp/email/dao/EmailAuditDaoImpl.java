@@ -50,4 +50,17 @@ public class EmailAuditDaoImpl implements EmailAuditDao {
 		}
 	}
 
+	@Override
+	public boolean existsByEventName(String eventName) {
+		if (eventName == null || eventName.isBlank()) {
+			return false;
+		}
+		try {
+			return emailAuditRepository.existsByEventName(eventName);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 }

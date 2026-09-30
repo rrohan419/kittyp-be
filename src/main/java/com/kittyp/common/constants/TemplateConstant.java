@@ -29,9 +29,25 @@ public class TemplateConstant {
 	/** CRM parent (no KittyP account yet) welcome after walk-in / schedule. */
 	public static final String ZEPTO_CLINIC_PARENT_CRM_WELCOME_EMAIL_TEMPLATE_ID =
 			"zoho.clinic.parent.crm.welcome.email.template.id";
-	/** Owner appointment confirmation (walk-in or scheduled). */
+	/** Owner appointment confirmation (walk-in or scheduled). Dedicated template; never the welcome template. */
 	public static final String ZEPTO_APPOINTMENT_CONFIRMATION_EMAIL_TEMPLATE_ID =
 			"zoho.appointment.confirmation.email.template.id";
+	public static final String ZEPTO_APPOINTMENT_REMINDER_EMAIL_TEMPLATE_ID =
+			"zoho.appointment.reminder.email.template.id";
+	public static final String ZEPTO_APPOINTMENT_RESCHEDULED_EMAIL_TEMPLATE_ID =
+			"zoho.appointment.rescheduled.email.template.id";
+	public static final String ZEPTO_APPOINTMENT_CANCELLED_EMAIL_TEMPLATE_ID =
+			"zoho.appointment.cancelled.email.template.id";
+	public static final String ZEPTO_WALKIN_CHECKED_IN_EMAIL_TEMPLATE_ID =
+			"zoho.appointment.walkin.email.template.id";
+	public static final String ZEPTO_APPOINTMENT_DOCTOR_CHANGED_EMAIL_TEMPLATE_ID =
+			"zoho.appointment.doctor.changed.email.template.id";
+	public static final String ZEPTO_CLINIC_CLOSURE_EMAIL_TEMPLATE_ID =
+			"zoho.appointment.clinic.closure.email.template.id";
+	public static final String ZEPTO_INVITE_REVOKED_EMAIL_TEMPLATE_ID =
+			"zoho.invite.revoked.email.template.id";
+	public static final String ZEPTO_CLINIC_LOCATION_CHANGED_EMAIL_TEMPLATE_ID =
+			"zoho.clinic.location.changed.email.template.id";
 	/** Staff account created after invite accept. */
 	public static final String ZEPTO_CLINIC_STAFF_WELCOME_EMAIL_TEMPLATE_ID =
 			"zoho.clinic.staff.welcome.email.template.id";

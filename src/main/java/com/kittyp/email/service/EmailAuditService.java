@@ -13,6 +13,8 @@ public interface EmailAuditService {
 
 	
 	void saveEmailAudit(EmailAuditDto emailAuditDto);
+
+	boolean alreadySent(String eventName);
 	
 	void zeptoWebhookEmailAudit(ZeptoWebhookEventRequest webhookEventRequest);
 }

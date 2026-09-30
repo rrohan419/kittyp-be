@@ -184,7 +184,9 @@ public class DoctorBookingController {
                 booking.getPet() == null ? null : booking.getPet().getType(),
                 booking.getVideoJoinUrl(),
                 booking.isVideoLive(),
-                booking.isVideoJoinOpen());
+                booking.isVideoJoinOpen(),
+                booking.getClinic() == null ? null : booking.getClinic().getPhone(),
+                false);
     }
 
     private DoctorProfile currentDoctor() {

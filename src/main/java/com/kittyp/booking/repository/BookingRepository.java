@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -36,7 +37,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     @EntityGraph(attributePaths = { "pet", "pet.clinicOwner", "pet.clinicOwner.linkedUser", "doctor", "doctor.user",
             "clinic", "owner" })
-    @Query("""
+    @Query(value = """
             SELECT DISTINCT b FROM Booking b
             LEFT JOIN b.pet p
             LEFT JOIN p.clinicOwner co
@@ -49,16 +50,29 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                   OR (co.email IS NOT NULL AND LOWER(co.email) = LOWER(:userEmail))
               )
             ORDER BY b.slotStart DESC
+            """, countQuery = """
+            SELECT COUNT(DISTINCT b.id) FROM Booking b
+            LEFT JOIN b.pet p
+            LEFT JOIN p.clinicOwner co
+            WHERE b.isActive = true
+              AND (
+                  (b.owner IS NOT NULL AND b.owner.id = :userId)
+                  OR (p IS NOT NULL AND p.uuid IN :petUuids)
+                  OR (p.parentUserUuid IS NOT NULL AND LOWER(p.parentUserUuid) = LOWER(:userUuid))
+                  OR (co.linkedUser IS NOT NULL AND co.linkedUser.id = :userId)
+                  OR (co.email IS NOT NULL AND LOWER(co.email) = LOWER(:userEmail))
+              )
             """)
-    List<Booking> findForParentUser(
+    Page<Booking> pageForParentUser(
             @Param("userId") Long userId,
             @Param("userUuid") String userUuid,
             @Param("userEmail") String userEmail,
-            @Param("petUuids") List<String> petUuids);
+            @Param("petUuids") List<String> petUuids,
+            Pageable pageable);
 
     @EntityGraph(attributePaths = { "pet", "pet.clinicOwner", "pet.clinicOwner.linkedUser", "doctor", "doctor.user",
             "clinic", "owner" })
-    @Query("""
+    @Query(value = """
             SELECT DISTINCT b FROM Booking b
             LEFT JOIN b.pet p
             LEFT JOIN p.clinicOwner co
@@ -70,11 +84,23 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                   OR (co.email IS NOT NULL AND LOWER(co.email) = LOWER(:userEmail))
               )
             ORDER BY b.slotStart DESC
+            """, countQuery = """
+            SELECT COUNT(DISTINCT b.id) FROM Booking b
+            LEFT JOIN b.pet p
+            LEFT JOIN p.clinicOwner co
+            WHERE b.isActive = true
+              AND (
+                  (b.owner IS NOT NULL AND b.owner.id = :userId)
+                  OR (p.parentUserUuid IS NOT NULL AND LOWER(p.parentUserUuid) = LOWER(:userUuid))
+                  OR (co.linkedUser IS NOT NULL AND co.linkedUser.id = :userId)
+                  OR (co.email IS NOT NULL AND LOWER(co.email) = LOWER(:userEmail))
+              )
             """)
-    List<Booking> findForParentUserWithoutPets(
+    Page<Booking> pageForParentUserWithoutPets(
             @Param("userId") Long userId,
             @Param("userUuid") String userUuid,
-            @Param("userEmail") String userEmail);
+            @Param("userEmail") String userEmail,
+            Pageable pageable);
 
     @EntityGraph(attributePaths = { "pet", "pet.clinicOwner", "pet.clinicOwner.linkedUser", "doctor", "doctor.user",
             "owner" })
@@ -95,5 +121,46 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             @Param("doctorId") Long doctorId,
             @Param("slotStart") LocalDateTime slotStart,
             @Param("slotEnd") LocalDateTime slotEnd,
+            @Param("statuses") Collection<BookingStatus> statuses);
+
+    @EntityGraph(attributePaths = { "pet", "pet.clinicOwner", "doctor", "doctor.user", "clinic", "owner" })
+    @Query("""
+            SELECT b FROM Booking b
+            WHERE b.isActive = true
+              AND b.reminderSentAt IS NULL
+              AND b.status IN :statuses
+              AND b.slotStart > :from
+              AND b.slotStart <= :until
+            """)
+    List<Booking> findDueForReminder(
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("from") LocalDateTime from,
+            @Param("until") LocalDateTime until);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Booking b
+            SET b.reminderSentAt = :sentAt
+            WHERE b.id = :id
+              AND b.reminderSentAt IS NULL
+              AND b.isActive = true
+              AND b.status IN :statuses
+            """)
+    int claimReminder(
+            @Param("id") Long id,
+            @Param("sentAt") LocalDateTime sentAt,
+            @Param("statuses") Collection<BookingStatus> statuses);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Booking b
+            SET b.reminderSentAt = null
+            WHERE b.id = :id
+              AND b.reminderSentAt IS NOT NULL
+              AND b.isActive = true
+              AND b.status IN :statuses
+            """)
+    int releaseReminder(
+            @Param("id") Long id,
             @Param("statuses") Collection<BookingStatus> statuses);
 }

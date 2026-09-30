@@ -61,9 +61,47 @@ public interface ZeptoMailService {
 	/** Welcome for clinic CRM parent without a KittyP account yet. */
 	void sendClinicParentCrmWelcomeEmail(String firstName, String recipientEmail, String clinicName);
 
-	/** Confirm appointment/walk-in to the pet owner email. */
+	/** Confirm appointment/walk-in to the pet owner email. Skips when the dedicated template id is blank. */
 	void sendAppointmentConfirmationEmail(String recipientEmail, String ownerName, String clinicName, String petName,
-			String when, String doctorName);
+			String when, String doctorName, String bookingId, String clinicAddress, String mapsUrl,
+			String rescheduleUrl, String cancelUrl);
+
+	/**
+	 * One-hour pre-visit reminder. Runs on the caller thread and returns false when the mail is not accepted.
+	 */
+	boolean sendAppointmentReminderEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName, String bookingId, String clinicPhone, String clinicAddress, String mapsUrl);
+
+	/** Sent after the slot changes. Dedicated template; does not reuse welcome. */
+	void sendAppointmentRescheduledEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName, String bookingId, String clinicAddress, String mapsUrl,
+			String previousWhen, String clinicPhone, String manageUrl);
+
+	/** Sent to the pet owner after a successful cancel. Dedicated template. */
+	void sendAppointmentCancelledEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName, String bookingId, String clinicPhone, String clinicAddress, String bookUrl);
+
+	/** Walk-in check-in. No reschedule or cancel link. */
+	void sendWalkInCheckedInEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String doctorName, String visitId, String clinicPhone, String clinicAddress, String mapsUrl);
+
+	/** Same slot, different doctor. */
+	void sendAppointmentDoctorChangedEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName, String bookingId, String doctorUuid, String clinicAddress, String mapsUrl,
+			String clinicPhone, String manageUrl);
+
+	/** Upcoming visit cancelled because the clinic shut down. */
+	void sendClinicClosureEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName, String bookingId, String clinicPhone);
+
+	/** Doctor or staff invite was withdrawn. inviteRole is "doctor" or "staff". */
+	void sendInviteRevokedEmail(String recipientEmail, String inviteeName, String clinicName, String inviteRole,
+			String inviteUuid);
+
+	/** Clinic address changed. moveDate is the display date; eventDate is yyyy-MM-dd. */
+	void sendClinicLocationChangedEmail(String recipientEmail, String recipientName, String clinicName,
+			String moveDate, String oldLocation, String newLocation, String oldMapsUrl, String newMapsUrl,
+			String clinicUuid, String eventDate);
 
 	/** Welcome after clinic staff completes invite signup. */
 	void sendWelcomeEmailforClinicStaff(String firstName, String recipientEmail, String clinicName);

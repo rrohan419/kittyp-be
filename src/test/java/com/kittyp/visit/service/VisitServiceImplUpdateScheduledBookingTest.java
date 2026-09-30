@@ -1,6 +1,7 @@
 package com.kittyp.visit.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -39,6 +40,7 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorProfile;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
@@ -68,6 +70,8 @@ class VisitServiceImplUpdateScheduledBookingTest {
 	private DoctorAvailabilityRepository doctorAvailabilityRepository;
 	@Mock
 	private JitsiMeetService jitsiMeetService;
+	@Mock
+	private ZeptoMailService zeptoMailService;
 
 	@InjectMocks
 	private VisitServiceImpl visitService;
@@ -203,9 +207,14 @@ class VisitServiceImplUpdateScheduledBookingTest {
 		stubDoctorHoursAndAffiliation();
 		when(bookingRepository.findOverlappingForDoctor(eq(5L), any(), any(), any())).thenReturn(List.of(booking));
 		LocalDateTime next = futureSlot(11, 0);
+		booking.setReminderSentAt(LocalDateTime.now());
+		booking.setOwner(owner);
 
 		assertEquals(next, visitService.updateScheduledBooking(CLINIC_UUID, BOOKING_UUID,
 				new ScheduleBookingPatchRequest(null, next, null, null, null), EMAIL).slotStart());
+		assertNull(booking.getReminderSentAt());
+		verify(zeptoMailService).sendAppointmentRescheduledEmail(any(), any(), any(), any(), any(), any(),
+				eq(BOOKING_UUID), any(), eq(""), any(), any(), any());
 	}
 
 	@Test
@@ -274,6 +283,38 @@ class VisitServiceImplUpdateScheduledBookingTest {
 
 		assertThrows(AccessDeniedException.class, () -> visitService.updateScheduledBooking(CLINIC_UUID, BOOKING_UUID,
 				new ScheduleBookingPatchRequest(null, null, "nope", null, null), "doc@test.com"));
+	}
+
+	@Test
+	void clinicReschedulesFiveHoursBefore() {
+		stubDoctorHoursAndAffiliation();
+		when(bookingRepository.findOverlappingForDoctor(eq(5L), any(), any(), any())).thenReturn(List.of());
+		LocalDateTime start = futureSlot(15, 0);
+		booking.setSlotStart(start);
+		booking.setSlotEnd(start.plusMinutes(30));
+		booking.setOwner(owner);
+		org.springframework.test.util.ReflectionTestUtils.setField(visitService, "clinicClock",
+				(java.util.function.Function<String, LocalDateTime>) zone -> start.minusHours(5));
+		LocalDateTime next = futureSlot(11, 0);
+
+		assertEquals(next, visitService.updateScheduledBooking(CLINIC_UUID, BOOKING_UUID,
+				new ScheduleBookingPatchRequest(null, next, null, null, null), EMAIL).slotStart());
+		verify(zeptoMailService).sendAppointmentRescheduledEmail(any(), any(), any(), any(), any(), any(),
+				eq(BOOKING_UUID), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void clinicCancelsThirtyMinutesBefore() {
+		LocalDateTime start = futureSlot(11, 0);
+		booking.setSlotStart(start);
+		booking.setOwner(owner);
+		org.springframework.test.util.ReflectionTestUtils.setField(visitService, "clinicClock",
+				(java.util.function.Function<String, LocalDateTime>) zone -> start.minusMinutes(30));
+
+		assertEquals(BookingStatus.CANCELLED, visitService.updateScheduledBooking(CLINIC_UUID, BOOKING_UUID,
+				new ScheduleBookingPatchRequest(null, null, null, BookingStatus.CANCELLED, null), EMAIL).status());
+		verify(zeptoMailService).sendAppointmentCancelledEmail(any(), any(), any(), any(), any(), any(),
+				eq(BOOKING_UUID), any(), any(), any());
 	}
 
 	private void stubDoctorHoursAndAffiliation() {

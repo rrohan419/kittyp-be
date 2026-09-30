@@ -3,6 +3,8 @@ package com.kittyp.visit.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -15,6 +17,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -32,6 +37,7 @@ import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.booking.repository.BookingRepository;
 import com.kittyp.booking.repository.DoctorAvailabilityRepository;
 import com.kittyp.booking.service.JitsiMeetService;
+import com.kittyp.clinic.ClinicMapsLink;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
@@ -94,6 +100,10 @@ import com.kittyp.visit.enums.VisitSource;
 import com.kittyp.visit.enums.VisitStatus;
 import com.kittyp.visit.enums.VisitUrgency;
 
+import java.util.function.Function;
+
+import org.springframework.beans.factory.annotation.Value;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -111,6 +121,8 @@ public class VisitServiceImpl implements VisitService {
     private static final Set<BookingStatus> ACTIVE_BOOKING_STATUSES = EnumSet.of(
             BookingStatus.PENDING, BookingStatus.CONFIRMED);
     private static final int APPOINTMENT_MINUTES = 30;
+    private static final DateTimeFormatter APPOINTMENT_WHEN = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a",
+            Locale.ENGLISH);
 
     private final VisitDao visitDao;
     private final ClinicDao clinicDao;
@@ -138,6 +150,12 @@ public class VisitServiceImpl implements VisitService {
     private final UserRepository userRepository;
     private final TenantAccessService tenantAccessService;
     private final ZeptoMailService zeptoMailService;
+
+    /** Clinic-local clock. Tests replace this so the 6-hour boundary is exact. */
+    Function<String, LocalDateTime> clinicClock = AppointmentChangeWindow::now;
+
+    @Value("${app.frontend.base-url:http://localhost:8080}")
+    private String frontendBaseUrl = "http://localhost:8080";
 
     @Override
     @Transactional
@@ -174,7 +192,7 @@ public class VisitServiceImpl implements VisitService {
         if (doctor != null) {
             notifyDoctorOfPatient(visit, "assigned");
         }
-        notifyOwnerEmails(clinic, owner, pet, doctor, "walk-in / now", newClinicOwner);
+        notifyWalkInCheckedIn(clinic, owner, pet, doctor, visit.getUuid(), newClinicOwner);
         return toModel(visit, true);
     }
 
@@ -254,8 +272,8 @@ public class VisitServiceImpl implements VisitService {
 
         parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         notifyDoctorOfBooking(booking);
-        String when = booking.getSlotStart() == null ? "soon" : booking.getSlotStart().toString();
-        notifyOwnerEmails(clinic, clinicOwner, pet, doctor, when, newClinicOwner);
+        notifyOwnerEmails(clinic, clinicOwner, pet, doctor, formatAppointmentWhen(booking.getSlotStart()),
+                booking.getUuid(), newClinicOwner);
         return toBookingModel(booking);
     }
 
@@ -339,10 +357,15 @@ public class VisitServiceImpl implements VisitService {
                         HttpStatus.BAD_REQUEST);
             }
             booking.setStatus(next);
-            return toBookingModel(bookingRepository.save(booking));
+            Booking saved = bookingRepository.save(booking);
+            if (next == BookingStatus.CANCELLED) {
+                notifyBookingEmail(saved, "cancel", null);
+            }
+            return toBookingModel(saved);
         }
 
         DoctorProfile doctor = booking.getDoctor();
+        String previousDoctorUuid = doctor == null ? null : doctor.getUuid();
         if (hasDoctor) {
             doctor = requireClinicDoctor(clinic, request.doctorUuid().trim());
             requirePracticeReady(doctor);
@@ -353,6 +376,7 @@ public class VisitServiceImpl implements VisitService {
         }
 
         boolean slotOrDoctorChanged = hasSlot || hasDoctor;
+        LocalDateTime previousSlot = booking.getSlotStart();
         if (hasSlot) {
             LocalDateTime slotStart = snapToHalfHour(request.slotStart());
             requireNotInPast(clinic, slotStart);
@@ -384,8 +408,19 @@ public class VisitServiceImpl implements VisitService {
         if (hasMode) {
             booking.setMode(request.mode());
         }
+        boolean rescheduled = hasSlot && !Objects.equals(previousSlot, booking.getSlotStart());
+        boolean doctorChanged = hasDoctor && !Objects.equals(previousDoctorUuid, booking.getDoctor().getUuid());
+        if (rescheduled) {
+            booking.setReminderSentAt(null);
+        }
         jitsiMeetService.ensureVideoRoom(booking);
-        return toBookingModel(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        if (rescheduled) {
+            notifyBookingEmail(saved, "reschedule", previousSlot);
+        } else if (doctorChanged) {
+            notifyBookingEmail(saved, "doctor", null);
+        }
+        return toBookingModel(saved);
     }
 
     @Override
@@ -442,6 +477,7 @@ public class VisitServiceImpl implements VisitService {
         }
 
         notifyDoctorOfBooking(booking);
+        notifyBookingEmail(booking, "confirm", null);
         return toBookingModel(booking);
     }
 
@@ -472,13 +508,20 @@ public class VisitServiceImpl implements VisitService {
         if (!hasSlot && !hasNotes && !hasStatus) {
             throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
         }
+        if (hasStatus || hasSlot) {
+            requireParentChangeWindow(booking, hasStatus);
+        }
 
         if (hasStatus) {
             if (request.status() != BookingStatus.CANCELLED) {
                 throw new CustomException("Parents can only cancel upcoming appointments", HttpStatus.BAD_REQUEST);
             }
             booking.setStatus(BookingStatus.CANCELLED);
-            return toBookingModel(bookingRepository.save(booking));
+            Booking saved = bookingRepository.save(booking);
+            notifyBookingEmail(saved, "cancel", null);
+            notifyDoctorOfChange(saved, "Appointment cancelled",
+                    "cancelled the visit at " + formatAppointmentWhen(saved.getSlotStart()));
+            return toBookingModel(saved);
         }
 
         Clinic clinic = booking.getClinic();
@@ -491,6 +534,7 @@ public class VisitServiceImpl implements VisitService {
             throw new CustomException("Doctor is required to reschedule", HttpStatus.BAD_REQUEST);
         }
 
+        LocalDateTime previousSlot = booking.getSlotStart();
         if (hasSlot) {
             LocalDateTime slotStart = snapToHalfHour(request.slotStart());
             requireNotInPast(clinic, slotStart);
@@ -508,10 +552,19 @@ public class VisitServiceImpl implements VisitService {
         if (hasNotes) {
             booking.setNotes(blankToNull(request.notes()));
         }
+        boolean rescheduled = hasSlot && !Objects.equals(previousSlot, booking.getSlotStart());
+        if (rescheduled) {
+            booking.setReminderSentAt(null);
+        }
         booking = bookingRepository.save(booking);
         jitsiMeetService.ensureVideoRoom(booking);
         if (booking.getJitsiRoomId() != null) {
             booking = bookingRepository.save(booking);
+        }
+        if (rescheduled) {
+            notifyBookingEmail(booking, "reschedule", previousSlot);
+            notifyDoctorOfChange(booking, "Appointment rescheduled",
+                    "moved the visit to " + formatAppointmentWhen(booking.getSlotStart()));
         }
         return toBookingModel(booking);
     }
@@ -569,9 +622,20 @@ public class VisitServiceImpl implements VisitService {
 
     /** Slot times are clinic-local wall clock; JVM/UTC now would still allow this morning's 9:30 at 2:40pm IST. */
     private void requireNotInPast(Clinic clinic, LocalDateTime slotStart) {
-        LocalDateTime nowClinic = DoctorHours.nowLocal(clinic == null ? null : clinic.getTimezone());
+        LocalDateTime nowClinic = clinicClock.apply(clinic == null ? null : clinic.getTimezone());
         if (slotStart.isBefore(nowClinic.minusMinutes(5))) {
             throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private void requireParentChangeWindow(Booking booking, boolean cancel) {
+        String zone = AppointmentChangeWindow.zone(booking.getTimezone(),
+                booking.getClinic() == null ? null : booking.getClinic().getTimezone());
+        if (!AppointmentChangeWindow.allowed(booking.getSlotStart(), clinicClock.apply(zone))) {
+            throw new CustomException(cancel
+                    ? "Online cancellation is no longer available because the 6-hour cancellation window has passed. Please contact the clinic directly."
+                    : "Online rescheduling is no longer available because the 6-hour change window has passed. Please contact the clinic directly.",
+                    HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -602,6 +666,11 @@ public class VisitServiceImpl implements VisitService {
 
 
     private void notifyDoctorOfBooking(Booking booking) {
+        notifyDoctorOfChange(booking, "New appointment booked", null);
+    }
+
+    /** In-app log and push only. WhatsApp stays on the original create notice. */
+    private void notifyDoctorOfChange(Booking booking, String title, String action) {
         DoctorProfile doctor = booking.getDoctor();
         if (doctor == null || doctor.getUser() == null) {
             return;
@@ -611,16 +680,19 @@ public class VisitServiceImpl implements VisitService {
         String petName = pet != null ? pet.getName() : "a pet";
         String clinicName = booking.getClinic() != null ? booking.getClinic().getName() : "Clinic";
         String when = booking.getSlotStart() == null ? "soon" : booking.getSlotStart().toString();
-        String title = "New appointment booked";
-        String body = String.format("%s booked %s at %s (%s)", clinicName, petName, when,
-                booking.getMode() == null ? "IN_PERSON" : booking.getMode().name());
+        String body = action == null
+                ? String.format("%s booked %s at %s (%s)", clinicName, petName, when,
+                        booking.getMode() == null ? "IN_PERSON" : booking.getMode().name())
+                : String.format("%s %s for %s (%s)", clinicName, action, petName, when);
+        NotificationType type = action == null ? NotificationType.BOOKING_CREATED
+                : title.contains("cancel") ? NotificationType.BOOKING_CANCELLED : NotificationType.BOOKING_RESCHEDULED;
 
         Runnable notify = () -> {
             try {
                 notificationLogRepository.save(NotificationLog.builder()
                         .user(doctorUser)
                         .pet(pet)
-                        .type(NotificationType.BOOKING_CREATED)
+                        .type(type)
                         .payload(body)
                         .sentAt(LocalDateTime.now())
                         .build());
@@ -634,6 +706,9 @@ public class VisitServiceImpl implements VisitService {
             } catch (Exception e) {
                 log.warn("Failed to push booking notification: {}", e.getMessage());
             }
+            if (action != null) {
+                return;
+            }
             try {
                 WhatsAppSenderCredentials sender = resolveBookingWhatsAppSender(booking);
                 String phone = doctor.getPhoneNumber() != null ? doctor.getPhoneNumber() : doctorUser.getPhoneNumber();
@@ -642,10 +717,9 @@ public class VisitServiceImpl implements VisitService {
                             sender, phone, List.of(petName, clinicName, when), doctorUser, pet);
                 }
             } catch (Exception e) {
-                log.warn("Failed to WhatsApp booking notification: {}", e.getMessage());
+                log.warn("Failed to send booking WhatsApp: {}", e.getMessage());
             }
         };
-
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -674,8 +748,172 @@ public class VisitServiceImpl implements VisitService {
                 .isEmpty();
     }
 
+    static String formatClinicAddress(Clinic clinic) {
+        if (clinic == null) {
+            return "";
+        }
+        String address = clinic.getAddress() == null ? "" : clinic.getAddress().trim();
+        String city = clinic.getCity() == null ? "" : clinic.getCity().trim();
+        if (address.isEmpty()) {
+            return city;
+        }
+        if (city.isEmpty()) {
+            return address;
+        }
+        return address + ", " + city;
+    }
+
+    private static String formatAppointmentWhen(LocalDateTime slotStart) {
+        if (slotStart == null) {
+            return "soon";
+        }
+        return slotStart.format(APPOINTMENT_WHEN);
+    }
+
+    private void notifyBookingEmail(Booking booking, String kind, LocalDateTime previousSlot) {
+        if (booking == null) {
+            return;
+        }
+        String ownerEmail = null;
+        String ownerName = "there";
+        if (booking.getOwner() != null && booking.getOwner().getEmail() != null
+                && !booking.getOwner().getEmail().isBlank()) {
+            ownerEmail = booking.getOwner().getEmail().trim();
+            String fn = booking.getOwner().getFirstName() == null ? "" : booking.getOwner().getFirstName();
+            String ln = booking.getOwner().getLastName() == null ? "" : booking.getOwner().getLastName();
+            String combined = (fn + " " + ln).trim();
+            if (!combined.isBlank()) {
+                ownerName = combined;
+            }
+        } else if (booking.getPet() != null && booking.getPet().getClinicOwner() != null
+                && booking.getPet().getClinicOwner().getEmail() != null
+                && !booking.getPet().getClinicOwner().getEmail().isBlank()) {
+            ClinicPetOwner owner = booking.getPet().getClinicOwner();
+            ownerEmail = owner.getEmail().trim();
+            String combined = ((owner.getFirstName() == null ? "" : owner.getFirstName()) + " "
+                    + (owner.getLastName() == null ? "" : owner.getLastName())).trim();
+            if (!combined.isBlank()) {
+                ownerName = combined;
+            }
+        }
+        if (ownerEmail == null) {
+            return;
+        }
+        Clinic clinic = booking.getClinic();
+        Pet pet = booking.getPet();
+        String clinicName = clinic != null && clinic.getName() != null ? clinic.getName() : "Clinic";
+        String petName = pet != null && pet.getName() != null ? pet.getName() : "your pet";
+        String when = formatAppointmentWhen(booking.getSlotStart());
+        String doctorName = displayDoctorName(booking.getDoctor());
+        String bookingId = booking.getUuid();
+        String clinicAddress = formatClinicAddress(clinic);
+        String mapsUrl = ClinicMapsLink.url(clinic);
+        String clinicPhone = clinic != null && clinic.getPhone() != null ? clinic.getPhone() : "";
+        String previousWhen = formatAppointmentWhen(previousSlot);
+        String rescheduleUrl = frontendPath("/app/appointments/" + bookingId + "/reschedule");
+        String cancelUrl = frontendPath("/app/appointments/" + bookingId + "/cancel");
+        String bookUrl = frontendPath("/app/book");
+        final String finalOwnerName = ownerName;
+        final String finalEmail = ownerEmail;
+        Runnable send = () -> {
+            try {
+                if ("reschedule".equals(kind)) {
+                    zeptoMailService.sendAppointmentRescheduledEmail(finalEmail, finalOwnerName, clinicName, petName,
+                            when, doctorName, bookingId, clinicAddress, mapsUrl, previousWhen, clinicPhone,
+                            rescheduleUrl);
+                } else if ("doctor".equals(kind)) {
+                    String doctorUuid = booking.getDoctor() == null ? "" : booking.getDoctor().getUuid();
+                    zeptoMailService.sendAppointmentDoctorChangedEmail(finalEmail, finalOwnerName, clinicName, petName,
+                            when, doctorName, bookingId, doctorUuid, clinicAddress, mapsUrl, clinicPhone,
+                            rescheduleUrl);
+                } else if ("cancel".equals(kind)) {
+                    zeptoMailService.sendAppointmentCancelledEmail(finalEmail, finalOwnerName, clinicName, petName,
+                            when, doctorName, bookingId, clinicPhone, clinicAddress, bookUrl);
+                } else {
+                    zeptoMailService.sendAppointmentConfirmationEmail(finalEmail, finalOwnerName, clinicName, petName,
+                            when, doctorName, bookingId, clinicAddress, mapsUrl, rescheduleUrl, cancelUrl);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to send appointment email to {}: {}", finalEmail, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
+    private String frontendPath(String path) {
+        String base = frontendBaseUrl == null ? "http://localhost:8080" : frontendBaseUrl.trim();
+        while (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        return base + path;
+    }
+
+    private static String displayDoctorName(DoctorProfile doctor) {
+        if (doctor == null || doctor.getUser() == null) {
+            return "your veterinarian";
+        }
+        String fn = doctor.getUser().getFirstName() == null ? "" : doctor.getUser().getFirstName();
+        String ln = doctor.getUser().getLastName() == null ? "" : doctor.getUser().getLastName();
+        String name = (fn + " " + ln).trim();
+        return name.isBlank() ? "your veterinarian" : name;
+    }
+
+    private void notifyWalkInCheckedIn(Clinic clinic, ClinicPetOwner owner, Pet pet, DoctorProfile doctor,
+            String visitUuid, boolean newClinicOwner) {
+        if (owner == null || owner.getEmail() == null || owner.getEmail().isBlank()) {
+            return;
+        }
+        String ownerEmail = owner.getEmail().trim();
+        String ownerName = ((owner.getFirstName() == null ? "" : owner.getFirstName()) + " "
+                + (owner.getLastName() == null ? "" : owner.getLastName())).trim();
+        if (ownerName.isBlank()) {
+            ownerName = "there";
+        }
+        String clinicName = clinic != null && clinic.getName() != null ? clinic.getName() : "Clinic";
+        String petName = pet != null && pet.getName() != null ? pet.getName() : "your pet";
+        String doctorName = displayDoctorName(doctor);
+        String clinicAddress = formatClinicAddress(clinic);
+        String mapsUrl = ClinicMapsLink.url(clinic);
+        String clinicPhone = clinic != null && clinic.getPhone() != null ? clinic.getPhone() : "";
+        final String finalOwnerName = ownerName;
+        Runnable send = () -> {
+            try {
+                if (newClinicOwner) {
+                    zeptoMailService.sendClinicParentCrmWelcomeEmail(finalOwnerName, ownerEmail, clinicName);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to send CRM parent welcome to {}: {}", ownerEmail, e.getMessage());
+            }
+            try {
+                zeptoMailService.sendWalkInCheckedInEmail(ownerEmail, finalOwnerName, clinicName, petName, doctorName,
+                        visitUuid, clinicPhone, clinicAddress, mapsUrl);
+            } catch (Exception e) {
+                log.warn("Failed to send walk-in email to {}: {}", ownerEmail, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
     private void notifyOwnerEmails(Clinic clinic, ClinicPetOwner owner, Pet pet, DoctorProfile doctor, String when,
-            boolean newClinicOwner) {
+            String bookingId, boolean newClinicOwner) {
         if (owner == null || owner.getEmail() == null || owner.getEmail().isBlank()) {
             return;
         }
@@ -687,15 +925,9 @@ public class VisitServiceImpl implements VisitService {
         }
         String clinicName = clinic != null ? clinic.getName() : "Clinic";
         String petName = pet != null && pet.getName() != null ? pet.getName() : "your pet";
-        String doctorName = "your veterinarian";
-        if (doctor != null && doctor.getUser() != null) {
-            String fn = doctor.getUser().getFirstName();
-            String ln = doctor.getUser().getLastName();
-            doctorName = ((fn == null ? "" : fn) + " " + (ln == null ? "" : ln)).trim();
-            if (doctorName.isBlank()) {
-                doctorName = "your veterinarian";
-            }
-        }
+        String doctorName = displayDoctorName(doctor);
+        String clinicAddress = formatClinicAddress(clinic);
+        String mapsUrl = ClinicMapsLink.url(clinic);
         final String finalOwnerName = ownerName;
         final String finalDoctorName = doctorName;
         Runnable send = () -> {
@@ -708,7 +940,9 @@ public class VisitServiceImpl implements VisitService {
             }
             try {
                 zeptoMailService.sendAppointmentConfirmationEmail(ownerEmail, finalOwnerName, clinicName, petName, when,
-                        finalDoctorName);
+                        finalDoctorName, bookingId, clinicAddress, mapsUrl,
+                        frontendPath("/app/appointments/" + bookingId + "/reschedule"),
+                        frontendPath("/app/appointments/" + bookingId + "/cancel"));
             } catch (Exception e) {
                 log.warn("Failed to send appointment confirmation to {}: {}", ownerEmail, e.getMessage());
             }
@@ -1132,7 +1366,7 @@ public class VisitServiceImpl implements VisitService {
 
     @Override
     @Transactional
-    public List<BookingModel> listMyParentBookings(String email) {
+    public PaginationModel<BookingModel> listMyParentBookings(String email, int page, int size) {
         User user = userDao.userByEmail(email);
         clinicOwnerUserLinkService.linkUserToClinicOwners(user);
         User managed = userDao.userByUuid(user.getUuid());
@@ -1140,10 +1374,13 @@ public class VisitServiceImpl implements VisitService {
         String userEmail = managed.getEmail() == null || managed.getEmail().isBlank()
                 ? "__none__"
                 : managed.getEmail().trim();
-        List<Booking> bookings = petUuids.isEmpty()
-                ? bookingRepository.findForParentUserWithoutPets(managed.getId(), managed.getUuid(), userEmail)
-                : bookingRepository.findForParentUser(managed.getId(), managed.getUuid(), userEmail, petUuids);
-        for (Booking booking : bookings) {
+        int safePage = Math.max(page, 0);
+        int safeSize = size <= 0 ? 20 : Math.min(size, 50);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        Page<Booking> bookings = petUuids.isEmpty()
+                ? bookingRepository.pageForParentUserWithoutPets(managed.getId(), managed.getUuid(), userEmail, pageable)
+                : bookingRepository.pageForParentUser(managed.getId(), managed.getUuid(), userEmail, petUuids, pageable);
+        for (Booking booking : bookings.getContent()) {
             if (booking.getOwner() == null && booking.getPet() != null) {
                 User owner = resolvePlatformOwner(booking.getPet());
                 if (owner != null) {
@@ -1152,7 +1389,33 @@ public class VisitServiceImpl implements VisitService {
                 }
             }
         }
-        return bookings.stream().map(this::toBookingModel).toList();
+        return PaginationModel.<BookingModel>builder()
+                .models(bookings.getContent().stream().map(this::toBookingModel).toList())
+                .totalPages(bookings.getTotalPages())
+                .totalElements(bookings.getTotalElements())
+                .isFirst(bookings.isFirst())
+                .isLast(bookings.isLast())
+                .pageNumber(bookings.getNumber())
+                .pageSize(bookings.getSize())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BookingModel getMyParentBooking(String bookingUuid, String email) {
+        User user = userDao.userByEmail(email);
+        Booking booking = bookingRepository.findByUuid(bookingUuid)
+                .filter(b -> Boolean.TRUE.equals(b.getIsActive()))
+                .orElseThrow(() -> new ResourceNotFoundException("booking", "uuid", bookingUuid));
+        if (booking.getPet() == null || booking.getPet().getUuid() == null) {
+            throw new ResourceNotFoundException("booking", "uuid", bookingUuid);
+        }
+        try {
+            requireParentOwnsPet(user, booking.getPet().getUuid());
+        } catch (AccessDeniedException ex) {
+            throw new ResourceNotFoundException("booking", "uuid", bookingUuid);
+        }
+        return toBookingModel(booking);
     }
 
     @Override
@@ -1823,7 +2086,18 @@ public class VisitServiceImpl implements VisitService {
                 booking.getPet() == null ? null : booking.getPet().getType(),
                 booking.getVideoJoinUrl(),
                 booking.isVideoLive(),
-                booking.isVideoJoinOpen());
+                booking.isVideoJoinOpen(),
+                booking.getClinic() == null ? null : booking.getClinic().getPhone(),
+                parentChangeAllowed(booking));
+    }
+
+    private boolean parentChangeAllowed(Booking booking) {
+        if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CONFIRMED) {
+            return false;
+        }
+        String zone = AppointmentChangeWindow.zone(booking.getTimezone(),
+                booking.getClinic() == null ? null : booking.getClinic().getTimezone());
+        return AppointmentChangeWindow.allowed(booking.getSlotStart(), clinicClock.apply(zone));
     }
 
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {

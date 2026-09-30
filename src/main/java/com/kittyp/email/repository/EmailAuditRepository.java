@@ -13,4 +13,6 @@ import com.kittyp.email.entity.EmailAudit;
 public interface EmailAuditRepository extends JpaRepository<EmailAudit, Long> {
 
 	EmailAudit findByRequestId(String requestId);
+
+	boolean existsByEventName(String eventName);
 }

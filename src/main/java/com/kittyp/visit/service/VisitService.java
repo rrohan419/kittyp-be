@@ -73,8 +73,11 @@ public interface VisitService {
     /** All clinic visits across pets owned/linked to this parent. */
     List<VisitModel> listMyParentVisits(String email);
 
-    /** Scheduled appointments for this parent (by account, linked pets, or clinic-owner email). */
-    List<BookingModel> listMyParentBookings(String email);
+    /** One page of this parent's appointments. Location and phone come from the clinic row. */
+    PaginationModel<BookingModel> listMyParentBookings(String email, int page, int size);
+
+    /** One appointment this parent owns. */
+    BookingModel getMyParentBooking(String bookingUuid, String email);
 
     VisitRatingModel rateVisit(String visitUuid, VisitRatingRequest request, String email);
 

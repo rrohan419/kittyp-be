@@ -23,10 +23,11 @@ public final class ClinicDtos {
 
     public record ClinicRequest(@NotBlank String name, String licenseNumber, String address, String phone, String email,
             String timezone, String operatingHours, String city, Double latitude, Double longitude,
-            String profileImageUrl) {
+            String profileImageUrl, Boolean notifyLocationChange, String moveDate) {
         public ClinicRequest(@NotBlank String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours) {
-            this(name, licenseNumber, address, phone, email, timezone, operatingHours, null, null, null, null);
+            this(name, licenseNumber, address, phone, email, timezone, operatingHours, null, null, null, null, null,
+                    null);
         }
     }
 
@@ -267,26 +268,27 @@ public final class ClinicDtos {
     public record BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
             LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
             String notes, String clinicUuid, String clinicName, String doctorName, String doctorSpecialization,
-            String doctorPhotoUrl, String species, String videoJoinUrl, boolean videoLive, boolean videoJoinOpen) {
+            String doctorPhotoUrl, String species, String videoJoinUrl, boolean videoLive, boolean videoJoinOpen,
+            String clinicPhone, boolean parentChangeAllowed) {
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    null, null, null, null, null, null, null, false, false);
+                    null, null, null, null, null, null, null, false, false, null, false);
         }
 
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes, String clinicUuid) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    clinicUuid, null, null, null, null, null, null, false, false);
+                    clinicUuid, null, null, null, null, null, null, false, false, null, false);
         }
 
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes, String clinicUuid, String clinicName) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    clinicUuid, clinicName, null, null, null, null, null, false, false);
+                    clinicUuid, clinicName, null, null, null, null, null, false, false, null, false);
         }
     }
 

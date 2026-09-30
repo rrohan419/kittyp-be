@@ -29,6 +29,11 @@ public class EmailAuditServiceImpl implements EmailAuditService {
 	 * @author rrohan419@gmail.com
 	 */
 	@Override
+	public boolean alreadySent(String eventName) {
+		return emailAuditDao.existsByEventName(eventName);
+	}
+
+	@Override
 	public void saveEmailAudit(EmailAuditDto emailAuditDto) {
 		EmailAudit emailAudit = mapper.convert(emailAuditDto, EmailAudit.class);
 		

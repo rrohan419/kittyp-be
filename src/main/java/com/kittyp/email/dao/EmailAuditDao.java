@@ -13,4 +13,6 @@ public interface EmailAuditDao {
 	EmailAudit save(EmailAudit emailAudit);
 	
 	EmailAudit emailAuditByRequestId(String requestId);
+
+	boolean existsByEventName(String eventName);
 }

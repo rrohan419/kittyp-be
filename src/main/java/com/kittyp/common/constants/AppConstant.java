@@ -11,6 +11,8 @@ public class AppConstant {
 	
 	public static final String KITTYP_EMAIL_TEMPLATE_LOGO= "https://www.kittyp.in/android-chrome-512x512.png";
 	public static final String KITTYP_PUSH_NOTIFICATION_LOGO= "https://www.kittyp.in/android-chrome-512x512.png";
+	public static final String KITTYP_FACEBOOK_URL = "https://www.facebook.com/profile.php?id=61594089520463";
+	public static final String KITTYP_INSTAGRAM_URL = "https://www.instagram.com/kittypindia/";
 
 		//AWS KEYS
 		public static final String AWS_INVOICE_BUCKET_NAME="aws.invoice.bucket.name";

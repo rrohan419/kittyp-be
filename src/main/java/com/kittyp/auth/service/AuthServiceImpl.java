@@ -15,6 +15,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.kittyp.auth.config.UserDetailsImpl;
 import com.kittyp.auth.dto.GoogleUserInfo;
@@ -117,7 +119,9 @@ public class AuthServiceImpl implements AuthService {
 		user.getUserRoles().add(new UserRole(user, userRole));
 		user = userDao.saveUser(user);
 		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
-		zeptoMailService.sendWelcomeEmailforParent(user.getFirstName(), user.getEmail());
+		String firstName = user.getFirstName();
+		String email = user.getEmail();
+		afterCommit(() -> zeptoMailService.sendWelcomeEmailforParent(firstName, email));
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
@@ -218,7 +222,8 @@ public class AuthServiceImpl implements AuthService {
 		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
 		verificationCodeService.clearVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
 
-		zeptoMailService.sendWelcomeEmailforDoctor(user.getEmail());
+		String doctorEmail = user.getEmail();
+		afterCommit(() -> zeptoMailService.sendWelcomeEmailforDoctor(doctorEmail));
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
@@ -334,8 +339,22 @@ public class AuthServiceImpl implements AuthService {
 
 		verificationCodeService
 				.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
-		zeptoMailService.sendWelcomeEmailforClinicAdmin(user.getEmail());
+		String clinicAdminEmail = user.getEmail();
+		afterCommit(() -> zeptoMailService.sendWelcomeEmailforClinicAdmin(clinicAdminEmail));
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
+	}
+
+	private void afterCommit(Runnable action) {
+		if (TransactionSynchronizationManager.isSynchronizationActive()) {
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCommit() {
+					action.run();
+				}
+			});
+			return;
+		}
+		action.run();
 	}
 
 	private Clinic provisionPersonalPractice(User user, DoctorProfile profile) {
@@ -446,8 +465,9 @@ public class AuthServiceImpl implements AuthService {
 				existingUser.addRole(userRole);
 				existingUser = userDao.saveUser(existingUser);
 
-				// Send welcome email
-				zeptoMailService.sendWelcomeEmailforParent(existingUser.getFirstName(), existingUser.getEmail());
+				String firstName = existingUser.getFirstName();
+				String email = existingUser.getEmail();
+				afterCommit(() -> zeptoMailService.sendWelcomeEmailforParent(firstName, email));
 			}
 
 			try {

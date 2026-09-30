@@ -2,6 +2,7 @@ package com.kittyp.clinic.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,6 +36,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.kittyp.booking.dao.BookingDao;
 import com.kittyp.booking.entity.Booking;
 import com.kittyp.booking.enums.BookingStatus;
+import com.kittyp.booking.repository.BookingRepository;
+import com.kittyp.clinic.ClinicMapsLink;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
@@ -124,6 +127,7 @@ import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.Role;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserRole;
+import com.kittyp.visit.service.AppointmentChangeWindow;
 import com.kittyp.user.enums.ERole;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
@@ -158,6 +162,7 @@ public class ClinicServiceImpl implements ClinicService {
     private final PetsRepository petsRepository;
     private final DoctorProfileDao doctorProfileDao;
     private final BookingDao bookingDao;
+    private final BookingRepository bookingRepository;
     private final HealthEventDao healthEventDao;
     private final PetVaccineScheduleDao petVaccineScheduleDao;
     private final VaccineMasterRepository vaccineMasterRepository;
@@ -280,6 +285,10 @@ public class ClinicServiceImpl implements ClinicService {
         Clinic clinic = access(clinicUuid, email);
         requireClinicManager(clinic, userDao.userByEmail(email));
         requireOperational(clinic);
+        String previousAddress = clinic.getAddress();
+        String previousCity = clinic.getCity();
+        Double previousLat = clinic.getLatitude();
+        Double previousLng = clinic.getLongitude();
         clinic.setName(request.name());
         clinic.setLicenseNumber(request.licenseNumber());
         clinic.setAddress(request.address());
@@ -299,7 +308,121 @@ public class ClinicServiceImpl implements ClinicService {
         if (request.profileImageUrl() != null) {
             clinic.setProfileImageUrl(blankToNull(request.profileImageUrl()));
         }
-        return clinicModel(clinicDao.saveClinic(clinic));
+        Clinic saved = clinicDao.saveClinic(clinic);
+        if (Boolean.TRUE.equals(request.notifyLocationChange())
+                && locationMoved(previousAddress, previousCity, previousLat, previousLng, saved)) {
+            notifyLocationChange(saved, previousAddress, previousCity, previousLat, previousLng, request.moveDate());
+        }
+        return clinicModel(saved);
+    }
+
+    private static boolean locationMoved(String previousAddress, String previousCity, Double previousLat,
+            Double previousLng, Clinic saved) {
+        if (!sameText(previousAddress, saved.getAddress()) || !sameText(previousCity, saved.getCity())) {
+            return true;
+        }
+        return !sameCoord(previousLat, saved.getLatitude()) || !sameCoord(previousLng, saved.getLongitude());
+    }
+
+    private static boolean sameText(String left, String right) {
+        String a = left == null ? "" : left.trim();
+        String b = right == null ? "" : right.trim();
+        return a.equals(b);
+    }
+
+    private static boolean sameCoord(Double left, Double right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null || !Double.isFinite(left) || !Double.isFinite(right)) {
+            return false;
+        }
+        return Math.abs(left - right) < 0.000001d;
+    }
+
+    private void notifyLocationChange(Clinic clinic, String previousAddress, String previousCity, Double previousLat,
+            Double previousLng, String moveDateRaw) {
+        LocalDate moveDay = parseMoveDate(moveDateRaw, clinic.getTimezone());
+        String displayDate = moveDay.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH));
+        String eventDate = moveDay.toString();
+        String oldPlace = ClinicMapsLink.place(previousAddress, previousCity);
+        String newPlace = ClinicMapsLink.place(clinic.getAddress(), clinic.getCity());
+        String oldMaps = ClinicMapsLink.url(previousLat, previousLng, previousAddress, previousCity);
+        String newMaps = ClinicMapsLink.url(clinic);
+        String clinicName = blankToDefault(clinic.getName(), "Clinic");
+        List<LocationRecipient> recipients = locationRecipients(clinic);
+        if (recipients.isEmpty()) {
+            return;
+        }
+        Runnable send = () -> {
+            for (LocationRecipient recipient : recipients) {
+                try {
+                    zeptoMailService.sendClinicLocationChangedEmail(recipient.email(), recipient.name(), clinicName,
+                            displayDate, oldPlace, newPlace, oldMaps, newMaps, clinic.getUuid(), eventDate);
+                } catch (Exception e) {
+                    log.warn("Clinic location email failed: {}", e.getMessage());
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
+    private static LocalDate parseMoveDate(String raw, String timezone) {
+        if (raw != null && !raw.isBlank()) {
+            try {
+                return LocalDate.parse(raw.trim());
+            } catch (java.time.format.DateTimeParseException ignored) {
+                // Fall through to today in the clinic timezone.
+            }
+        }
+        return AppointmentChangeWindow.now(timezone).toLocalDate();
+    }
+
+    private List<LocationRecipient> locationRecipients(Clinic clinic) {
+        Map<String, LocationRecipient> byEmail = new LinkedHashMap<>();
+        User owner = clinic.getOwner();
+        if (owner != null) {
+            addLocationRecipient(byEmail, owner.getEmail(), owner.getFirstName(), owner.getIsActive());
+        }
+        addLocationRecipient(byEmail, clinic.getEmail(), owner == null ? null : owner.getFirstName(), Boolean.TRUE);
+        for (ClinicDoctor affiliation : clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
+            DoctorProfile doctor = affiliation.getDoctor();
+            User user = doctor == null ? null : doctor.getUser();
+            if (user != null) {
+                addLocationRecipient(byEmail, user.getEmail(), user.getFirstName(), user.getIsActive());
+            }
+        }
+        for (ClinicStaff membership : clinicStaffDao.findActiveByClinicId(clinic.getId())) {
+            User user = membership.getUser();
+            if (user != null) {
+                addLocationRecipient(byEmail, user.getEmail(), user.getFirstName(), user.getIsActive());
+            }
+        }
+        for (ClinicPetOwner parent : clinicPetOwnerRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
+            addLocationRecipient(byEmail, parent.getEmail(), parent.getFirstName(), parent.getIsActive());
+        }
+        return new ArrayList<>(byEmail.values());
+    }
+
+    private static void addLocationRecipient(Map<String, LocationRecipient> byEmail, String email, String name,
+            Boolean active) {
+        if (email == null || email.isBlank() || !Boolean.TRUE.equals(active)) {
+            return;
+        }
+        String key = email.trim().toLowerCase(Locale.ROOT);
+        byEmail.putIfAbsent(key, new LocationRecipient(email.trim(), blankToDefault(name, "there")));
+    }
+
+    private record LocationRecipient(String email, String name) {
     }
 
     @Override
@@ -328,7 +451,159 @@ public class ClinicServiceImpl implements ClinicService {
             return clinicModel(clinic);
         }
         clinic.setStatus(ClinicStatus.SHUTDOWN);
-        return clinicModel(clinicDao.saveClinic(clinic));
+        Clinic saved = clinicDao.saveClinic(clinic);
+        cancelUpcomingBookings(saved);
+        return clinicModel(saved);
+    }
+
+    /**
+     * Upcoming visits cannot be kept once the clinic is closed. Past visits stay as they are.
+     * Mail is best-effort and waits until the status change is committed.
+     */
+    private void cancelUpcomingBookings(Clinic clinic) {
+        Sort newestFirst = Sort.by(Sort.Order.desc("slotStart").nullsLast());
+        List<ClosureNotice> notices = new ArrayList<>();
+        Set<Long> cancelled = new HashSet<>();
+        for (BookingStatus status : List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED)) {
+            int guard = 0;
+            while (guard++ < 200) {
+                Page<Booking> batch = bookingDao.findByClinic(clinic.getId(), status,
+                        PageRequest.of(0, 50, newestFirst));
+                boolean progressed = false;
+                for (Booking booking : batch.getContent()) {
+                    if (booking.getId() == null || !cancelled.add(booking.getId())) {
+                        continue;
+                    }
+                    LocalDateTime now = AppointmentChangeWindow.now(
+                            AppointmentChangeWindow.zone(booking.getTimezone(), clinic.getTimezone()));
+                    if (!Boolean.TRUE.equals(booking.getIsActive()) || booking.getSlotStart() == null
+                            || !booking.getSlotStart().isAfter(now)) {
+                        cancelled.remove(booking.getId());
+                        continue;
+                    }
+                    booking.setStatus(BookingStatus.CANCELLED);
+                    bookingRepository.save(booking);
+                    progressed = true;
+                    String email = bookingOwnerEmail(booking);
+                    if (email == null) {
+                        continue;
+                    }
+                    notices.add(new ClosureNotice(email, bookingOwnerName(booking),
+                            blankToDefault(clinic.getName(), "Clinic"),
+                            booking.getPet() == null ? "your pet" : blankToDefault(booking.getPet().getName(), "your pet"),
+                            bookingDoctorName(booking), formatSlot(booking.getSlotStart()),
+                            blankToDefault(booking.getUuid(), ""),
+                            blankToDefault(clinic.getPhone(), "")));
+                }
+                if (!progressed) {
+                    break;
+                }
+                bookingRepository.flush();
+            }
+        }
+        if (notices.isEmpty()) {
+            return;
+        }
+        Runnable send = () -> {
+            for (ClosureNotice notice : notices) {
+                try {
+                    zeptoMailService.sendClinicClosureEmail(notice.email(), notice.ownerName(), notice.clinicName(),
+                            notice.petName(), notice.when(), notice.doctorName(), notice.bookingId(),
+                            notice.clinicPhone());
+                } catch (Exception e) {
+                    log.warn("Clinic closure email failed for booking {}: {}", notice.bookingId(), e.getMessage());
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
+    private static String bookingOwnerEmail(Booking booking) {
+        if (booking.getOwner() != null && booking.getOwner().getEmail() != null
+                && !booking.getOwner().getEmail().isBlank()) {
+            return booking.getOwner().getEmail().trim();
+        }
+        Pet pet = booking.getPet();
+        if (pet != null && pet.getClinicOwner() != null && pet.getClinicOwner().getEmail() != null
+                && !pet.getClinicOwner().getEmail().isBlank()) {
+            return pet.getClinicOwner().getEmail().trim();
+        }
+        return null;
+    }
+
+    private static String bookingOwnerName(Booking booking) {
+        if (booking.getOwner() != null && booking.getOwner().getFirstName() != null
+                && !booking.getOwner().getFirstName().isBlank()) {
+            return booking.getOwner().getFirstName().trim();
+        }
+        Pet pet = booking.getPet();
+        if (pet != null && pet.getClinicOwner() != null && pet.getClinicOwner().getFirstName() != null
+                && !pet.getClinicOwner().getFirstName().isBlank()) {
+            return pet.getClinicOwner().getFirstName().trim();
+        }
+        return "there";
+    }
+
+    private static String bookingDoctorName(Booking booking) {
+        if (booking.getDoctor() == null || booking.getDoctor().getUser() == null
+                || booking.getDoctor().getUser().getFirstName() == null
+                || booking.getDoctor().getUser().getFirstName().isBlank()) {
+            return "your veterinarian";
+        }
+        String first = booking.getDoctor().getUser().getFirstName().trim();
+        String last = booking.getDoctor().getUser().getLastName();
+        if (last == null || last.isBlank()) {
+            return first;
+        }
+        return first + " " + last.trim();
+    }
+
+    private static String formatSlot(LocalDateTime slot) {
+        return slot.format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH));
+    }
+
+    private static String blankToDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private void notifyInviteRevoked(String email, String inviteeName, String clinicName, String inviteRole,
+            String inviteUuid) {
+        if (email == null || email.isBlank()) {
+            return;
+        }
+        String to = email.trim();
+        String name = blankToDefault(inviteeName, "there");
+        String clinic = blankToDefault(clinicName, "Clinic");
+        Runnable send = () -> {
+            try {
+                zeptoMailService.sendInviteRevokedEmail(to, name, clinic, inviteRole, inviteUuid);
+            } catch (Exception e) {
+                log.warn("Invite revoked email failed for {}: {}", inviteUuid, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
+    private record ClosureNotice(String email, String ownerName, String clinicName, String petName, String doctorName,
+            String when, String bookingId, String clinicPhone) {
     }
 
     @Override
@@ -746,6 +1021,7 @@ public class ClinicServiceImpl implements ClinicService {
         }
         invite.setStatus(ClinicDoctorInviteStatus.REVOKED);
         clinicDoctorInviteRepository.save(invite);
+        notifyInviteRevoked(invite.getEmail(), invite.getDoctorName(), clinic.getName(), "doctor", invite.getUuid());
     }
 
     @Override
@@ -1015,6 +1291,7 @@ public class ClinicServiceImpl implements ClinicService {
         }
         invite.setStatus(ClinicStaffInviteStatus.REVOKED);
         clinicStaffInviteRepository.save(invite);
+        notifyInviteRevoked(invite.getEmail(), invite.getStaffName(), clinic.getName(), "staff", invite.getUuid());
     }
 
     @Override
@@ -3355,7 +3632,9 @@ public class ClinicServiceImpl implements ClinicService {
                 booking.getPet() == null ? null : booking.getPet().getType(),
                 booking.getVideoJoinUrl(),
                 booking.isVideoLive(),
-                booking.isVideoJoinOpen());
+                booking.isVideoJoinOpen(),
+                booking.getClinic() == null ? null : booking.getClinic().getPhone(),
+                false);
     }
 
     private static String doctorDisplayName(com.kittyp.doctor.entity.DoctorProfile doctor) {

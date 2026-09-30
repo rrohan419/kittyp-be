@@ -23,6 +23,10 @@ public enum NotificationType {
     PROMO_OFFER,
     /** Parent booked an appointment with a doctor. */
     BOOKING_CREATED,
+    /** Parent or clinic moved an upcoming appointment. */
+    BOOKING_RESCHEDULED,
+    /** Parent or clinic cancelled an upcoming appointment. */
+    BOOKING_CANCELLED,
     /** Doctor or parent started the Jitsi video consult. */
     VIDEO_CALL_STARTED
 }

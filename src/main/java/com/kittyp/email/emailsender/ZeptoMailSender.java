@@ -49,6 +49,8 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
         }
         mergeInfo.put("current_year", LocalDate.now().getYear());
         mergeInfo.put("logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO);
+        mergeInfo.put("facebook_url", AppConstant.KITTYP_FACEBOOK_URL);
+        mergeInfo.put("instagram_url", AppConstant.KITTYP_INSTAGRAM_URL);
         request.setMergeInfo(mergeInfo);
         request.setFrom(new EmailAddress(env.getProperty(AppConstant.KITTYP_MAIL_ID), AppConstant.KITTYP));
         request.setTo(List.of(new Recipient(new EmailAddress(zeptoMailDto.getRecipientEmail(), zeptoMailDto.getRecipientName()))));

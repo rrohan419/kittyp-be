@@ -1,7 +1,6 @@
 package com.kittyp.booking.controller;
 
 import java.time.LocalDate;
-import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -27,6 +26,7 @@ import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
+import com.kittyp.common.model.PaginationModel;
 import com.kittyp.visit.dto.VisitDtos.DoctorDaySlotsModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingPatchRequest;
@@ -46,10 +46,20 @@ public class ParentBookingController {
 
     @GetMapping(ApiUrl.USER_BOOKINGS_MINE)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
-    public ResponseEntity<SuccessResponse<List<BookingModel>>> mine() {
+    public ResponseEntity<SuccessResponse<PaginationModel<BookingModel>>> mine(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return responseBuilder.buildSuccessResponse(visitService.listMyParentBookings(email), ResponseMessage.SUCCESS,
-                HttpStatus.OK);
+        return responseBuilder.buildSuccessResponse(visitService.listMyParentBookings(email, page, size),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @GetMapping(ApiUrl.USER_BOOKING_BY_UUID)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<BookingModel>> one(@PathVariable String bookingUuid) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(visitService.getMyParentBooking(bookingUuid, email),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @PostMapping(ApiUrl.USER_BOOKINGS)

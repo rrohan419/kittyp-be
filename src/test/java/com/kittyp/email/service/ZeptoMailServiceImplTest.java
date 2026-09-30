@@ -55,6 +55,40 @@ class ZeptoMailServiceImplTest {
 	}
 
 	@Test
+	void sendAppointmentConfirmation_blankTemplate_doesNotFallBackToWelcome() {
+		when(env.getProperty(TemplateConstant.ZEPTO_APPOINTMENT_CONFIRMATION_EMAIL_TEMPLATE_ID)).thenReturn("");
+		when(env.getProperty(TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID)).thenReturn("welcome-tmpl");
+
+		mailService.sendAppointmentConfirmationEmail("parent@kittyp.test", "Ada", "Clinic", "Miso",
+				"12 Oct 2026, 11:30 AM", "Ravi", "book-1", "12 Park Road, Pune", "", "", "");
+
+		verify(sender, never()).sendEmail(any());
+		verify(env, never()).getProperty(TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID);
+	}
+
+	@Test
+	void sendAppointmentConfirmation_putsMapsUrlOnMerge() {
+		when(env.getProperty(TemplateConstant.ZEPTO_APPOINTMENT_CONFIRMATION_EMAIL_TEMPLATE_ID))
+				.thenReturn("tmpl-confirm");
+
+		mailService.sendAppointmentConfirmationEmail("parent@kittyp.test", "Ada", "Clinic", "Miso",
+				"12 Oct 2026, 11:30 AM", "Ravi", "book-1", "12 Park Road, Pune",
+				"https://www.google.com/maps/search/?api=1&query=18.52,73.85",
+				"https://kittyp.in/app/appointments/book-1/reschedule",
+				"https://kittyp.in/app/appointments/book-1/cancel");
+
+		ArgumentCaptor<ZeptoMailDto> captor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(captor.capture());
+		assertEquals("https://www.google.com/maps/search/?api=1&query=18.52,73.85",
+				captor.getValue().getMergeInfo().get("maps_url"));
+		assertEquals("12 Park Road, Pune", captor.getValue().getMergeInfo().get("clinic_address"));
+		assertEquals("https://kittyp.in/app/appointments/book-1/reschedule",
+				captor.getValue().getMergeInfo().get("reschedule_url"));
+		assertEquals("https://kittyp.in/app/appointments/book-1/cancel",
+				captor.getValue().getMergeInfo().get("cancel_url"));
+	}
+
+	@Test
 	void sendDoctorProfileVerified_emptyTemplateKey_doesNotThrow() {
 		when(env.getProperty(TemplateConstant.ZOHO_DOCTOR_PROFILE_VERIFIED_TEMPLATE_ID)).thenReturn("");
 		assertDoesNotThrow(() -> mailService.sendDoctorProfileVerified("doc@kittyp.test", "Dr", "https://kittyp.in"));

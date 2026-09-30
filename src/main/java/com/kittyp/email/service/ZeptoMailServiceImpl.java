@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -70,21 +71,27 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	@Async
 	public void sendWelcomeEmailforDoctor(String recipientEmail) {
-		User user = userDao.userByEmail(recipientEmail);
-		ZeptoMailDto mailDto = new ZeptoMailDto();
-		mailDto.setMergeInfo(
-				Map.of("Customer_Name", user.getFirstName(), "logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
-		mailDto.setRecipientEmail(recipientEmail);
-		mailDto.setRecipientName(user.getFirstName());
-		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZOHO_DOCTOR_WELCOME_EMAIL_TEMPLATE_ID));
+		try {
+			User user = userDao.userByEmail(recipientEmail);
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			mailDto.setMergeInfo(
+					Map.of("Customer_Name", user.getFirstName(), "logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(user.getFirstName());
+			mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZOHO_DOCTOR_WELCOME_EMAIL_TEMPLATE_ID));
 
-		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
-		log.info("welcome email sent for email : " + recipientEmail);
-		addEmailAuditLog(responseModel, recipientEmail);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			log.info("welcome email sent for email : " + recipientEmail);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send doctor welcome to {}: {}", recipientEmail, e.getMessage());
+		}
 	}
 
 	@Override
+	@Async
 	public void sendWelcomeEmailforClinicAdmin(String recipientEmail) {
 		User user = userDao.userByEmail(recipientEmail);
 		ZeptoMailDto mailDto = new ZeptoMailDto();
@@ -252,7 +259,18 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			String acceptUrl) {
 		log.info("Clinic doctor invite REMINDER to email={} clinic={} acceptUrl={}", recipientEmail, clinicName,
 				acceptUrl);
-		sendClinicDoctorInviteEmail(recipientEmail, doctorName, clinicName, acceptUrl);
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		String name = doctorName == null || doctorName.isBlank() ? "Doctor" : doctorName;
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(Map.of(
+				"doctor_name", name,
+				"clinic_name", clinicName == null ? "" : clinicName,
+				"acceptUrl", acceptUrl == null ? "" : acceptUrl));
+		mailDto.setRecipientEmail(recipientEmail);
+		mailDto.setRecipientName(name);
+		dispatch(mailDto, TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_REMINDER_EMAIL_TEMPLATE_ID);
 	}
 
 	@Override
@@ -331,7 +349,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 		// Create the root map with all required fields
 		Map<String, Object> root = new HashMap<>();
-		root.put("facebook_url", "facebook_url_value");
+		root.put("facebook_url", AppConstant.KITTYP_FACEBOOK_URL);
 		root.put("tracking_url", "tracking_url_value");
 		root.put("twitter_url", "twitter_url_value");
 		root.put("order_number", order.getOrderNumber());
@@ -340,7 +358,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		root.put("products", productsList); // Pass the list directly
 		root.put("total", order.getTotalAmount().toString());
 		root.put("shipping", order.getTaxes().getShippingCharges().toString());
-		root.put("instagram_url", "instagram_url_value");
+		root.put("instagram_url", AppConstant.KITTYP_INSTAGRAM_URL);
 		root.put("subtotal", order.getSubTotal().toString());
 		root.put("customer_name", user.getFirstName());
 		root.put("shipping_address", order.getShippingAddress().getFormattedAddress());
@@ -355,6 +373,10 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	private void addEmailAuditLog(ZeptoMailResponseModel responseModel, String recipientEmail) {
+		addEmailAuditLog(responseModel, recipientEmail, "email_Sent");
+	}
+
+	private void addEmailAuditLog(ZeptoMailResponseModel responseModel, String recipientEmail, String eventName) {
 		EmailAuditDto emailAudit = new EmailAuditDto();
 		emailAudit.setRecipientEmail(recipientEmail);
 		emailAudit.setMessage(responseModel.getMessage());
@@ -362,7 +384,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		emailAudit.setStatusCode(responseModel.getData().get(0).getCode());
 		emailAudit.setRequestId(responseModel.getRequestId());
 		emailAudit.setProvider("Zepto Mail");
-		emailAudit.setEventName("email_Sent");
+		emailAudit.setEventName(eventName);
 
 		emailAuditService.saveEmailAudit(emailAudit);
 		log.info("email audit added for email: " + recipientEmail + " request id : " + responseModel.getRequestId());
@@ -429,6 +451,12 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	private static String blankToDefault(String value, String fallback) {
 		return value == null || value.isBlank() ? fallback : value;
+	}
+
+	private static void putIfPresent(Map<String, Object> merge, String key, String value) {
+		if (value != null && !value.isBlank()) {
+			merge.put(key, value);
+		}
 	}
 
 	private void sendDedicated(String recipientEmail, String recipientName, String templateProperty,
@@ -505,25 +533,170 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	@Override
 	@Async
 	public void sendAppointmentConfirmationEmail(String recipientEmail, String ownerName, String clinicName,
-			String petName, String when, String doctorName) {
+			String petName, String when, String doctorName, String bookingId, String clinicAddress, String mapsUrl,
+			String rescheduleUrl, String cancelUrl) {
+		sendAppointmentTemplate(recipientEmail, ownerName, clinicName, petName, when, doctorName, bookingId, null,
+				clinicAddress, mapsUrl, rescheduleUrl, cancelUrl, null, null, null,
+				TemplateConstant.ZEPTO_APPOINTMENT_CONFIRMATION_EMAIL_TEMPLATE_ID,
+				"appointment_confirmation:" + blankToDefault(bookingId, ""));
+	}
+
+	@Override
+	public boolean sendAppointmentReminderEmail(String recipientEmail, String ownerName, String clinicName,
+			String petName, String when, String doctorName, String bookingId, String clinicPhone,
+			String clinicAddress, String mapsUrl) {
+		return sendAppointmentTemplate(recipientEmail, ownerName, clinicName, petName, when, doctorName, bookingId,
+				clinicPhone, clinicAddress, mapsUrl, null, null, null, null, null,
+				TemplateConstant.ZEPTO_APPOINTMENT_REMINDER_EMAIL_TEMPLATE_ID,
+				"appointment_reminder:" + blankToDefault(bookingId, "") + ":" + blankToDefault(when, ""));
+	}
+
+	@Override
+	@Async
+	public void sendAppointmentRescheduledEmail(String recipientEmail, String ownerName, String clinicName,
+			String petName, String when, String doctorName, String bookingId, String clinicAddress, String mapsUrl,
+			String previousWhen, String clinicPhone, String manageUrl) {
+		sendAppointmentTemplate(recipientEmail, ownerName, clinicName, petName, when, doctorName, bookingId,
+				clinicPhone, clinicAddress, mapsUrl, null, null, previousWhen, null, manageUrl,
+				TemplateConstant.ZEPTO_APPOINTMENT_RESCHEDULED_EMAIL_TEMPLATE_ID,
+				"appointment_rescheduled:" + blankToDefault(bookingId, "") + ":" + blankToDefault(when, ""));
+	}
+
+	@Override
+	@Async
+	public void sendAppointmentCancelledEmail(String recipientEmail, String ownerName, String clinicName,
+			String petName, String when, String doctorName, String bookingId, String clinicPhone,
+			String clinicAddress, String bookUrl) {
+		sendAppointmentTemplate(recipientEmail, ownerName, clinicName, petName, when, doctorName, bookingId,
+				clinicPhone, clinicAddress, null, null, null, null, bookUrl, null,
+				TemplateConstant.ZEPTO_APPOINTMENT_CANCELLED_EMAIL_TEMPLATE_ID,
+				"appointment_cancelled:" + blankToDefault(bookingId, ""));
+	}
+
+	@Override
+	@Async
+	public void sendWalkInCheckedInEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String doctorName, String visitId, String clinicPhone, String clinicAddress, String mapsUrl) {
+		sendAppointmentTemplate(recipientEmail, ownerName, clinicName, petName, "", doctorName, visitId,
+				clinicPhone, clinicAddress, mapsUrl, null, null, null, null, null,
+				TemplateConstant.ZEPTO_WALKIN_CHECKED_IN_EMAIL_TEMPLATE_ID,
+				"walk_in_checked_in:" + blankToDefault(visitId, ""));
+	}
+
+	@Override
+	@Async
+	public void sendAppointmentDoctorChangedEmail(String recipientEmail, String ownerName, String clinicName,
+			String petName, String when, String doctorName, String bookingId, String doctorUuid, String clinicAddress,
+			String mapsUrl, String clinicPhone, String manageUrl) {
+		sendAppointmentTemplate(recipientEmail, ownerName, clinicName, petName, when, doctorName, bookingId,
+				clinicPhone, clinicAddress, mapsUrl, null, null, null, null, manageUrl,
+				TemplateConstant.ZEPTO_APPOINTMENT_DOCTOR_CHANGED_EMAIL_TEMPLATE_ID,
+				"appointment_doctor_changed:" + blankToDefault(bookingId, "") + ":" + blankToDefault(doctorUuid, ""));
+	}
+
+	@Override
+	@Async
+	public void sendClinicClosureEmail(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName, String bookingId, String clinicPhone) {
+		sendAppointmentTemplate(recipientEmail, ownerName, clinicName, petName, when, doctorName, bookingId,
+				clinicPhone, "", "", null, null, null, null, null,
+				TemplateConstant.ZEPTO_CLINIC_CLOSURE_EMAIL_TEMPLATE_ID,
+				"clinic_closure:" + blankToDefault(bookingId, ""));
+	}
+
+	@Override
+	@Async
+	public void sendInviteRevokedEmail(String recipientEmail, String inviteeName, String clinicName, String inviteRole,
+			String inviteUuid) {
 		if (recipientEmail == null || recipientEmail.isBlank()) {
 			return;
 		}
-		String name = blankToDefault(ownerName, "there");
+		String eventName = "invite_revoked:" + blankToDefault(inviteUuid, "");
+		if (emailAuditService.alreadySent(eventName)) {
+			log.info("Skipping duplicate invite revoked email {}", eventName);
+			return;
+		}
+		String name = blankToDefault(inviteeName, "there");
+		String clinic = blankToDefault(clinicName, "Clinic");
+		Map<String, Object> merge = new HashMap<>();
+		merge.put("Customer_Name", name);
+		merge.put("Clinic_Name", clinic);
+		merge.put("clinic_name", clinic);
+		merge.put("invite_role", blankToDefault(inviteRole, "member"));
 		ZeptoMailDto mailDto = new ZeptoMailDto();
-		mailDto.setMergeInfo(Map.of(
-				"Customer_Name", name,
-				"Clinic_Name", blankToDefault(clinicName, "Clinic"),
-				"clinic_name", blankToDefault(clinicName, "Clinic"),
-				"pet_name", blankToDefault(petName, "your pet"),
-				"appointment_when", blankToDefault(when, "soon"),
-				"doctor_name", blankToDefault(doctorName, "your veterinarian")));
+		mailDto.setMergeInfo(merge);
 		mailDto.setRecipientEmail(recipientEmail.trim());
 		mailDto.setRecipientName(name);
-		String key = TemplateConstant.ZEPTO_APPOINTMENT_CONFIRMATION_EMAIL_TEMPLATE_ID;
-		if (!dispatch(mailDto, key)) {
-			dispatch(mailDto, TemplateConstant.ZOHO_PARENT_WELCOME_EMAIL_TEMPLATE_ID);
+		dispatchWithRetry(mailDto, TemplateConstant.ZEPTO_INVITE_REVOKED_EMAIL_TEMPLATE_ID, eventName);
+	}
+
+	@Override
+	@Async
+	public void sendClinicLocationChangedEmail(String recipientEmail, String recipientName, String clinicName,
+			String moveDate, String oldLocation, String newLocation, String oldMapsUrl, String newMapsUrl,
+			String clinicUuid, String eventDate) {
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
 		}
+		String eventName = "clinic_location_changed:" + blankToDefault(clinicUuid, "") + ":"
+				+ blankToDefault(eventDate, "") + ":" + recipientEmail.trim().toLowerCase(Locale.ROOT);
+		if (emailAuditService.alreadySent(eventName)) {
+			log.info("Skipping duplicate clinic location email {}", eventName);
+			return;
+		}
+		String name = blankToDefault(recipientName, "there");
+		String clinic = blankToDefault(clinicName, "Clinic");
+		Map<String, Object> merge = new HashMap<>();
+		merge.put("Customer_Name", name);
+		merge.put("Clinic_Name", clinic);
+		merge.put("clinic_name", clinic);
+		merge.put("move_date", blankToDefault(moveDate, ""));
+		merge.put("old_location", blankToDefault(oldLocation, ""));
+		merge.put("new_location", blankToDefault(newLocation, ""));
+		merge.put("old_maps_url", blankToDefault(oldMapsUrl, ""));
+		merge.put("new_maps_url", blankToDefault(newMapsUrl, ""));
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(merge);
+		mailDto.setRecipientEmail(recipientEmail.trim());
+		mailDto.setRecipientName(name);
+		dispatchWithRetry(mailDto, TemplateConstant.ZEPTO_CLINIC_LOCATION_CHANGED_EMAIL_TEMPLATE_ID, eventName);
+	}
+
+	private boolean sendAppointmentTemplate(String recipientEmail, String ownerName, String clinicName, String petName,
+			String when, String doctorName, String bookingId, String clinicPhone, String clinicAddress, String mapsUrl,
+			String rescheduleUrl, String cancelUrl, String previousWhen, String bookUrl, String manageUrl,
+			String templateProperty, String eventName) {
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return false;
+		}
+		if (emailAuditService.alreadySent(eventName)) {
+			log.info("Skipping duplicate appointment email {}", eventName);
+			return true;
+		}
+		String name = blankToDefault(ownerName, "there");
+		Map<String, Object> merge = new HashMap<>();
+		merge.put("Customer_Name", name);
+		merge.put("Clinic_Name", blankToDefault(clinicName, "Clinic"));
+		merge.put("clinic_name", blankToDefault(clinicName, "Clinic"));
+		merge.put("pet_name", blankToDefault(petName, "your pet"));
+		merge.put("appointment_when", blankToDefault(when, "soon"));
+		merge.put("doctor_name", blankToDefault(doctorName, "your veterinarian"));
+		merge.put("booking_id", blankToDefault(bookingId, ""));
+		merge.put("clinic_address", blankToDefault(clinicAddress, ""));
+		merge.put("maps_url", blankToDefault(mapsUrl, ""));
+		if (clinicPhone != null) {
+			merge.put("clinic_phone", clinicPhone);
+		}
+		putIfPresent(merge, "reschedule_url", rescheduleUrl);
+		putIfPresent(merge, "cancel_url", cancelUrl);
+		putIfPresent(merge, "previous_appointment_when", previousWhen);
+		putIfPresent(merge, "book_url", bookUrl);
+		putIfPresent(merge, "manage_url", manageUrl);
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(merge);
+		mailDto.setRecipientEmail(recipientEmail.trim());
+		mailDto.setRecipientName(name);
+		return dispatchWithRetry(mailDto, templateProperty, eventName);
 	}
 
 	@Override
@@ -564,5 +737,33 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 		addEmailAuditLog(responseModel, mailDto.getRecipientEmail());
 		return true;
+	}
+
+	/** Three attempts. Waits 1s then 2s between failures. Does not fall back to another template. */
+	private boolean dispatchWithRetry(ZeptoMailDto mailDto, String templateProperty, String eventName) {
+		String templateKey = resolveTemplateKey(templateProperty);
+		if (templateKey == null) {
+			return false;
+		}
+		mailDto.setTemplateKey(templateKey);
+		for (int attempt = 1; attempt <= 3; attempt++) {
+			try {
+				ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+				addEmailAuditLog(responseModel, mailDto.getRecipientEmail(), eventName);
+				return true;
+			} catch (RuntimeException e) {
+				if (attempt == 3) {
+					log.warn("Appointment email {} failed after {} attempts: {}", eventName, attempt, e.getMessage());
+					return false;
+				}
+				try {
+					Thread.sleep(1000L * attempt);
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+					return false;
+				}
+			}
+		}
+		return false;
 	}
 }
