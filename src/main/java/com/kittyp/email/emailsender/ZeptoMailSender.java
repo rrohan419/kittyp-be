@@ -63,4 +63,32 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
         return responseEntity.getBody();
 	}
 
+	/**
+	 * Raw HTML send. Template mail stays on {@link #sendEmail}.
+	 */
+	@SuppressWarnings("null")
+	public ZeptoMailResponseModel sendHtml(ZohoMailRequest request) {
+		ResponseEntity<ZeptoMailResponseModel> responseEntity = restClient.post().uri(htmlSendUrl())
+				.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+				.header(HttpHeaders.AUTHORIZATION, env.getProperty(AppConstant.ZOHO_API_KEY))
+				.accept(MediaType.APPLICATION_JSON)
+				.body(request)
+				.retrieve()
+				.toEntity(ZeptoMailResponseModel.class);
+		return responseEntity.getBody();
+	}
+
+	String htmlSendUrl() {
+		String configured = env.getProperty(AppConstant.ZOHO_EMAIL_SEND_HTML_URL);
+		if (configured != null && !configured.isBlank()) {
+			return configured;
+		}
+		String base = env.getProperty(AppConstant.ZOHO_MAIL_BASE_URL);
+		if (base == null || base.isBlank()) {
+			throw new IllegalStateException("ZeptoMail HTML send URL is not configured");
+		}
+		String trimmed = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+		return trimmed + "/email";
+	}
+
 }
