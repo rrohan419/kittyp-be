@@ -50,6 +50,16 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
         mergeInfo.put("current_year", LocalDate.now().getYear());
         mergeInfo.put("logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO);
         request.setMergeInfo(mergeInfo);
+        Object supportId = mergeInfo.get("Support_Id");
+        if (supportId != null && !supportId.toString().isBlank()) {
+            request.setClientReference(supportId.toString().trim());
+        }
+        if (zeptoMailDto.getReplyToEmail() != null && !zeptoMailDto.getReplyToEmail().isBlank()) {
+            String replyName = zeptoMailDto.getReplyToName() == null || zeptoMailDto.getReplyToName().isBlank()
+                    ? zeptoMailDto.getReplyToEmail().trim()
+                    : zeptoMailDto.getReplyToName().trim();
+            request.setReplyTo(List.of(new EmailAddress(zeptoMailDto.getReplyToEmail().trim(), replyName)));
+        }
         request.setFrom(new EmailAddress(env.getProperty(AppConstant.KITTYP_MAIL_ID), AppConstant.KITTYP));
         request.setTo(List.of(new Recipient(new EmailAddress(zeptoMailDto.getRecipientEmail(), zeptoMailDto.getRecipientName()))));
 
@@ -61,34 +71,6 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
                 .retrieve()
                 .toEntity(ZeptoMailResponseModel.class);
         return responseEntity.getBody();
-	}
-
-	/**
-	 * Raw HTML send. Template mail stays on {@link #sendEmail}.
-	 */
-	@SuppressWarnings("null")
-	public ZeptoMailResponseModel sendHtml(ZohoMailRequest request) {
-		ResponseEntity<ZeptoMailResponseModel> responseEntity = restClient.post().uri(htmlSendUrl())
-				.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-				.header(HttpHeaders.AUTHORIZATION, env.getProperty(AppConstant.ZOHO_API_KEY))
-				.accept(MediaType.APPLICATION_JSON)
-				.body(request)
-				.retrieve()
-				.toEntity(ZeptoMailResponseModel.class);
-		return responseEntity.getBody();
-	}
-
-	String htmlSendUrl() {
-		String configured = env.getProperty(AppConstant.ZOHO_EMAIL_SEND_HTML_URL);
-		if (configured != null && !configured.isBlank()) {
-			return configured;
-		}
-		String base = env.getProperty(AppConstant.ZOHO_MAIL_BASE_URL);
-		if (base == null || base.isBlank()) {
-			throw new IllegalStateException("ZeptoMail HTML send URL is not configured");
-		}
-		String trimmed = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
-		return trimmed + "/email";
 	}
 
 }

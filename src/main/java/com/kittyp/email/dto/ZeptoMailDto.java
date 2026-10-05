@@ -20,6 +20,8 @@ public class ZeptoMailDto implements IEmailDto{
 	private String type;
 	private String recipientName;
 	private String recipientEmail;
+	private String replyToEmail;
+	private String replyToName;
 	private String message;
 //	private String provider;
 	private Map<String, Object> mergeInfo;

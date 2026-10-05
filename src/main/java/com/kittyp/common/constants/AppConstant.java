@@ -39,8 +39,9 @@ public class AppConstant {
 	    public static final String KITTYP_SUPPORT_MAIL_ID = "kittyp.support.mail.id";
 	    public static final String ZOHO_MAIL_BASE_URL = "zoho.mail.base.url";
 	    public static final String ZOHO_EMAIL_SEND_URL="zoho.email.send.url.with.template";
-	    public static final String ZOHO_EMAIL_SEND_HTML_URL = "zoho.email.send.url";
 	    public static final String ZOHO_MAIL_WEBHOOK_SECRET = "zoho.mail.webhook.secret";
+	    /** HMAC key from Zoho's one-time {@code X-Hook-Secret}. Set {@code ZOHO_MAIL_HOOK_SECRET}. */
+	    public static final String ZOHO_MAIL_HOOK_SECRET = "zoho.mail.hook.secret";
 	    
 
 		// Google

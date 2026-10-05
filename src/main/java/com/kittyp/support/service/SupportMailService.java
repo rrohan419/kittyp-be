@@ -1,8 +1,11 @@
 package com.kittyp.support.service;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.LocalDate;
+import java.util.Base64;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,8 +16,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 import com.kittyp.common.constants.AppConstant;
+import com.kittyp.common.constants.TemplateConstant;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.email.dto.ZeptoMailDto;
 import com.kittyp.email.emailsender.ZeptoMailSender;
 import com.kittyp.support.entity.SupportMail;
 import com.kittyp.support.repository.SupportMailRepository;
@@ -75,15 +83,68 @@ public class SupportMailService {
 		}
 	}
 
-	public void receive(InboundMail mail) {
+	/**
+	 * Zoho's registration POST carries {@code X-Hook-Secret} once. The value is not stored.
+	 * Copy it into {@code ZOHO_MAIL_HOOK_SECRET} and restart before signed deliveries can be checked.
+	 */
+	public void acceptHookSecret(String presented) {
+		if (presented == null || presented.isBlank() || !isHeaderSafe(presented)) {
+			throw new CustomException("Missing webhook secret", HttpStatus.UNAUTHORIZED);
+		}
+		log.info("Accepted Zoho mail webhook handshake");
+	}
+
+	/**
+	 * Checks {@code Base64(HMAC-SHA256(rawBodyUtf8, ZOHO_MAIL_HOOK_SECRET))} against {@code X-Hook-Signature}.
+	 * The body must be the raw payload before JSON parsing.
+	 */
+	public void verifyHookSignature(String rawBody, String signature) {
+		String secret = environment.getProperty(AppConstant.ZOHO_MAIL_HOOK_SECRET);
+		if (secret == null || secret.isBlank() || signature == null || signature.isBlank() || rawBody == null) {
+			throw new CustomException("Missing webhook secret", HttpStatus.UNAUTHORIZED);
+		}
+		byte[] expected = hmacSha256(secret, rawBody.getBytes(StandardCharsets.UTF_8));
+		byte[] presented;
+		try {
+			presented = Base64.getDecoder().decode(signature.trim());
+		} catch (IllegalArgumentException ex) {
+			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
+		}
+		if (!MessageDigest.isEqual(expected, presented)) {
+			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
+		}
+	}
+
+	private static byte[] hmacSha256(String secret, byte[] rawBody) {
+		try {
+			Mac mac = Mac.getInstance("HmacSHA256");
+			mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+			return mac.doFinal(rawBody);
+		} catch (GeneralSecurityException ex) {
+			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
+		}
+	}
+
+	private static boolean isHeaderSafe(String value) {
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			if (c <= 0x1F || c == 0x7F) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	public String receive(InboundMail mail) {
 		if (isOwnAcknowledgement(mail.from())) {
 			log.info("Skipped inbound mail from the acknowledgement sender");
-			return;
+			return null;
 		}
 		StoredMail stored = writeWithRetry(mail);
 		if (stored.shouldAcknowledge()) {
-			acknowledge(stored.mail());
+			acknowledge(stored.mail(), mail.senderName());
 		}
+		return stored.mail() == null ? null : stored.mail().getSupportId();
 	}
 
 	private StoredMail writeWithRetry(InboundMail mail) {
@@ -177,15 +238,31 @@ public class SupportMailService {
 				.getResultList();
 	}
 
-	private void acknowledge(SupportMail mail) {
+	private void acknowledge(SupportMail mail, String senderName) {
+		String templateKey = environment.getProperty(TemplateConstant.ZOHO_CONTACT_ACK_EMAIL_TEMPLATE_ID);
+		if (templateKey == null || templateKey.isBlank()) {
+			throw new CustomException("Mail is not configured", HttpStatus.SERVICE_UNAVAILABLE);
+		}
+		String name = senderName == null || senderName.isBlank() ? mail.getSenderEmail() : senderName.trim();
+		ZeptoMailDto ack = new ZeptoMailDto();
+		ack.setTemplateKey(templateKey.trim());
+		String subject = mail.getSubject() == null ? "" : mail.getSubject();
+		ack.setRecipientEmail(mail.getSenderEmail());
+		ack.setRecipientName(name);
+		ack.setReplyToEmail(supportInbox());
+		ack.setReplyToName("KittyP Support");
+		ack.setMergeInfo(Map.of(
+				"Customer_Name", name,
+				"Subject", subject,
+				"Support_Id", mail.getSupportId(),
+				"Support_Email", supportInbox()));
 		Long id = mail.getId();
 		Integer claimed = transactionTemplate.execute(status -> supportMailRepository.claimAck(id));
 		if (claimed == null || claimed == 0) {
 			return;
 		}
 		try {
-			zeptoMailSender.sendHtml(SupportAckMail.build(fromAddress(), supportInbox(), mail.getSenderEmail(),
-					mail.getSupportId()));
+			zeptoMailSender.sendEmail(ack);
 			log.info("Sent support acknowledgement for {}", mail.getSupportId());
 		} catch (RuntimeException ex) {
 			transactionTemplate.execute(status -> {

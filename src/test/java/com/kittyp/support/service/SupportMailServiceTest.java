@@ -17,7 +17,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
+import java.util.Base64;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -44,10 +48,14 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.common.constants.AppConstant;
+import com.kittyp.common.constants.TemplateConstant;
 import com.kittyp.common.exception.CustomException;
-import com.kittyp.email.dto.ZohoMailRequest;
+import com.kittyp.email.dto.ZeptoMailDto;
 import com.kittyp.email.emailsender.ZeptoMailSender;
 import com.kittyp.support.entity.SupportMail;
 import com.kittyp.support.repository.SupportMailRepository;
@@ -90,6 +98,8 @@ class SupportMailServiceTest {
 				.thenReturn("noreply@kittyp.in");
 		lenient().when(environment.getProperty(eq(AppConstant.KITTYP_SUPPORT_MAIL_ID), anyString()))
 				.thenReturn("admin@kittyp.in");
+		lenient().when(environment.getProperty(TemplateConstant.ZOHO_CONTACT_ACK_EMAIL_TEMPLATE_ID))
+				.thenReturn("ack-template-key");
 		lenient().when(environment.getProperty(AppConstant.ZOHO_MAIL_WEBHOOK_SECRET)).thenReturn("top-secret");
 		Query query = org.mockito.Mockito.mock(Query.class);
 		lenient().when(query.getResultList()).thenReturn(List.of(0));
@@ -128,17 +138,16 @@ class SupportMailServiceTest {
 		assertNull(row.getUserId());
 		verify(entityManager).createNativeQuery(contains("pg_advisory_xact_lock(58291011)"));
 
-		ArgumentCaptor<ZohoMailRequest> sent = ArgumentCaptor.forClass(ZohoMailRequest.class);
-		verify(zeptoMailSender).sendHtml(sent.capture());
-		verify(zeptoMailSender, never()).sendEmail(any());
-		ZohoMailRequest ack = sent.getValue();
-		assertEquals("[KittyP #" + expectedId + "] We received your request", ack.getSubject());
-		assertEquals(expectedId, ack.getClientReference());
-		assertNull(ack.getTemplateKey());
-		assertEquals("noreply@kittyp.in", ack.getFrom().getAddress());
-		assertEquals("visitor@example.com", ack.getTo().get(0).getEmailAddress().getAddress());
-		assertTrue(ack.getHtmlBody().contains(expectedId));
-		assertTrue(ack.getHtmlBody().contains("admin@kittyp.in"));
+		ArgumentCaptor<ZeptoMailDto> sent = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(zeptoMailSender).sendEmail(sent.capture());
+		ZeptoMailDto ack = sent.getValue();
+		assertEquals("ack-template-key", ack.getTemplateKey());
+		assertEquals("visitor@example.com", ack.getRecipientEmail());
+		assertEquals("admin@kittyp.in", ack.getReplyToEmail());
+		assertEquals("visitor@example.com", ack.getMergeInfo().get("Customer_Name"));
+		assertEquals("Need help", ack.getMergeInfo().get("Subject"));
+		assertEquals(expectedId, ack.getMergeInfo().get("Support_Id"));
+		assertEquals("admin@kittyp.in", ack.getMergeInfo().get("Support_Email"));
 		verify(userRepository, never()).save(any());
 		verify(userRepository, never()).saveAndFlush(any());
 	}
@@ -166,7 +175,7 @@ class SupportMailServiceTest {
 		service.receive(incoming);
 
 		verify(supportMailRepository, times(1)).saveAndFlush(any());
-		verify(zeptoMailSender, times(1)).sendHtml(any());
+		verify(zeptoMailSender, times(1)).sendEmail(any());
 		verify(supportMailRepository, times(1)).claimAck(11L);
 	}
 
@@ -182,7 +191,7 @@ class SupportMailServiceTest {
 		SupportMail reply = savedRow();
 		assertEquals("KIT-20200101-0007", reply.getSupportId());
 		assertFalse(reply.isOpening());
-		verify(zeptoMailSender, never()).sendHtml(any());
+		verify(zeptoMailSender, never()).sendEmail(any());
 		verify(supportMailRepository, never()).claimAck(any());
 		verify(entityManager, never()).createNativeQuery(anyString());
 	}
@@ -199,7 +208,7 @@ class SupportMailServiceTest {
 		SupportMail reply = savedRow();
 		assertEquals("KIT-20200101-0007", reply.getSupportId());
 		assertFalse(reply.isOpening());
-		verify(zeptoMailSender, never()).sendHtml(any());
+		verify(zeptoMailSender, never()).sendEmail(any());
 	}
 
 	@Test
@@ -220,7 +229,7 @@ class SupportMailServiceTest {
 
 		assertEquals(3, replies.size());
 		assertTrue(replies.stream().allMatch(row -> "KIT-20200101-0004".equals(row.getSupportId()) && !row.isOpening()));
-		verify(zeptoMailSender, never()).sendHtml(any());
+		verify(zeptoMailSender, never()).sendEmail(any());
 	}
 
 	@Test
@@ -236,7 +245,7 @@ class SupportMailServiceTest {
 		assertTrue(created.isOpening());
 		assertNotEquals("KIT-20200101-0007", created.getSupportId());
 		assertEquals(SupportIds.format(LocalDate.now(SupportIds.ZONE), 1), created.getSupportId());
-		verify(zeptoMailSender).sendHtml(any());
+		verify(zeptoMailSender).sendEmail(any());
 	}
 
 	@Test
@@ -248,7 +257,7 @@ class SupportMailServiceTest {
 		SupportMail created = savedRow();
 		assertTrue(created.isOpening());
 		assertEquals(SupportIds.format(LocalDate.now(SupportIds.ZONE), 4), created.getSupportId());
-		verify(zeptoMailSender).sendHtml(any());
+		verify(zeptoMailSender).sendEmail(any());
 	}
 
 	@Test
@@ -271,7 +280,7 @@ class SupportMailServiceTest {
 		assertEquals(SupportIds.format(LocalDate.now(SupportIds.ZONE), 2),
 				saved.getAllValues().get(1).getSupportId());
 		verify(entityManager, times(2)).createNativeQuery(contains("pg_advisory_xact_lock(58291011)"));
-		verify(zeptoMailSender).sendHtml(any());
+		verify(zeptoMailSender).sendEmail(any());
 	}
 
 	@Test
@@ -317,7 +326,7 @@ class SupportMailServiceTest {
 		}
 
 		assertEquals(2, openingIds.size());
-		verify(zeptoMailSender, times(2)).sendHtml(any());
+		verify(zeptoMailSender, times(2)).sendEmail(any());
 	}
 
 	@Test
@@ -352,24 +361,74 @@ class SupportMailServiceTest {
 
 		when(environment.getProperty(AppConstant.ZOHO_MAIL_WEBHOOK_SECRET)).thenReturn("top-secret");
 		service.verifySecret("top-secret");
+		verify(supportMailRepository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void validHookSignatureDoesNotStoreMail() {
+		when(environment.getProperty(AppConstant.ZOHO_MAIL_HOOK_SECRET)).thenReturn("hook-secret");
+		String body = "{\"messageId\":\"m-1\",\"fromAddress\":\"a@b.com\"}";
+		service.verifyHookSignature(body, hookSignature(body, "hook-secret"));
+		verify(supportMailRepository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void invalidHookSignatureDoesNotStoreMail() {
+		when(environment.getProperty(AppConstant.ZOHO_MAIL_HOOK_SECRET)).thenReturn("hook-secret");
+		String body = "{\"messageId\":\"m-1\"}";
+		CustomException invalid = assertThrows(CustomException.class,
+				() -> service.verifyHookSignature(body, hookSignature("other", "hook-secret")));
+		assertEquals(HttpStatus.UNAUTHORIZED, invalid.getHttpStatus());
+		CustomException garbage = assertThrows(CustomException.class,
+				() -> service.verifyHookSignature(body, "not-base64"));
+		assertEquals(HttpStatus.UNAUTHORIZED, garbage.getHttpStatus());
+		verify(supportMailRepository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void missingHookSignatureDoesNotStoreMail() {
+		when(environment.getProperty(AppConstant.ZOHO_MAIL_HOOK_SECRET)).thenReturn("hook-secret");
+		CustomException missing = assertThrows(CustomException.class, () -> service.verifyHookSignature("{}", null));
+		assertEquals(HttpStatus.UNAUTHORIZED, missing.getHttpStatus());
+		CustomException blank = assertThrows(CustomException.class, () -> service.verifyHookSignature("{}", "  "));
+		assertEquals(HttpStatus.UNAUTHORIZED, blank.getHttpStatus());
+
+		when(environment.getProperty(AppConstant.ZOHO_MAIL_HOOK_SECRET)).thenReturn(" ");
+		CustomException unset = assertThrows(CustomException.class,
+				() -> service.verifyHookSignature("{}", hookSignature("{}", "hook-secret")));
+		assertEquals(HttpStatus.UNAUTHORIZED, unset.getHttpStatus());
+		verify(supportMailRepository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void hookSecretHandshakeDoesNotStoreMail() {
+		service.acceptHookSecret("generated-secret");
+		CustomException missing = assertThrows(CustomException.class, () -> service.acceptHookSecret(null));
+		assertEquals(HttpStatus.UNAUTHORIZED, missing.getHttpStatus());
+		CustomException blank = assertThrows(CustomException.class, () -> service.acceptHookSecret("  "));
+		assertEquals(HttpStatus.UNAUTHORIZED, blank.getHttpStatus());
+		CustomException control = assertThrows(CustomException.class, () -> service.acceptHookSecret("bad\r\nsecret"));
+		assertEquals(HttpStatus.UNAUTHORIZED, control.getHttpStatus());
+		verify(supportMailRepository, never()).saveAndFlush(any());
+		verify(zeptoMailSender, never()).sendEmail(any());
 	}
 
 	@Test
 	void acknowledgementSenderDoesNotOpenATicketButAdminCan() {
 		service.receive(mail("loop", "NoReply@kittyp.in", "Re: [KittyP #KIT-20200101-0007]", "ack body", "thread-1"));
 		verify(supportMailRepository, never()).saveAndFlush(any());
-		verify(zeptoMailSender, never()).sendHtml(any());
+		verify(zeptoMailSender, never()).sendEmail(any());
 
 		service.receive(mail("admin-1", "admin@kittyp.in", "Customer wrote in", "please check", null));
 		SupportMail created = savedRow();
 		assertEquals("admin@kittyp.in", created.getSenderEmail());
 		assertTrue(created.isOpening());
-		verify(zeptoMailSender).sendHtml(any());
+		verify(zeptoMailSender).sendEmail(any());
 	}
 
 	@Test
 	void zeptoFailureReleasesTheClaimAndReturnsBadGateway() {
-		when(zeptoMailSender.sendHtml(any())).thenThrow(new IllegalStateException("down"));
+		when(zeptoMailSender.sendEmail(any())).thenThrow(new IllegalStateException("down"));
 
 		CustomException failure = assertThrows(CustomException.class,
 				() -> service.receive(mail("m-fail", "visitor@example.com", "Help", "body", null)));
@@ -421,5 +480,15 @@ class SupportMailServiceTest {
 
 	private static InboundMail mail(String messageId, String from, String subject, String body, String threadId) {
 		return new InboundMail(messageId, from, subject, body, threadId);
+	}
+
+	private static String hookSignature(String rawBody, String secret) {
+		try {
+			Mac mac = Mac.getInstance("HmacSHA256");
+			mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+			return Base64.getEncoder().encodeToString(mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8)));
+		} catch (NoSuchAlgorithmException | InvalidKeyException ex) {
+			throw new IllegalStateException(ex);
+		}
 	}
 }
