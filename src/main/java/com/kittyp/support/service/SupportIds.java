@@ -8,25 +8,25 @@ import java.util.regex.Pattern;
 
 /**
  * Support ids use Asia/Kolkata, the same zone as clinic hours and user mail.
+ * The customer-facing form is {@code KIT-YYYYMMDD-#####}, sequence 1 through 99999.
  */
 public final class SupportIds {
 
 	public static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
-	public static final int SUBJECT_MAX = 500;
-	public static final int BODY_MAX = 8000;
 	static final long ADVISORY_LOCK_KEY = 58291011L;
 
-	private static final Pattern ID = Pattern.compile("KIT-\\d{8}-\\d{4}");
+	private static final Pattern ID = Pattern.compile("KIT-\\d{8}-\\d{5}(?!\\d)");
 	private static final DateTimeFormatter DAY = DateTimeFormatter.BASIC_ISO_DATE;
+	private static final int SEQUENCE_MAX = 99999;
 
 	private SupportIds() {
 	}
 
 	public static String format(LocalDate date, int sequence) {
-		if (sequence < 1 || sequence > 9999) {
+		if (sequence < 1 || sequence > SEQUENCE_MAX) {
 			throw new IllegalArgumentException("Support id sequence out of range");
 		}
-		return "KIT-" + date.format(DAY) + "-" + String.format("%04d", sequence);
+		return "KIT-" + date.format(DAY) + "-" + String.format("%05d", sequence);
 	}
 
 	public static String prefix(LocalDate date) {
@@ -39,16 +39,5 @@ public final class SupportIds {
 		}
 		Matcher matcher = ID.matcher(subject);
 		return matcher.find() ? matcher.group() : null;
-	}
-
-	public static String cap(String value, int max) {
-		if (value == null) {
-			return "";
-		}
-		String trimmed = value.trim();
-		if (trimmed.length() <= max) {
-			return trimmed;
-		}
-		return trimmed.substring(0, max);
 	}
 }

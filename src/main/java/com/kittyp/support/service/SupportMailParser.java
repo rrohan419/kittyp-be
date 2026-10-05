@@ -10,11 +10,14 @@ import com.kittyp.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Reads the inbound Zoho payload. Attachments are ignored. Text is capped later, not rejected.
+ * Reads the inbound Zoho payload. Attachments are ignored. Subject and body are trimmed to the column limits.
  */
 @Component
 @RequiredArgsConstructor
 public class SupportMailParser {
+
+	static final int SUBJECT_MAX = 500;
+	static final int BODY_MAX = 8000;
 
 	private final ObjectMapper objectMapper;
 
@@ -38,7 +41,7 @@ public class SupportMailParser {
 		if (from.length() > 254) {
 			throw new CustomException("Mail sender is too long", HttpStatus.BAD_REQUEST);
 		}
-		return new InboundMail(messageId, from, subject == null ? "" : subject, body == null ? "" : body, threadId);
+		return new InboundMail(messageId, from, cap(subject, SUBJECT_MAX), cap(body, BODY_MAX), threadId);
 	}
 
 	private JsonNode read(String raw) {
@@ -102,6 +105,17 @@ public class SupportMailParser {
 			return text.isEmpty() ? null : text;
 		}
 		return null;
+	}
+
+	private static String cap(String value, int max) {
+		if (value == null) {
+			return "";
+		}
+		String trimmed = value.trim();
+		if (trimmed.length() <= max) {
+			return trimmed;
+		}
+		return trimmed.substring(0, max);
 	}
 
 	private static String emailOnly(String raw) {

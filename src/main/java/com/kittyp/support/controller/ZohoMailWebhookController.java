@@ -1,5 +1,7 @@
 package com.kittyp.support.controller;
 
+import java.nio.charset.StandardCharsets;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,7 +37,7 @@ public class ZohoMailWebhookController {
 			@RequestHeader(value = SECRET_HEADER, required = false) String secret,
 			@RequestHeader(value = HOOK_SECRET_HEADER, required = false) String hookSecret,
 			@RequestHeader(value = HOOK_SIGNATURE_HEADER, required = false) String hookSignature,
-			@RequestBody String rawPayload) {
+			@RequestBody byte[] rawPayload) {
 		if (hasText(hookSecret)) {
 			supportMailService.acceptHookSecret(hookSecret);
 			ResponseEntity<SuccessResponse<String>> accepted = responseBuilder.buildSuccessResponse(null,
@@ -47,7 +49,8 @@ public class ZohoMailWebhookController {
 		} else {
 			supportMailService.verifySecret(secret);
 		}
-		supportMailService.receive(supportMailParser.parse(rawPayload));
+		String payload = rawPayload == null ? null : new String(rawPayload, StandardCharsets.UTF_8);
+		supportMailService.receive(supportMailParser.parse(payload));
 		return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 

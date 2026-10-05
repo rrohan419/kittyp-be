@@ -95,15 +95,15 @@ public class SupportMailService {
 	}
 
 	/**
-	 * Checks {@code Base64(HMAC-SHA256(rawBodyUtf8, ZOHO_MAIL_HOOK_SECRET))} against {@code X-Hook-Signature}.
-	 * The body must be the raw payload before JSON parsing.
+	 * Checks {@code Base64(HMAC-SHA256(rawBody, ZOHO_MAIL_HOOK_SECRET))} against {@code X-Hook-Signature}.
+	 * {@code rawBody} must be the exact HTTP body bytes before JSON parsing.
 	 */
-	public void verifyHookSignature(String rawBody, String signature) {
+	public void verifyHookSignature(byte[] rawBody, String signature) {
 		String secret = environment.getProperty(AppConstant.ZOHO_MAIL_HOOK_SECRET);
 		if (secret == null || secret.isBlank() || signature == null || signature.isBlank() || rawBody == null) {
 			throw new CustomException("Missing webhook secret", HttpStatus.UNAUTHORIZED);
 		}
-		byte[] expected = hmacSha256(secret, rawBody.getBytes(StandardCharsets.UTF_8));
+		byte[] expected = hmacSha256(secret, rawBody);
 		byte[] presented;
 		try {
 			presented = Base64.getDecoder().decode(signature.trim());
@@ -204,7 +204,7 @@ public class SupportMailService {
 		LocalDate today = LocalDate.now(SupportIds.ZONE);
 		Number max = supportMailRepository.maxOpeningSequence(SupportIds.prefix(today));
 		int sequence = max == null ? 0 : max.intValue();
-		if (sequence >= 9999) {
+		if (sequence >= 99999) {
 			throw new CustomException("Support id sequence exhausted", HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 		return newRow(SupportIds.format(today, sequence + 1), mail, true);
@@ -214,8 +214,8 @@ public class SupportMailService {
 		SupportMail row = new SupportMail();
 		row.setSupportId(supportId);
 		row.setSenderEmail(mail.from().trim());
-		row.setSubject(SupportIds.cap(mail.subject(), SupportIds.SUBJECT_MAX));
-		row.setBody(SupportIds.cap(mail.body(), SupportIds.BODY_MAX));
+		row.setSubject(cap(mail.subject(), 500));
+		row.setBody(cap(mail.body(), 8000));
 		row.setZohoMessageId(mail.messageId());
 		row.setThreadId(blankToNull(mail.threadId()));
 		row.setOpening(opening);
@@ -292,6 +292,17 @@ public class SupportMailService {
 			return "admin@kittyp.in";
 		}
 		return configured.trim();
+	}
+
+	private static String cap(String value, int max) {
+		if (value == null) {
+			return "";
+		}
+		String trimmed = value.trim();
+		if (trimmed.length() <= max) {
+			return trimmed;
+		}
+		return trimmed.substring(0, max);
 	}
 
 	private static String blankToNull(String value) {

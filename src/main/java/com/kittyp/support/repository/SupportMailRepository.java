@@ -19,10 +19,10 @@ public interface SupportMailRepository extends JpaRepository<SupportMail, Long> 
 
 	/**
 	 * Highest opening sequence for today's prefix ({@code KIT-YYYYMMDD-%}).
-	 * The number starts at 1-based position 14.
+	 * The five-digit number starts at 1-based position 14.
 	 */
 	@Query(value = """
-			SELECT COALESCE(MAX(CAST(SUBSTRING(support_id FROM 14 FOR 4) AS integer)), 0)
+			SELECT COALESCE(MAX(CAST(SUBSTRING(support_id FROM 14 FOR 5) AS integer)), 0)
 			FROM support_mail
 			WHERE opening = true AND support_id LIKE :prefix
 			""", nativeQuery = true)
