@@ -28,4 +28,7 @@ public interface UserDao {
 	Page<User> findPetOwnerUsers(String q, Pageable pageable);
 
 	Integer countActiveUsers();
+
+	/** Every account, matching the admin users list with an empty search. */
+	long countAllUsers();
 }

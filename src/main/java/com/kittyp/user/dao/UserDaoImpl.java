@@ -122,4 +122,14 @@ public class UserDaoImpl implements UserDao {
 		}
 	}
 
+	@Override
+	public long countAllUsers() {
+		try {
+			return userRepository.count();
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 }

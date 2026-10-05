@@ -101,7 +101,8 @@ public class DoctorProfileController {
                 profile.isCheckClinicPhotos(),
                 profile.getSubmittedAt(),
                 profile.getReviewedAt(),
-                profile.getReviewNotes());
+                profile.getReviewNotes(),
+                profile.getExperienceYears());
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

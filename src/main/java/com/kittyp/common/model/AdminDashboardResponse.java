@@ -15,4 +15,6 @@ public class AdminDashboardResponse {
     private long pendingDoctorsCount;
     /** Total organization clinics (excludes personal doctor practices). */
     private long clinicsCount;
+    /** All doctor profiles, same set as the admin doctor list with no status filter. */
+    private long doctorsCount;
 }

@@ -34,14 +34,15 @@ public class AdminServiceImpl implements AdminService{
         List<ArticleStatus> articleStatuses = List.of(ArticleStatus.PUBLISHED, ArticleStatus.DRAFT, ArticleStatus.SCHEDULED);
         List<DoctorStatus> pendingDoctorStatuses = List.of(DoctorStatus.DOCUMENTS_SUBMITTED, DoctorStatus.UNDER_REVIEW);
         
-        Integer totalUsers = userDao.countActiveUsers();
+        long totalUsers = userDao.countAllUsers();
         Integer totalProducts = productDao.productCount(true);
         Integer totalOrders = orderDao.countOfOrderByStatus(true, orderStatuses);
         Integer articleCount = articleDao.countByIsActiveAndStatusIn(true, articleStatuses);
         long pendingDoctorsCount = doctorProfileRepository.countByStatusIn(pendingDoctorStatuses);
         long clinicsCount = clinicRepository.countOrganizationClinics();
+        long doctorsCount = doctorProfileRepository.count();
         return new AdminDashboardResponse(
-                totalProducts, totalOrders, totalUsers, articleCount, pendingDoctorsCount, clinicsCount);
+                totalProducts, totalOrders, totalUsers, articleCount, pendingDoctorsCount, clinicsCount, doctorsCount);
 
     }
     
