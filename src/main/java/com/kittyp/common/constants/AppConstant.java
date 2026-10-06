@@ -42,6 +42,8 @@ public class AppConstant {
 	    public static final String ZOHO_MAIL_WEBHOOK_SECRET = "zoho.mail.webhook.secret";
 	    /** HMAC key from Zoho's one-time {@code X-Hook-Secret}. Set {@code ZOHO_MAIL_HOOK_SECRET}. */
 	    public static final String ZOHO_MAIL_HOOK_SECRET = "zoho.mail.hook.secret";
+	    /** Shared secret for the CPaaS/ZeptoMail email-event webhook. Set {@code ZEPTOMAIL_WEBHOOK_SECRET}. */
+	    public static final String ZEPTOMAIL_WEBHOOK_SECRET = "zeptomail.webhook.secret";
 	    
 
 		// Google

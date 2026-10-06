@@ -32,5 +32,11 @@ public class Detail {
 
     @JsonProperty("user_agent")
     private String userAgent;
+
+    @JsonProperty("reason")
+    private String reason;
+
+    @JsonProperty("diagnostic_message")
+    private String diagnosticMessage;
 }
 

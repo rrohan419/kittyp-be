@@ -208,6 +208,7 @@ public class ApiUrl {
 	public static final String DOCTOR_WHATSAPP_CONNECT_EMBEDDED = DOCTOR_BASE_URL + "/whatsapp/connect/embedded";
 	public static final String WEBHOOK_WHATSAPP = "/webhook/whatsapp";
 	public static final String WEBHOOK_ZOHO_MAIL = "/webhook/zoho-mail";
+	public static final String WEBHOOK_ZEPTOMAIL = "/webhook/zeptomail";
 
 	public static final String DOCTOR_VISITS = DOCTOR_BASE_URL + "/visits";
 	public static final String DOCTOR_VISITS_MINE = DOCTOR_VISITS + "/mine";
