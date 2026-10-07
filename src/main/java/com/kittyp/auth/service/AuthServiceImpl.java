@@ -100,22 +100,7 @@ public class AuthServiceImpl implements AuthService {
 			throw new ResourceAlreadyExistsException("User", "email", signupRequestDto.getEmail());
 		}
 
-		// Create new user
-		User user = User.builder()
-				.email(signupRequestDto.getEmail()).password(encoder.encode(signupRequestDto.getPassword()))
-				.firstName(signupRequestDto.getFirstName()).lastName(signupRequestDto.getLastName()).build();
-
-		user = userDao.saveUser(user);
-
-		// Pet-parent path only. Client SignupRole.DOCTOR/CLINIC is dispatched in
-		// register().
-		// The legacy Set<String> roles field is ignored and cannot escalate privileges.
-		Role userRole = roleDao.roleByName(ERole.ROLE_USER);
-		if (userRole == null) {
-			throw new CustomException("Default ROLE_USER not found", HttpStatus.INTERNAL_SERVER_ERROR);
-		}
-		user.getUserRoles().add(new UserRole(user, userRole));
-		user = userDao.saveUser(user);
+		User user = createUserWithRole(signupRequestDto, ERole.ROLE_USER);
 		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
 		zeptoMailService.sendWelcomeEmailforParent(user.getFirstName(), user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
