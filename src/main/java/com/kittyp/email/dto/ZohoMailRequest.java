@@ -35,9 +35,6 @@ public class ZohoMailRequest implements IEmailDto {
     @JsonProperty("merge_info")
     private Map<String, Object> mergeInfo;
 
-    @JsonProperty("htmlbody")
-    private String htmlBody;
-
     @JsonProperty("reply_to")
     private List<EmailAddress> replyTo;
 
