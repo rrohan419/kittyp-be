@@ -30,7 +30,7 @@ public class ContactService {
 
 	public void send(ContactRequest request) {
 		String from = env.getProperty(AppConstant.KITTYP_MAIL_ID);
-		String support = env.getProperty(AppConstant.KITTYP_SUPPORT_MAIL_ID, "admin@kittyp.in");
+		String support = env.getProperty(AppConstant.KITTYP_SUPPORT_MAIL_ID, "support@kittyp.in");
 		String templateKey = env.getProperty(TemplateConstant.ZOHO_CONTACT_ADMIN_EMAIL_TEMPLATE_ID);
 		if (from == null || from.isBlank() || support == null || support.isBlank()
 				|| templateKey == null || templateKey.isBlank()) {
@@ -43,7 +43,7 @@ public class ContactService {
 		String supportId = supportMailService.receive(
 				new InboundMail("contact-" + UUID.randomUUID(), email, subject, message, null, name));
 		if (supportId == null || supportId.isBlank()) {
-			throw new CustomException("Could not send your message. Please email admin@kittyp.in.",
+			throw new CustomException("Could not send your message. Please email support@kittyp.in.",
 					HttpStatus.BAD_GATEWAY);
 		}
 		ZeptoMailDto mail = new ZeptoMailDto();
@@ -62,7 +62,7 @@ public class ContactService {
 			zeptoMailSender.sendEmail(mail);
 		} catch (RuntimeException e) {
 			log.warn("Contact form mail failed: {}", e.getMessage());
-			throw new CustomException("Could not send your message. Please email admin@kittyp.in.",
+			throw new CustomException("Could not send your message. Please email support@kittyp.in.",
 					HttpStatus.BAD_GATEWAY);
 		}
 	}

@@ -25,8 +25,6 @@ import lombok.RequiredArgsConstructor;
 public class ZohoMailWebhookController {
 
 	public static final String SECRET_HEADER = "X-Zoho-Webhook-Secret";
-	public static final String HOOK_SECRET_HEADER = "X-Hook-Secret";
-	public static final String HOOK_SIGNATURE_HEADER = "X-Hook-Signature";
 
 	private final ApiResponse<?> responseBuilder;
 	private final SupportMailService supportMailService;
@@ -35,20 +33,10 @@ public class ZohoMailWebhookController {
 	@PostMapping(ApiUrl.WEBHOOK_ZOHO_MAIL)
 	public ResponseEntity<SuccessResponse<String>> zohoMail(
 			@RequestHeader(value = SECRET_HEADER, required = false) String secret,
-			@RequestHeader(value = HOOK_SECRET_HEADER, required = false) String hookSecret,
-			@RequestHeader(value = HOOK_SIGNATURE_HEADER, required = false) String hookSignature,
 			@RequestBody byte[] rawPayload) {
-		if (hasText(hookSecret)) {
-			supportMailService.acceptHookSecret(hookSecret);
-			ResponseEntity<SuccessResponse<String>> accepted = responseBuilder.buildSuccessResponse(null,
-					ResponseMessage.SUCCESS, HttpStatus.OK);
-			return ResponseEntity.ok().header(HOOK_SECRET_HEADER, hookSecret).body(accepted.getBody());
-		}
-		if (hasText(hookSignature)) {
-			supportMailService.verifyHookSignature(rawPayload, hookSignature);
-		} else {
+	
 			supportMailService.verifySecret(secret);
-		}
+
 		String payload = rawPayload == null ? null : new String(rawPayload, StandardCharsets.UTF_8);
 		supportMailService.receive(supportMailParser.parse(payload));
 		return responseBuilder.buildSuccessResponse(null, ResponseMessage.SUCCESS, HttpStatus.OK);

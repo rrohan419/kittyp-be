@@ -72,7 +72,7 @@ public class SupportMailService {
 	}
 
 	public void verifySecret(String presented) {
-		String expected = environment.getProperty(AppConstant.ZOHO_MAIL_WEBHOOK_SECRET);
+		String expected = environment.getProperty(AppConstant.ZEPTOMAIL_WEBHOOK_SECRET);
 		if (expected == null || expected.isBlank() || presented == null || presented.isBlank()) {
 			throw new CustomException("Missing webhook secret", HttpStatus.UNAUTHORIZED);
 		}
@@ -80,38 +80,6 @@ public class SupportMailService {
 		byte[] required = expected.getBytes(StandardCharsets.UTF_8);
 		if (!MessageDigest.isEqual(actual, required)) {
 			throw new CustomException("Invalid webhook secret", HttpStatus.UNAUTHORIZED);
-		}
-	}
-
-	/**
-	 * Zoho's registration POST carries {@code X-Hook-Secret} once. The value is not stored.
-	 * Copy it into {@code ZOHO_MAIL_HOOK_SECRET} and restart before signed deliveries can be checked.
-	 */
-	public void acceptHookSecret(String presented) {
-		if (presented == null || presented.isBlank() || !isHeaderSafe(presented)) {
-			throw new CustomException("Missing webhook secret", HttpStatus.UNAUTHORIZED);
-		}
-		log.info("Accepted Zoho mail webhook handshake");
-	}
-
-	/**
-	 * Checks {@code Base64(HMAC-SHA256(rawBody, ZOHO_MAIL_HOOK_SECRET))} against {@code X-Hook-Signature}.
-	 * {@code rawBody} must be the exact HTTP body bytes before JSON parsing.
-	 */
-	public void verifyHookSignature(byte[] rawBody, String signature) {
-		String secret = environment.getProperty(AppConstant.ZOHO_MAIL_HOOK_SECRET);
-		if (secret == null || secret.isBlank() || signature == null || signature.isBlank() || rawBody == null) {
-			throw new CustomException("Missing webhook secret", HttpStatus.UNAUTHORIZED);
-		}
-		byte[] expected = hmacSha256(secret, rawBody);
-		byte[] presented;
-		try {
-			presented = Base64.getDecoder().decode(signature.trim());
-		} catch (IllegalArgumentException ex) {
-			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
-		}
-		if (!MessageDigest.isEqual(expected, presented)) {
-			throw new CustomException("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
 		}
 	}
 
@@ -250,7 +218,7 @@ public class SupportMailService {
 		ack.setRecipientEmail(mail.getSenderEmail());
 		ack.setRecipientName(name);
 		ack.setReplyToEmail(supportInbox());
-		ack.setReplyToName("KittyP Support");
+		ack.setReplyToName("Kittyp support");
 		ack.setMergeInfo(Map.of(
 				"Customer_Name", name,
 				"Subject", subject,
@@ -287,9 +255,9 @@ public class SupportMailService {
 	}
 
 	private String supportInbox() {
-		String configured = environment.getProperty(AppConstant.KITTYP_SUPPORT_MAIL_ID, "admin@kittyp.in");
+		String configured = environment.getProperty(AppConstant.KITTYP_SUPPORT_MAIL_ID, "support@kittyp.in");
 		if (configured == null || configured.isBlank()) {
-			return "admin@kittyp.in";
+			return "support@kittyp.in";
 		}
 		return configured.trim();
 	}
