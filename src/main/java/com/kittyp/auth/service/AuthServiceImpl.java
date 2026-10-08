@@ -104,6 +104,9 @@ public class AuthServiceImpl implements AuthService {
 		User user = User.builder()
 				.email(signupRequestDto.getEmail()).password(encoder.encode(signupRequestDto.getPassword()))
 				.firstName(signupRequestDto.getFirstName()).lastName(signupRequestDto.getLastName()).build();
+		if (signupRequestDto instanceof PublicSignupRequestDto publicSignup) {
+			applyParentPhone(user, publicSignup.getPhoneNumber());
+		}
 
 		user = userDao.saveUser(user);
 
@@ -119,6 +122,19 @@ public class AuthServiceImpl implements AuthService {
 		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
 		zeptoMailService.sendWelcomeEmailforParent(user.getFirstName(), user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
+	}
+
+	/** Stores the local 10-digit number. +91 is the country code column, not part of the number. */
+	private void applyParentPhone(User user, String phoneNumber) {
+		if (phoneNumber == null || phoneNumber.isBlank()) {
+			return;
+		}
+		String digits = phoneNumber.replaceAll("\\D", "");
+		if (!digits.matches("\\d{10}")) {
+			throw new CustomException("Phone number must be exactly 10 digits", HttpStatus.BAD_REQUEST);
+		}
+		user.setPhoneNumber(digits);
+		user.setPhoneCountryCode("+91");
 	}
 
 	@Transactional
