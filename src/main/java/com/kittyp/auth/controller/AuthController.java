@@ -27,6 +27,7 @@ import com.kittyp.common.dto.SignupClinicRequestDto;
 import com.kittyp.common.dto.SignupDoctorRequestDto;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.JwtResponseModel;
+import com.kittyp.common.util.ClientIp;
 import com.kittyp.common.model.MessageResponse;
 import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.service.UserService;
@@ -52,7 +53,7 @@ public class AuthController {
 			@Valid @RequestBody LoginRequestDto loginRequest,
 			HttpServletRequest request) {
 
-		JwtResponseModel response = authService.loginUser(loginRequest, clientIp(request));
+		JwtResponseModel response = authService.loginUser(loginRequest, ClientIp.from(request));
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
@@ -122,13 +123,5 @@ public class AuthController {
 		// Always return success to prevent email enumeration
 		userService.sendResetPasswordCode(email);
 		return responseBuilder.buildSuccessResponse(true, ResponseMessage.SUCCESS, HttpStatus.OK);
-	}
-
-	private static String clientIp(HttpServletRequest request) {
-		String forwarded = request.getHeader("X-Forwarded-For");
-		if (forwarded != null && !forwarded.isBlank()) {
-			return forwarded.split(",")[0].trim();
-		}
-		return request.getRemoteAddr();
 	}
 }

@@ -50,6 +50,16 @@ public class ZeptoMailSender implements IEmailSender<ZeptoMailDto, ZeptoMailResp
         mergeInfo.put("current_year", LocalDate.now().getYear());
         mergeInfo.put("logo_url", AppConstant.KITTYP_EMAIL_TEMPLATE_LOGO);
         request.setMergeInfo(mergeInfo);
+        Object supportId = mergeInfo.get("Support_Id");
+        if (supportId != null && !supportId.toString().isBlank()) {
+            request.setClientReference(supportId.toString().trim());
+        }
+        if (zeptoMailDto.getReplyToEmail() != null && !zeptoMailDto.getReplyToEmail().isBlank()) {
+            String replyName = zeptoMailDto.getReplyToName() == null || zeptoMailDto.getReplyToName().isBlank()
+                    ? zeptoMailDto.getReplyToEmail().trim()
+                    : zeptoMailDto.getReplyToName().trim();
+            request.setReplyTo(List.of(new EmailAddress(zeptoMailDto.getReplyToEmail().trim(), replyName)));
+        }
         request.setFrom(new EmailAddress(env.getProperty(AppConstant.KITTYP_MAIL_ID), AppConstant.KITTYP));
         request.setTo(List.of(new Recipient(new EmailAddress(zeptoMailDto.getRecipientEmail(), zeptoMailDto.getRecipientName()))));
 
