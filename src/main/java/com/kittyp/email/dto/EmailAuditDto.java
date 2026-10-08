@@ -23,7 +23,5 @@ public class EmailAuditDto {
 	
 	private String recipientEmail;
 	
-	private String provider;
-	
 	private String eventName;
 }

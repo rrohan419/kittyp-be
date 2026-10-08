@@ -3,11 +3,7 @@
  */
 package com.kittyp.email.entity;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import com.kittyp.common.entity.BaseEntity;
-import com.kittyp.email.model.IpLocationInfo;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -44,11 +40,4 @@ public class EmailAudit extends BaseEntity{
 	
 	@Column
 	private String recipientEmail;
-	
-	@Column(nullable = false)
-	private String provider;
-	
-	@Column(columnDefinition = "json")
-    @JdbcTypeCode(SqlTypes.JSON)
-	private IpLocationInfo ipLocationInfo;
 }

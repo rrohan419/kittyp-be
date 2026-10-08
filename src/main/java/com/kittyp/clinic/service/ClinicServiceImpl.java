@@ -204,7 +204,7 @@ public class ClinicServiceImpl implements ClinicService {
         return clinicDao.findAllOrganizationFetchOwner().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
-                .map(this::clinicModel)
+                .map(clinic -> clinicModel(clinic, false))
                 .toList();
     }
 
@@ -3177,6 +3177,10 @@ public class ClinicServiceImpl implements ClinicService {
         boolean personal = viewer != null
                 ? isViewerPersonalPractice(clinic, viewer)
                 : isOwnerAffiliatedDoctor(clinic);
+        return clinicModel(clinic, personal);
+    }
+
+    private ClinicModel clinicModel(Clinic clinic, boolean personal) {
         boolean waConfigured = WhatsAppSettingsSupport.isConfigured(
                 clinic.getWhatsappPhoneNumberId(),
                 clinic.getWhatsappBusinessAccountId(),
