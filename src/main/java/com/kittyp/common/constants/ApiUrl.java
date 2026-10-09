@@ -114,8 +114,6 @@ public class ApiUrl {
 	public static final String PUBLIC_BASE_URL = "/public";
 	public static final String PUBLIC_PLACES_AUTOCOMPLETE = PUBLIC_BASE_URL + "/places/autocomplete";
 	public static final String PUBLIC_PLACES_DETAILS = PUBLIC_BASE_URL + "/places/details";
-	public static final String PLACES_AUTOCOMPLETE = "/places/autocomplete";
-	public static final String PLACES_DETAILS = "/places/details";
 	public static final String SITEMAP = PUBLIC_BASE_URL + "/sitemap.xml";
 	public static final String PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG = PUBLIC_BASE_URL + "/whatsapp/embedded-signup-config";
 	public static final String PUBLIC_CONTACT = PUBLIC_BASE_URL + "/contact";

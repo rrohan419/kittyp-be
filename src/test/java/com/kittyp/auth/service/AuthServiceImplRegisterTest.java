@@ -393,6 +393,11 @@ class AuthServiceImplRegisterTest {
 		req.setEmail("ada@example.com");
 		req.setPassword("Passw0rd!");
 		req.setClinicName("Paws Clinic");
+		req.setAddress("1 Main Street, Example City");
+		req.setCity("Example City");
+		req.setLatitude(12.9716);
+		req.setLongitude(77.5946);
+		req.setGooglePlaceId("ChIJLxZ2B0cWrjsR7X7pV4");
 
 		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(false);
 		when(roleDao.roleByName(ERole.ROLE_CLINIC_ADMIN)).thenReturn(role(ERole.ROLE_CLINIC_ADMIN));
@@ -402,6 +407,10 @@ class AuthServiceImplRegisterTest {
 		authService.registerClinic(req);
 
 		verify(roleDao).roleByName(ERole.ROLE_CLINIC_ADMIN);
+		verify(clinicDao).saveClinic(argThat(clinic -> "Example City".equals(clinic.getCity())
+				&& Double.valueOf(12.9716).equals(clinic.getLatitude())
+				&& Double.valueOf(77.5946).equals(clinic.getLongitude())
+				&& "ChIJLxZ2B0cWrjsR7X7pV4".equals(clinic.getGooglePlaceId())));
 	}
 
 	private void stubDoctorReady(PublicSignupRequestDto req) {

@@ -2,6 +2,9 @@ package com.kittyp.common.dto;
 
 import com.kittyp.common.enums.DoctorSpecialization;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -21,6 +24,15 @@ public class PublicSignupRequestDto extends SignupRequestDto {
 	private String clinicName;
 	private String clinicAddress;
 	private String professionalSummary;
+	private String city;
+	@DecimalMin("-90.0")
+	@DecimalMax("90.0")
+	private Double latitude;
+	@DecimalMin("-180.0")
+	@DecimalMax("180.0")
+	private Double longitude;
+	@Size(max = 512)
+	private String googlePlaceId;
 	private String degreeCertificateUrl;
 	private String registrationCertificateUrl;
 	private String governmentIdUrl;
@@ -57,6 +69,10 @@ public class PublicSignupRequestDto extends SignupRequestDto {
 		dto.setClinicName(clinicName);
 		dto.setLicenseNumber(licenseNumber);
 		dto.setAddress(address);
+		dto.setCity(city);
+		dto.setLatitude(latitude);
+		dto.setLongitude(longitude);
+		dto.setGooglePlaceId(googlePlaceId);
 		dto.setPhone(phone);
 		dto.setTimezone(timezone);
 		return dto;
