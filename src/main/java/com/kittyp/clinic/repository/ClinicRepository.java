@@ -51,6 +51,21 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
             """)
     long countOrganizationClinics();
 
+    @Query("""
+            SELECT COUNT(c) FROM Clinic c
+            WHERE c.status = :status
+            AND (
+                c.owner IS NULL
+                OR NOT EXISTS (
+                    SELECT 1 FROM ClinicDoctor cd
+                    WHERE cd.clinic = c
+                      AND cd.isActive = true
+                      AND cd.doctor.user.id = c.owner.id
+                )
+            )
+            """)
+    long countOrganizationClinicsByStatus(@Param("status") ClinicStatus status);
+
     Clinic findByOwner_Id(Long ownerUserId);
 
     List<Clinic> findAllByOwner_Id(Long ownerUserId);

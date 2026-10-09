@@ -31,4 +31,8 @@ public interface UserDao {
 
 	/** Every account, matching the admin users list with an empty search. */
 	long countAllUsers();
+
+	long countCreatedSince(java.time.LocalDateTime since);
+
+	java.util.List<Object[]> countCreatedByDay(java.time.LocalDateTime from, java.time.LocalDateTime to);
 }

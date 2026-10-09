@@ -113,4 +113,15 @@ public class OrderDaoImpl implements OrderDao {
 		}
 	}
 
+	@Override
+	public List<Object[]> countCreatedByDay(java.time.LocalDateTime from, java.time.LocalDateTime to, List<OrderStatus> statuses) {
+		try {
+			List<String> names = statuses.stream().map(OrderStatus::name).toList();
+			return orderRepository.countCreatedByDay(from, to, names);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 }

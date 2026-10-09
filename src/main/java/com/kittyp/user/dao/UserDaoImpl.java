@@ -132,4 +132,24 @@ public class UserDaoImpl implements UserDao {
 		}
 	}
 
+	@Override
+	public long countCreatedSince(java.time.LocalDateTime since) {
+		try {
+			return userRepository.countCreatedSince(since);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public java.util.List<Object[]> countCreatedByDay(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+		try {
+			return userRepository.countCreatedByDay(from, to);
+		} catch (Exception e) {
+			throw new CustomException(env.getProperty(ExceptionConstant.ERROR_DATABASE_OPERATION),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 }

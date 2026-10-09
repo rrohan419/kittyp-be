@@ -29,5 +29,7 @@ public interface OrderDao {
 
 	Integer countOfSuccessfullOrderByUser(String email);
 
-	Integer countOfOrderByStatus(boolean isActive, List<OrderStatus> status);;
+	Integer countOfOrderByStatus(boolean isActive, List<OrderStatus> status);
+
+	List<Object[]> countCreatedByDay(java.time.LocalDateTime from, java.time.LocalDateTime to, List<OrderStatus> statuses);
 }

@@ -3,12 +3,14 @@
  */
 package com.kittyp.order.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.kittyp.order.emus.OrderStatus;
 import com.kittyp.order.entity.Order;
@@ -33,4 +35,18 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
 	Integer countByUser_EmailAndStatusIn(String email, List<OrderStatus> status);
 
 	Integer countByIsActiveAndStatusIn(boolean isActive, List<OrderStatus> status);
+
+	@Query(value = """
+			SELECT CAST(created_at AS date), COUNT(*)
+			FROM orders
+			WHERE is_active = true
+			  AND status IN (:statuses)
+			  AND created_at >= :from AND created_at < :to
+			GROUP BY 1
+			ORDER BY 1
+			""", nativeQuery = true)
+	List<Object[]> countCreatedByDay(
+			@Param("from") LocalDateTime from,
+			@Param("to") LocalDateTime to,
+			@Param("statuses") List<String> statuses);
 }

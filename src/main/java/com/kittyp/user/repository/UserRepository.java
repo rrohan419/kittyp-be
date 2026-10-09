@@ -1,5 +1,6 @@
 package com.kittyp.user.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -87,6 +88,18 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	Page<User> findPetOwnerUsers(@Param("q") String q, Pageable pageable);
 
 	Integer countByIsActiveTrue();
+
+	@Query("SELECT COUNT(u) FROM User u WHERE u.createdAt >= :since")
+	long countCreatedSince(@Param("since") LocalDateTime since);
+
+	@Query(value = """
+			SELECT CAST(created_at AS date), COUNT(*)
+			FROM users
+			WHERE created_at >= :from AND created_at < :to
+			GROUP BY 1
+			ORDER BY 1
+			""", nativeQuery = true)
+	List<Object[]> countCreatedByDay(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
 	/**
 	 * Live search of active pet-parent KittyP accounts (ROLE_USER only).
