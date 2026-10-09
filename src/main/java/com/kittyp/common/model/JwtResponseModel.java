@@ -13,8 +13,11 @@ public class JwtResponseModel {
     private String type = "Bearer";
     private Long id;
     private String username;
-    private String email;
+	private String email;
     private List<String> roles;
+
+	/** Set only when exactly one role password matches. Navigation hint, not an identity claim. */
+	private String loginRole;
     
     public JwtResponseModel(String accessToken, Long id, String username, String email, List<String> roles) {
         this.token = accessToken;

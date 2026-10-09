@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.auth.dto.ActivateRoleRequest;
+import com.kittyp.auth.service.RoleActivationFacade;
 import com.kittyp.auth.util.SecurityContextUtils;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
@@ -52,6 +54,7 @@ public class UserController {
 
     private final UserService userService;
     private final ClinicService clinicService;
+    private final RoleActivationFacade roleActivationFacade;
     private final ApiResponse<?> responseBuilder;
     private final SecurityContextUtils securityContextUtils;
 
@@ -77,6 +80,15 @@ public class UserController {
     public ResponseEntity<SuccessResponse<ClinicModel>> switchClinic(@RequestBody @Valid SwitchClinicRequest request) {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return responseBuilder.buildSuccessResponse(clinicService.switchClinic(request.clinicUuid(), email),
+                ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.USER_ACTIVATE_ROLE)
+    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    public ResponseEntity<SuccessResponse<MessageResponse>> activateRole(
+            @RequestBody @Valid ActivateRoleRequest request) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return responseBuilder.buildSuccessResponse(roleActivationFacade.activate(email, request),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

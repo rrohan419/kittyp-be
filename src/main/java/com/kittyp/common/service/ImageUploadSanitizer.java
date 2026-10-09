@@ -2,6 +2,7 @@ package com.kittyp.common.service;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -22,7 +23,10 @@ import org.springframework.stereotype.Service;
 import com.kittyp.common.dto.FileUploadRequest;
 import com.kittyp.common.exception.CustomException;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@Slf4j
 public class ImageUploadSanitizer {
 
 	static {
@@ -57,9 +61,11 @@ public class ImageUploadSanitizer {
 		}
 
 		if (!isAllowedImageType(type)) {
-			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST);
+			log.warn("Rejected upload: unsupported type {}", type);
+			throw new CustomException("Upload a JPG, PNG, or PDF", HttpStatus.BAD_REQUEST);
 		}
 		if (!hasValidImageMagic(data) && looksLikeMarkupOrScript(data)) {
+			log.warn("Rejected upload: markup disguised as an image");
 			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST);
 		}
 
@@ -67,15 +73,14 @@ public class ImageUploadSanitizer {
 		try {
 			image = ImageIO.read(new ByteArrayInputStream(data));
 		} catch (IOException e) {
+			log.warn("Rejected upload: image decode failed");
 			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST, e);
 		}
 		if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0) {
+			log.warn("Rejected upload: image decode returned no pixels for type {}", type);
 			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST);
 		}
-		long pixels = (long) image.getWidth() * (long) image.getHeight();
-		if (image.getWidth() > MAX_SIDE || image.getHeight() > MAX_SIDE || pixels > MAX_PIXELS) {
-			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST);
-		}
+		image = limitSize(image);
 
 		boolean jpeg = "image/jpeg".equals(type);
 		try {
@@ -192,6 +197,40 @@ public class ImageUploadSanitizer {
 			}
 		}
 		return true;
+	}
+
+	/** Shrink phone photos and wide screenshots so a real certificate is not rejected. */
+	private static BufferedImage limitSize(BufferedImage source) {
+		int width = source.getWidth();
+		int height = source.getHeight();
+		double scale = 1d;
+		if (width > MAX_SIDE) {
+			scale = Math.min(scale, (double) MAX_SIDE / width);
+		}
+		if (height > MAX_SIDE) {
+			scale = Math.min(scale, (double) MAX_SIDE / height);
+		}
+		long pixels = (long) width * (long) height;
+		if (pixels > MAX_PIXELS) {
+			scale = Math.min(scale, Math.sqrt((double) MAX_PIXELS / (double) pixels));
+		}
+		if (scale >= 1d) {
+			return source;
+		}
+		int targetWidth = Math.max(1, (int) Math.floor(width * scale));
+		int targetHeight = Math.max(1, (int) Math.floor(height * scale));
+		boolean alpha = source.getColorModel().hasAlpha();
+		BufferedImage scaled = new BufferedImage(targetWidth, targetHeight,
+				alpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+		Graphics2D graphics = scaled.createGraphics();
+		graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		if (!alpha) {
+			graphics.setColor(Color.WHITE);
+			graphics.fillRect(0, 0, targetWidth, targetHeight);
+		}
+		graphics.drawImage(source, 0, 0, targetWidth, targetHeight, null);
+		graphics.dispose();
+		return scaled;
 	}
 
 	private static byte[] writeJpeg(BufferedImage source) throws IOException {

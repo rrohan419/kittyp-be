@@ -1,22 +1,29 @@
 package com.kittyp.auth.service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.kittyp.auth.config.UserDetailsImpl;
+import com.kittyp.auth.dto.ActivateRoleRequest;
 import com.kittyp.auth.dto.GoogleUserInfo;
 import com.kittyp.auth.dto.SignupOtpSendRequest;
 import com.kittyp.auth.dto.SignupOtpVerifyRequest;
@@ -80,6 +87,9 @@ public class AuthServiceImpl implements AuthService {
 	private final Msg91OtpVerifyService msg91OtpVerifyService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 	private final LoginRateLimiter loginRateLimiter;
+	private final UserDetailsService userDetailsService;
+	private final RoleCredentialService roleCredentialService;
+	private final RoleActivationFacade roleActivationFacade;
 
 	@Transactional
 	@Override
@@ -96,9 +106,7 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public MessageResponse registerUser(SignupRequestDto signupRequestDto) {
 
-		if (userDao.userPresentByEmail(signupRequestDto.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", signupRequestDto.getEmail());
-		}
+		rejectExistingEmail(signupRequestDto.getEmail());
 
 		// Create new user
 		User user = User.builder()
@@ -117,6 +125,7 @@ public class AuthServiceImpl implements AuthService {
 		user.getUserRoles().add(new UserRole(user, userRole));
 		user = userDao.saveUser(user);
 		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
+		roleCredentialService.storeNewRolePassword(user, ERole.ROLE_USER, signupRequestDto.getPassword());
 		zeptoMailService.sendWelcomeEmailforParent(user.getFirstName(), user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
@@ -125,33 +134,56 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public MessageResponse registerDoctor(SignupDoctorRequestDto req) {
 		if (userDao.userPresentByEmail(req.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", req.getEmail());
+			return enrollExistingDoctor(req);
 		}
-		if (req.getPhoneNumber() == null || req.getPhoneNumber().isBlank()) {
-			throw new CustomException("Phone number is required", HttpStatus.BAD_REQUEST);
-		}
-		if (req.getRegistrationNumber() == null || req.getRegistrationNumber().isBlank()) {
-			throw new CustomException("Veterinary registration number is required", HttpStatus.BAD_REQUEST);
-		}
-		if (req.getDegreeCertificateUrl() == null || req.getDegreeCertificateUrl().isBlank()
-				|| req.getRegistrationCertificateUrl() == null || req.getRegistrationCertificateUrl().isBlank()) {
-			throw new CustomException("Degree and registration certificate uploads are required",
-					HttpStatus.BAD_REQUEST);
-		}
-		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()))) {
-			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
-		}
-		if (!verificationCodeService.isVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()))
-				&& !verificationCodeService.isVerified(
-						VerificationCodeService.phoneVerifiedKey("+91" + req.getPhoneNumber().trim()))) {
-			throw new CustomException("Phone OTP verification required", HttpStatus.BAD_REQUEST);
-		}
+		SignupRequirements.requireDoctor(req, verificationCodeService, true);
 
 		User user = createUserWithRole(req, ERole.ROLE_DOCTOR);
 		user.setPhoneNumber(req.getPhoneNumber());
 		user.setPhoneCountryCode("+91");
 		user = userDao.saveUser(user);
+		provisionNewDoctor(user, req);
+		roleCredentialService.storeNewRolePassword(user, ERole.ROLE_DOCTOR, req.getPassword());
 
+		zeptoMailService.sendWelcomeEmailforDoctor(user.getEmail());
+		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
+	}
+
+	/**
+	 * Adds the doctor role to an existing account only after the signup email OTP
+	 * is verified and the role is not already present. Does not create a second
+	 * profile or change users.password.
+	 */
+	private MessageResponse enrollExistingDoctor(SignupDoctorRequestDto req) {
+		User existing = userDao.userByEmail(req.getEmail());
+		if (hasRole(existing, ERole.ROLE_DOCTOR)
+				|| !verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()))) {
+			throw ResourceAlreadyExistsException.signInToContinue();
+		}
+		SignupRequirements.requireDoctor(req, verificationCodeService, true);
+		ActivateRoleRequest activation = new ActivateRoleRequest();
+		activation.setRole(SignupRole.DOCTOR);
+		activation.setEmail(req.getEmail());
+		activation.setPhoneNumber(req.getPhoneNumber());
+		activation.setLicenseNumber(req.getLicenseNumber());
+		activation.setRegistrationNumber(req.getRegistrationNumber());
+		activation.setSpecialization(req.getSpecialization());
+		activation.setExperience(req.getExperience());
+		activation.setProfessionalSummary(req.getProfessionalSummary());
+		activation.setDegreeCertificateUrl(req.getDegreeCertificateUrl());
+		activation.setRegistrationCertificateUrl(req.getRegistrationCertificateUrl());
+		activation.setGovernmentIdUrl(req.getGovernmentIdUrl());
+		activation.setPhotoUrl(req.getPhotoUrl());
+		activation.setInviteToken(req.getInviteToken());
+		activation.setRolePassword(req.getPassword());
+		return activateMissingRole(existing.getEmail(), activation);
+	}
+
+	/**
+	 * Creates the doctor profile and personal practice for an existing user.
+	 * Does not change the user's password or send email.
+	 */
+	public void provisionNewDoctor(User user, SignupDoctorRequestDto req) {
 		// Doctor signup is a personal account for online consultation. Clinic
 		// name/address/photos
 		// on the payload are ignored — clinics register and verify on their own path.
@@ -217,9 +249,6 @@ public class AuthServiceImpl implements AuthService {
 
 		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
 		verificationCodeService.clearVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
-
-		zeptoMailService.sendWelcomeEmailforDoctor(user.getEmail());
-		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
 	@Override
@@ -230,9 +259,6 @@ public class AuthServiceImpl implements AuthService {
 				throw new CustomException("Email is required", HttpStatus.BAD_REQUEST);
 			}
 			String email = request.getEmail().trim().toLowerCase();
-			if (userDao.userPresentByEmail(email)) {
-				throw new ResourceAlreadyExistsException("User", "email", email);
-			}
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
 			zeptoMailService.sendSignupOtpEmail(email, code, "EMAIL", null);
 			return new MessageResponse("OTP sent to email");
@@ -309,15 +335,9 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public MessageResponse registerClinic(SignupClinicRequestDto signupClinicRequestDto) {
 		if (userDao.userPresentByEmail(signupClinicRequestDto.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", signupClinicRequestDto.getEmail());
+			return enrollExistingClinic(signupClinicRequestDto);
 		}
-		if (signupClinicRequestDto.getClinicName() == null || signupClinicRequestDto.getClinicName().isBlank()) {
-			throw new CustomException("Clinic name is required", HttpStatus.BAD_REQUEST);
-		}
-		if (!verificationCodeService
-				.isVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()))) {
-			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
-		}
+		SignupRequirements.requireClinic(signupClinicRequestDto, verificationCodeService, true);
 
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
 
@@ -332,10 +352,50 @@ public class AuthServiceImpl implements AuthService {
 				.status(ClinicStatus.PENDING)
 				.build());
 
+		roleCredentialService.storeNewRolePassword(user, ERole.ROLE_CLINIC_ADMIN, signupClinicRequestDto.getPassword());
 		verificationCodeService
 				.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
 		zeptoMailService.sendWelcomeEmailforClinicAdmin(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
+	}
+
+	private MessageResponse enrollExistingClinic(SignupClinicRequestDto req) {
+		User existing = userDao.userByEmail(req.getEmail());
+		if (hasRole(existing, ERole.ROLE_CLINIC_ADMIN)
+				|| !verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()))) {
+			throw ResourceAlreadyExistsException.signInToContinue();
+		}
+		SignupRequirements.requireClinic(req, verificationCodeService, true);
+		ActivateRoleRequest activation = new ActivateRoleRequest();
+		activation.setRole(SignupRole.CLINIC);
+		activation.setEmail(req.getEmail());
+		activation.setClinicName(req.getClinicName());
+		activation.setLicenseNumber(req.getLicenseNumber());
+		activation.setAddress(req.getAddress());
+		activation.setPhone(req.getPhone());
+		activation.setTimezone(req.getTimezone());
+		activation.setRolePassword(req.getPassword());
+		return activateMissingRole(existing.getEmail(), activation);
+	}
+
+	private MessageResponse activateMissingRole(String email, ActivateRoleRequest activation) {
+		MessageResponse response = roleActivationFacade.activate(email, activation);
+		if ("This role is already on your account.".equals(response.getMessage())) {
+			throw ResourceAlreadyExistsException.signInToContinue();
+		}
+		return response;
+	}
+
+	private static boolean hasRole(User user, ERole role) {
+		if (user.getUserRoles() == null) {
+			return false;
+		}
+		for (UserRole userRole : user.getUserRoles()) {
+			if (userRole.getRole() != null && role == userRole.getRole().getName()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private Clinic provisionPersonalPractice(User user, DoctorProfile profile) {
@@ -368,6 +428,12 @@ public class AuthServiceImpl implements AuthService {
 		return personal;
 	}
 
+	private void rejectExistingEmail(String email) {
+		if (userDao.userPresentByEmail(email)) {
+			throw ResourceAlreadyExistsException.signInToContinue();
+		}
+	}
+
 	private User createUserWithRole(SignupRequestDto signupRequestDto, ERole roleName) {
 		User user = User.builder()
 				.email(signupRequestDto.getEmail())
@@ -385,13 +451,23 @@ public class AuthServiceImpl implements AuthService {
 	public JwtResponseModel loginUser(LoginRequestDto loginRequestDto, String clientIp) {
 		loginRateLimiter.assertAllowed(clientIp, loginRequestDto.getEmail());
 		try {
-			Authentication authentication = authenticationManager.authenticate(
-					new UsernamePasswordAuthenticationToken(loginRequestDto.getEmail(), loginRequestDto.getPassword()));
+			UserDetailsImpl userDetails = loadLoginUser(loginRequestDto.getEmail());
+			String rawPassword = loginRequestDto.getPassword();
+			boolean accountMatch = rawPassword != null && encoder.matches(rawPassword, userDetails.getPassword());
+			List<ERole> roleHits = assignedRoleHits(userDetails.getAuthorities(),
+					roleCredentialService.matchingRoles(userDetails.getId(), rawPassword));
+			RolePasswordMatch.Decision decision = RolePasswordMatch.decide(accountMatch, roleHits);
+			if (decision.kind() == RolePasswordMatch.Kind.REJECT) {
+				throw new BadCredentialsException("Bad credentials");
+			}
 
+			Authentication authentication = accountMatch
+					? authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
+							loginRequestDto.getEmail(), rawPassword))
+					: new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
 			SecurityContextHolder.getContext().setAuthentication(authentication);
 			String jwt = jwtUtils.generateJwtToken(authentication);
 
-			UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
 			List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
 
 			// Late clinic CRM link: parent may have been registered at a clinic months ago.
@@ -405,10 +481,39 @@ public class AuthServiceImpl implements AuthService {
 			}
 
 			loginRateLimiter.clear(clientIp, loginRequestDto.getEmail());
-			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
+			JwtResponseModel response = new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(),
+					userDetails.getEmail(), roles);
+			if (decision.loginRole() != null) {
+				response.setLoginRole(decision.loginRole().name());
+			}
+			return response;
 		} catch (org.springframework.security.core.AuthenticationException ex) {
 			loginRateLimiter.recordFailure(clientIp, loginRequestDto.getEmail());
 			throw ex;
+		}
+	}
+
+	/**
+	 * Drops credential hits for roles no longer on the account. Stale rows stay in the database.
+	 */
+	static List<ERole> assignedRoleHits(Collection<? extends GrantedAuthority> authorities, List<ERole> roleHits) {
+		if (roleHits == null || roleHits.isEmpty() || authorities == null || authorities.isEmpty()) {
+			return List.of();
+		}
+		Set<String> held = new HashSet<>();
+		for (GrantedAuthority authority : authorities) {
+			if (authority != null && authority.getAuthority() != null) {
+				held.add(authority.getAuthority());
+			}
+		}
+		return roleHits.stream().filter(role -> role != null && held.contains(role.name())).toList();
+	}
+
+	private UserDetailsImpl loadLoginUser(String login) {
+		try {
+			return (UserDetailsImpl) userDetailsService.loadUserByUsername(login);
+		} catch (UsernameNotFoundException ex) {
+			throw new BadCredentialsException("Bad credentials");
 		}
 	}
 

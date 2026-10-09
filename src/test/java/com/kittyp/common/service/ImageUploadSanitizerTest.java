@@ -88,17 +88,19 @@ class ImageUploadSanitizerTest {
 		CustomException ex = assertThrows(CustomException.class,
 				() -> sanitizer.sanitize("pet.svg", svg, "image/svg+xml"));
 
-		assertEquals(ImageUploadSanitizer.UNSAFE_IMAGE, ex.getMessage());
+		assertEquals("Upload a JPG, PNG, or PDF", ex.getMessage());
 	}
 
 	@Test
-	void oversizePixelBufferIsRejected() throws Exception {
-		byte[] tall = writeImage("png", 4097, 8);
+	void wideImageIsScaledDown() throws Exception {
+		byte[] wide = writeImage("png", 4097, 8);
 
-		CustomException ex = assertThrows(CustomException.class,
-				() -> sanitizer.sanitize("huge.png", tall, "image/png"));
+		FileUploadRequest out = sanitizer.sanitize("huge.png", wide, "image/png");
 
-		assertEquals(ImageUploadSanitizer.UNSAFE_IMAGE, ex.getMessage());
+		BufferedImage read = ImageIO.read(new ByteArrayInputStream(out.getData()));
+		assertTrue(read.getWidth() <= 4096);
+		assertTrue(read.getWidth() > 0);
+		assertTrue(read.getHeight() > 0);
 	}
 
 	@Test

@@ -54,6 +54,7 @@ public class ApiUrl {
 	public static final String USER_DETAILS = USER_BASE_URL + "/me";
 	public static final String USER_CLINICS = USER_BASE_URL + "/clinics";
 	public static final String USER_SWITCH_CLINIC = USER_BASE_URL + "/switch-clinic";
+	public static final String USER_ACTIVATE_ROLE = USER_BASE_URL + "/roles";
 	public static final String USER_ADDRESS = USER_BASE_URL + "/address";
 	public static final String USER_ADDRESS_DETAIL = USER_BASE_URL + "/address/detail";
 	public static final String USER_PROFILE_OTP_SEND = USER_BASE_URL + "/otp/send";

@@ -61,6 +61,12 @@ public class UserDaoImpl implements UserDao {
 				.orElseThrow(() -> new ResourceNotFoundException("email", "email", email));
 	}
 
+	@Override
+	public User lockById(Long id) {
+		return userRepository.findByIdForUpdate(id)
+				.orElseThrow(() -> new ResourceNotFoundException("user", "id", id));
+	}
+
 	/**
 	 * @author rrohan419@gmail.com
 	 */

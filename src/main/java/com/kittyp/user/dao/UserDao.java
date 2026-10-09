@@ -14,6 +14,9 @@ public interface UserDao {
 	boolean userPresentByEmail(String email);
 	
 	User userByEmail(String email);
+
+	/** Row lock so overlapping role activations serialize. */
+	User lockById(Long id);
 	
 	User userByUuid(String uuid);
 

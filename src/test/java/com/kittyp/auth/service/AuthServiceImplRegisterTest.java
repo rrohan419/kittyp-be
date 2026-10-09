@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.kittyp.auth.dto.SignupOtpSendRequest;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicDoctorInvite;
@@ -57,6 +58,8 @@ class AuthServiceImplRegisterTest {
 	private DoctorProfileDao doctorProfileDao;
 	private VerificationCodeService verificationCodeService;
 	private RecordingLinkService clinicOwnerUserLinkService;
+	private RoleCredentialService roleCredentialService;
+	private RoleActivationFacade roleActivationFacade;
 	private AuthServiceImpl authService;
 
 	@BeforeEach
@@ -71,6 +74,8 @@ class AuthServiceImplRegisterTest {
 		doctorProfileDao = mock(DoctorProfileDao.class);
 		verificationCodeService = new VerificationCodeService();
 		clinicOwnerUserLinkService = new RecordingLinkService();
+		roleCredentialService = mock(RoleCredentialService.class);
+		roleActivationFacade = mock(RoleActivationFacade.class);
 
 		when(encoder.encode(any())).thenReturn("encoded");
 		when(userDao.saveUser(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -93,7 +98,10 @@ class AuthServiceImplRegisterTest {
 				null,
 				null,
 				clinicOwnerUserLinkService,
-				null);
+				null,
+				null,
+				roleCredentialService,
+				roleActivationFacade);
 	}
 
 	@Test
@@ -158,9 +166,28 @@ class AuthServiceImplRegisterTest {
 		req.setRole(SignupRole.USER);
 		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(true);
 
-		assertThrows(ResourceAlreadyExistsException.class, () -> authService.register(req));
+		ResourceAlreadyExistsException ex = assertThrows(ResourceAlreadyExistsException.class,
+				() -> authService.register(req));
+		assertEquals(ResourceAlreadyExistsException.SIGN_IN_TO_CONTINUE, ex.getMessage());
+		assertEquals(false, ex.getMessage().contains(req.getEmail()));
+		assertEquals(false, ex.getMessage().toLowerCase().contains("doctor"));
 		verify(roleDao, never()).roleByName(any());
 		verify(userDao, never()).saveUser(any());
+	}
+
+	@Test
+	void sendSignupOtp_existingEmail_sendsMailAndDoesNotCreateUser() {
+		SignupOtpSendRequest request = new SignupOtpSendRequest();
+		request.setChannel("EMAIL");
+		request.setEmail("Ada@Example.com");
+		when(userDao.userPresentByEmail("ada@example.com")).thenReturn(true);
+
+		authService.sendSignupOtp(request);
+
+		verify(zeptoMailService).sendSignupOtpEmail(org.mockito.ArgumentMatchers.eq("ada@example.com"), any(),
+				org.mockito.ArgumentMatchers.eq("EMAIL"), any());
+		verify(userDao, never()).saveUser(any());
+		verify(roleDao, never()).roleByName(any());
 	}
 
 	@Test
@@ -362,6 +389,27 @@ class AuthServiceImplRegisterTest {
 		verify(clinicDao).saveClinic(argThat(clinic -> clinic.getStatus() == ClinicStatus.PENDING
 				&& "Paws Clinic".equals(clinic.getName())));
 		verify(doctorProfileDao, never()).save(any());
+	}
+
+	@Test
+	void registerDoctor_existingRole_doesNotCreateAnotherProfileOrPassword() {
+		SignupDoctorRequestDto req = new SignupDoctorRequestDto();
+		req.setEmail("ada@example.com");
+		req.setPassword("OtherPass1!");
+		User existing = User.builder().email(req.getEmail()).password("encoded-account").firstName("Ada").build();
+		existing.setId(4L);
+		existing.addRole(role(ERole.ROLE_DOCTOR));
+		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(true);
+		when(userDao.userByEmail(req.getEmail())).thenReturn(existing);
+
+		ResourceAlreadyExistsException ex = assertThrows(ResourceAlreadyExistsException.class,
+				() -> authService.registerDoctor(req));
+
+		assertEquals(ResourceAlreadyExistsException.SIGN_IN_TO_CONTINUE, ex.getMessage());
+		verify(doctorProfileDao, never()).save(any());
+		verify(roleActivationFacade, never()).activate(any(), any());
+		verify(roleCredentialService, never()).storeNewRolePassword(any(), any(), any());
+		assertEquals("encoded-account", existing.getPassword());
 	}
 
 	@Test
