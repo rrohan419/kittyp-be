@@ -36,7 +36,11 @@ public class AppConstant {
 		public static final String ZOHO_BEARER_KEY = "Zoho-enczapikey ";
 	    public static final String ZOHO_API_KEY="zoho.api.key";
 	    public static final String KITTYP_MAIL_ID ="kittyp.mail.id";
+	    public static final String KITTYP_SUPPORT_MAIL_ID = "kittyp.support.mail.id";
+	    public static final String ZOHO_MAIL_BASE_URL = "zoho.mail.base.url";
 	    public static final String ZOHO_EMAIL_SEND_URL="zoho.email.send.url.with.template";
+   
+	    public static final String ZEPTOMAIL_WEBHOOK_SECRET = "zeptomail.webhook.secret";
 	    
 
 		// Google

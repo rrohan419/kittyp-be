@@ -2,6 +2,8 @@ package com.kittyp.clinic.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -43,7 +45,7 @@ class ClinicServiceImplListAllTest {
 	void listAllClinics_nullStatus_defaultsPending() {
 		Clinic clinic = Clinic.builder().uuid("c1").name("Alpha").owner(null).build();
 		clinic.setId(1L);
-		when(clinicDao.findAllFetchOwner()).thenReturn(List.of(clinic));
+		when(clinicDao.findAllOrganizationFetchOwner()).thenReturn(List.of(clinic));
 
 		List<ClinicModel> list = assertDoesNotThrow(() -> clinicService.listAllClinics());
 
@@ -56,7 +58,7 @@ class ClinicServiceImplListAllTest {
 	void listAllClinics_verifiedStatus_isVerified() {
 		Clinic clinic = Clinic.builder().uuid("c3").name("Gamma").status(ClinicStatus.VERIFIED).owner(null).build();
 		clinic.setId(3L);
-		when(clinicDao.findAllFetchOwner()).thenReturn(List.of(clinic));
+		when(clinicDao.findAllOrganizationFetchOwner()).thenReturn(List.of(clinic));
 
 		List<ClinicModel> list = clinicService.listAllClinics();
 
@@ -78,19 +80,19 @@ class ClinicServiceImplListAllTest {
 	}
 
 	@Test
-	void listAllClinics_ownerLookupFailure_stillReturnsClinic() {
+	void listAllClinics_doesNotRequireOwnerAffiliationLookup() {
 		User owner = User.builder().email("owner@example.com").password("x").uuid("u1").build();
 		owner.setId(9L);
 		Clinic clinic = Clinic.builder().uuid("c2").name("Beta").status(ClinicStatus.PENDING).owner(owner).build();
 		clinic.setId(2L);
-		when(clinicDao.findAllFetchOwner()).thenReturn(List.of(clinic));
-		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(2L, 9L))
-				.thenThrow(new IllegalStateException("affiliation query failed"));
+		when(clinicDao.findAllOrganizationFetchOwner()).thenReturn(List.of(clinic));
 
 		List<ClinicModel> list = assertDoesNotThrow(() -> clinicService.listAllClinics());
 
 		assertEquals(1, list.size());
 		assertEquals("PENDING", list.get(0).status());
 		assertEquals("c2", list.get(0).uuid());
+		verify(clinicDoctorRepository, never())
+				.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(2L, 9L);
 	}
 }
