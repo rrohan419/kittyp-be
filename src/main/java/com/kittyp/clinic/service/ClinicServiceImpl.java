@@ -175,7 +175,7 @@ public class ClinicServiceImpl implements ClinicService {
     private final ParentBookingEnrollmentService parentBookingEnrollmentService;
     private final VerificationCodeService verificationCodeService;
 
-    @Value("${app.frontend.base-url:http://localhost:8080}")
+    @Value("${app.frontend.base-url:https://kittyp.in}")
     private String frontendBaseUrl;
 
     @Override
@@ -268,10 +268,29 @@ public class ClinicServiceImpl implements ClinicService {
                 : clinic.getEmail();
         String customerName = owner != null ? owner.getFirstName() : null;
         String base = frontendBaseUrl == null || frontendBaseUrl.isBlank()
-                ? "http://localhost:8080"
+                ? "https://kittyp.in"
                 : frontendBaseUrl.replaceAll("/$", "");
         String clinicUrl = base + "/clinic";
-        zeptoMailService.sendClinicProfileVerified(email, customerName, clinic.getName(), clinicUrl);
+        String clinicName = clinic.getName();
+        String clinicUuid = clinic.getUuid();
+        Runnable sendNotification = () -> {
+            try {
+                zeptoMailService.sendClinicProfileVerified(email, customerName, clinicName, clinicUrl);
+            } catch (RuntimeException e) {
+                log.warn("Failed to send clinic verification email for clinic {}: {}",
+                        clinicUuid, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sendNotification.run();
+                }
+            });
+        } else {
+            sendNotification.run();
+        }
     }
 
     @Override

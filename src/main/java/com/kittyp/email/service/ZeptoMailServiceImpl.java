@@ -359,6 +359,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		emailAudit.setStatusCode(responseModel.getData().get(0).getCode());
 		emailAudit.setRequestId(responseModel.getRequestId());
 		emailAudit.setEventName("email_Sent");
+		emailAudit.setProvider("ZeptoMail");
 
 		emailAuditService.saveEmailAudit(emailAudit);
 		log.info("email audit added for email: " + recipientEmail + " request id : " + responseModel.getRequestId());
