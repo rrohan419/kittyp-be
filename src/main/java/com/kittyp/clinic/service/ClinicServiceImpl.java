@@ -241,9 +241,13 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     @Transactional
-    public ClinicModel updateStatusForAdmin(String clinicUuid, ClinicStatus status) {
+    public ClinicModel updateStatusForAdmin(String clinicUuid, ClinicStatus status, String rejectionReason) {
         if (status != ClinicStatus.VERIFIED && status != ClinicStatus.REJECTED) {
             throw new CustomException("Admin can only set VERIFIED or REJECTED", HttpStatus.BAD_REQUEST);
+        }
+        String normalizedReason = rejectionReason == null ? null : rejectionReason.trim();
+        if (status == ClinicStatus.REJECTED && (normalizedReason == null || normalizedReason.isBlank())) {
+            throw new CustomException("A rejection reason is required", HttpStatus.BAD_REQUEST);
         }
         Clinic clinic = clinicDao.findByUuid(clinicUuid);
         if (clinic == null) {
@@ -254,11 +258,26 @@ public class ClinicServiceImpl implements ClinicService {
         }
         ClinicStatus previous = clinic.getStatus();
         clinic.setStatus(status);
+        clinic.setRejectionReason(status == ClinicStatus.REJECTED ? normalizedReason : null);
         Clinic saved = clinicDao.saveClinic(clinic);
         if (status == ClinicStatus.VERIFIED && previous != ClinicStatus.VERIFIED) {
             notifyClinicVerified(saved);
+        } else if (status == ClinicStatus.REJECTED) {
+            notifyClinicRejected(saved, normalizedReason);
         }
         return clinicModel(saved);
+    }
+
+    @Override
+    @Transactional
+    public ClinicModel reapplyForVerification(String clinicUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        if (clinic.getStatus() != ClinicStatus.REJECTED) {
+            throw new CustomException("Only rejected clinics can be resubmitted", HttpStatus.BAD_REQUEST);
+        }
+        clinic.setStatus(ClinicStatus.PENDING);
+        return clinicModel(clinicDao.saveClinic(clinic));
     }
 
     private void notifyClinicVerified(Clinic clinic) {
@@ -272,15 +291,35 @@ public class ClinicServiceImpl implements ClinicService {
                 : frontendBaseUrl.replaceAll("/$", "");
         String clinicUrl = base + "/clinic";
         String clinicName = clinic.getName();
-        String clinicUuid = clinic.getUuid();
         Runnable sendNotification = () -> {
             try {
                 zeptoMailService.sendClinicProfileVerified(email, customerName, clinicName, clinicUrl);
             } catch (RuntimeException e) {
                 log.warn("Failed to send clinic verification email for clinic {}: {}",
-                        clinicUuid, e.getMessage());
+                        clinic.getUuid(), e.getMessage());
             }
         };
+        sendAfterCommit(sendNotification);
+    }
+
+    private void notifyClinicRejected(Clinic clinic, String rejectionReason) {
+        User owner = clinic.getOwner();
+        String email = owner != null && owner.getEmail() != null && !owner.getEmail().isBlank()
+                ? owner.getEmail()
+                : clinic.getEmail();
+        String customerName = owner != null ? owner.getFirstName() : null;
+        Runnable sendNotification = () -> {
+            try {
+                zeptoMailService.sendClinicProfileRejected(email, customerName, clinic.getName(), rejectionReason);
+            } catch (RuntimeException e) {
+                log.warn("Failed to send clinic rejection email for clinic {}: {}",
+                        clinic.getUuid(), e.getMessage());
+            }
+        };
+        sendAfterCommit(sendNotification);
+    }
+
+    private void sendAfterCommit(Runnable sendNotification) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -3208,7 +3247,8 @@ public class ClinicServiceImpl implements ClinicService {
         return new ClinicModel(clinic.getUuid(), clinic.getName(), clinic.getLicenseNumber(), clinic.getAddress(),
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
                 status, personal, waConfigured,
-                clinic.getCity(), clinic.getLatitude(), clinic.getLongitude(), clinic.getProfileImageUrl());
+                clinic.getCity(), clinic.getLatitude(), clinic.getLongitude(), clinic.getProfileImageUrl(),
+                clinic.getRejectionReason());
     }
 
     private static String whatsappTokenOrNull(Clinic clinic) {

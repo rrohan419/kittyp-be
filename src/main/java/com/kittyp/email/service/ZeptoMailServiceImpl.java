@@ -383,6 +383,16 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	public void sendClinicProfileRejected(String email, String customerName, String clinicName,
+			String rejectionReason) {
+		String name = blankToDefault(customerName, "there");
+		sendDedicated(email, name, TemplateConstant.ZOHO_CLINIC_PROFILE_REJECTED_TEMPLATE_ID, Map.of(
+				"customer_name", name,
+				"clinic_name", blankToDefault(clinicName, "Clinic"),
+				"rejection_reason", rejectionReason));
+	}
+
+	@Override
 	public void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
 			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename) {
 		if (email == null || email.isBlank()) {

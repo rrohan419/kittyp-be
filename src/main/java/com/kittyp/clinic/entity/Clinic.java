@@ -73,6 +73,9 @@ public class Clinic extends BaseEntity implements HasPublicId {
     @Column(nullable = false, length = 20)
     private ClinicStatus status;
 
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
     private String timezone;
 
     @Column(columnDefinition = "TEXT")

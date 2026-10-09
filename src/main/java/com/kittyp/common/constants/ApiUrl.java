@@ -194,6 +194,7 @@ public class ApiUrl {
 	public static final String CLINIC_PATIENT_HEALTH_EVENTS = CLINIC_PATIENT_DETAIL + "/health-events";
 	public static final String CLINIC_SHUTDOWN = CLINIC_BY_UUID + "/shutdown";
 	public static final String CLINIC_REOPEN = CLINIC_BY_UUID + "/reopen";
+	public static final String CLINIC_REAPPLY = CLINIC_BY_UUID + "/reapply";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
 	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
 	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";

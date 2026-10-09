@@ -14,6 +14,7 @@ import org.springframework.core.env.Environment;
 import com.kittyp.common.constants.TemplateConstant;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.dto.EmailAuditDto;
+import com.kittyp.email.dto.ZeptoMailDto;
 import com.kittyp.email.emailsender.ZeptoMailSender;
 import com.kittyp.email.model.ZeptoMailResponseModel;
 import com.kittyp.order.dao.OrderDao;
@@ -46,6 +47,34 @@ class ZeptoMailServiceImplTest {
 		verify(auditService).saveEmailAudit(auditCaptor.capture());
 		assertEquals("ZeptoMail", auditCaptor.getValue().getProvider());
 		assertEquals("request-123", auditCaptor.getValue().getRequestId());
+	}
+
+	@Test
+	void clinicRejectionEmailIncludesExpectedMergeInfo() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		EmailAuditService auditService = mock(EmailAuditService.class);
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(TemplateConstant.ZOHO_CLINIC_PROFILE_REJECTED_TEMPLATE_ID))
+				.thenReturn("clinic-rejected-template");
+		when(sender.sendEmail(any())).thenReturn(response());
+		ZeptoMailServiceImpl service = new ZeptoMailServiceImpl(
+				sender,
+				auditService,
+				mock(UserDao.class),
+				mock(VerificationCodeService.class),
+				mock(OrderDao.class),
+				environment);
+
+		service.sendClinicProfileRejected(
+				"owner@example.com", "Clinic Admin", "Paws Clinic", "Please upload a valid license.");
+
+		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(mailCaptor.capture());
+		assertEquals("clinic-rejected-template", mailCaptor.getValue().getTemplateKey());
+		assertEquals("Clinic Admin", mailCaptor.getValue().getMergeInfo().get("customer_name"));
+		assertEquals("Paws Clinic", mailCaptor.getValue().getMergeInfo().get("clinic_name"));
+		assertEquals("Please upload a valid license.",
+				mailCaptor.getValue().getMergeInfo().get("rejection_reason"));
 	}
 
 	private static ZeptoMailResponseModel response() {
