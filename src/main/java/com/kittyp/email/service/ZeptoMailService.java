@@ -51,4 +51,11 @@ public interface ZeptoMailService {
 
 	void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
 			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename);
+
+	/**
+	 * Appointment confirmation. Skips when {@code zoho.appointment.booked.email.template.id} is unset.
+	 * Not a reminder.
+	 */
+	void sendAppointmentBookedEmail(String recipientEmail, String parentName, String clinicName, String petName,
+			String whenLabel, String doctorName);
 }

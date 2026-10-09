@@ -53,6 +53,7 @@ import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.entity.DoctorReview;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.doctor.repository.DoctorReviewRepository;
 import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.health.dao.HealthEventDao;
@@ -132,6 +133,7 @@ public class VisitServiceImpl implements VisitService {
     private final JitsiMeetService jitsiMeetService;
     private final VerificationCodeService verificationCodeService;
     private final UserRepository userRepository;
+    private final ZeptoMailService zeptoMailService;
 
     @Override
     @Transactional
@@ -147,6 +149,7 @@ public class VisitServiceImpl implements VisitService {
         }
 
         Pet pet = resolvePetForWalkIn(clinic, request);
+        User parent = resolvePlatformOwner(pet);
         ClinicPetOwner owner = pet.getClinicOwner();
 
         Visit visit = Visit.builder()
@@ -166,6 +169,9 @@ public class VisitServiceImpl implements VisitService {
         parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         if (doctor != null) {
             notifyDoctorOfPatient(visit, "assigned");
+        }
+        if (parent != null) {
+            notifyParentOfWalkIn(visit, parent);
         }
         return toModel(visit, true);
     }
@@ -213,10 +219,6 @@ public class VisitServiceImpl implements VisitService {
         WalkInCreateRequest petRequest = new WalkInCreateRequest(
                 request.petUuid(), request.owner(), request.newPet(), null, null, null);
         Pet pet = resolvePetForWalkIn(clinic, petRequest);
-        ClinicPetOwner clinicOwner = pet.getClinicOwner();
-        if (clinicOwner != null) {
-            clinicOwner = clinicOwnerUserLinkService.linkOwnerIfUserExists(clinicOwner);
-        }
         User ownerUser = resolvePlatformOwner(pet);
 
         BookingMode mode = request.mode() == null ? BookingMode.IN_PERSON : request.mode();
@@ -245,6 +247,9 @@ public class VisitServiceImpl implements VisitService {
 
         parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         notifyDoctorOfBooking(booking);
+        if (ownerUser != null) {
+            notifyParentOfBooking(booking, ownerUser);
+        }
         return toBookingModel(booking);
     }
 
@@ -587,6 +592,122 @@ public class VisitServiceImpl implements VisitService {
             return WhatsAppSenderCredentials.of(doctor.getWhatsappToken(), doctor.getWhatsappPhoneNumberId());
         }
         return WhatsAppSenderCredentials.of(null, null);
+    }
+
+    /**
+     * Walk-in confirmation for the resolved pet parent. Appointment email and push only.
+     * No reminder email, WhatsApp reminder, or pet reminder.
+     */
+    private void notifyParentOfWalkIn(Visit visit, User parent) {
+        if (parent == null) {
+            return;
+        }
+        String email = parent.getEmail();
+        String parentName = userDisplayName(parent);
+        String petName = visit.getPet() != null && visit.getPet().getName() != null ? visit.getPet().getName()
+                : "your pet";
+        String clinicName = visit.getClinic() != null && visit.getClinic().getName() != null
+                ? visit.getClinic().getName()
+                : "Clinic";
+        String doctorName = appointmentDoctorName(visit.getDoctor());
+        String title = "Appointment booked";
+        String body = String.format("%s booked %s for a visit.", clinicName, petName);
+        runAfterCommit(() -> {
+            try {
+                if (email != null && !email.isBlank()) {
+                    userService.sendPushNotification(email, title, body);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to push walk-in notice: {}", e.getMessage());
+            }
+            try {
+                zeptoMailService.sendAppointmentBookedEmail(email, parentName, clinicName, petName, "Now",
+                        doctorName);
+            } catch (Exception e) {
+                log.warn("Failed to email walk-in notice: {}", e.getMessage());
+            }
+        });
+    }
+
+    /** Scheduled booking confirmation for the resolved pet parent. One callback, after commit. */
+    private void notifyParentOfBooking(Booking booking, User parent) {
+        if (parent == null || parent.getId() == null || booking == null || booking.getUuid() == null) {
+            return;
+        }
+        Long parentId = parent.getId();
+        String marker = "booking:" + booking.getUuid();
+        String email = parent.getEmail();
+        String parentName = userDisplayName(parent);
+        Pet pet = booking.getPet();
+        String petName = pet != null && pet.getName() != null ? pet.getName() : "your pet";
+        String clinicName = booking.getClinic() != null && booking.getClinic().getName() != null
+                ? booking.getClinic().getName()
+                : "Clinic";
+        String when = booking.getSlotStart() == null ? "soon" : booking.getSlotStart().toString();
+        String doctorName = appointmentDoctorName(booking.getDoctor());
+        String title = "Appointment booked";
+        String body = String.format("%s booked %s at %s.", clinicName, petName, when);
+        String payload = marker + " " + body;
+        runAfterCommit(() -> deliverParentBookingNotice(
+                parent, pet, parentId, marker, payload, email, parentName, clinicName, petName, when, doctorName,
+                title, body));
+    }
+
+    private void deliverParentBookingNotice(User parent, Pet pet, Long parentId, String marker, String payload,
+            String email, String parentName, String clinicName, String petName, String when, String doctorName,
+            String title, String body) {
+        boolean alreadySent = false;
+        try {
+            alreadySent = notificationLogRepository.existsByUser_IdAndTypeAndPayloadContaining(
+                    parentId, NotificationType.BOOKING_CREATED, marker);
+            if (!alreadySent) {
+                notificationLogRepository.save(NotificationLog.builder()
+                        .user(parent)
+                        .pet(pet)
+                        .type(NotificationType.BOOKING_CREATED)
+                        .payload(payload)
+                        .sentAt(LocalDateTime.now())
+                        .build());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to log parent booking notification: {}", e.getMessage());
+        }
+        if (alreadySent) {
+            return;
+        }
+        try {
+            if (email != null && !email.isBlank()) {
+                userService.sendPushNotification(email, title, body);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to push booking notice: {}", e.getMessage());
+        }
+        try {
+            zeptoMailService.sendAppointmentBookedEmail(email, parentName, clinicName, petName, when, doctorName);
+        } catch (Exception e) {
+            log.warn("Failed to email booking notice: {}", e.getMessage());
+        }
+    }
+
+    private static String appointmentDoctorName(DoctorProfile doctor) {
+        if (doctor == null || doctor.getUser() == null) {
+            return "your doctor";
+        }
+        String name = userDisplayName(doctor.getUser());
+        return name == null || name.isBlank() || "Owner".equals(name) ? "your doctor" : name;
+    }
+
+    private void runAfterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     @Override

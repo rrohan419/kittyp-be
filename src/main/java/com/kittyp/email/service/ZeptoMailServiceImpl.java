@@ -423,6 +423,18 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		}
 	}
 
+	@Override
+	public void sendAppointmentBookedEmail(String recipientEmail, String parentName, String clinicName,
+			String petName, String whenLabel, String doctorName) {
+		String name = blankToDefault(parentName, "there");
+		sendDedicated(recipientEmail, name, TemplateConstant.ZOHO_APPOINTMENT_BOOKED_EMAIL_TEMPLATE_ID, Map.of(
+				"customer_name", name,
+				"clinic_name", blankToDefault(clinicName, "Clinic"),
+				"pet_name", blankToDefault(petName, "your pet"),
+				"appointment_time", blankToDefault(whenLabel, ""),
+				"doctor_name", blankToDefault(doctorName, "your doctor")));
+	}
+
 	private static String blankToDefault(String value, String fallback) {
 		return value == null || value.isBlank() ? fallback : value;
 	}
