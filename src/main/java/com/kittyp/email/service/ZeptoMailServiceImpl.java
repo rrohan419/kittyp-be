@@ -359,6 +359,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		emailAudit.setStatusCode(responseModel.getData().get(0).getCode());
 		emailAudit.setRequestId(responseModel.getRequestId());
 		emailAudit.setEventName("email_Sent");
+		emailAudit.setProvider("ZeptoMail");
 
 		emailAuditService.saveEmailAudit(emailAudit);
 		log.info("email audit added for email: " + recipientEmail + " request id : " + responseModel.getRequestId());
@@ -373,12 +374,30 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	public void sendDoctorProfileRejected(String email, String doctorName, String rejectionReason) {
+		String name = blankToDefault(doctorName, "Doctor");
+		sendDedicated(email, name, TemplateConstant.ZOHO_DOCTOR_PROFILE_REJECTED_TEMPLATE_ID, Map.of(
+				"customer_name", name,
+				"rejection_reason", rejectionReason));
+	}
+
+	@Override
 	public void sendClinicProfileVerified(String email, String customerName, String clinicName, String clinicUrl) {
 		String name = blankToDefault(customerName, "there");
 		sendDedicated(email, name, TemplateConstant.ZOHO_CLINIC_PROFILE_VERIFIED_TEMPLATE_ID, Map.of(
 				"customer_name", name,
 				"clinic_name", blankToDefault(clinicName, "Clinic"),
 				"clinic_url", blankToDefault(clinicUrl, "")));
+	}
+
+	@Override
+	public void sendClinicProfileRejected(String email, String customerName, String clinicName,
+			String rejectionReason) {
+		String name = blankToDefault(customerName, "there");
+		sendDedicated(email, name, TemplateConstant.ZOHO_CLINIC_PROFILE_REJECTED_TEMPLATE_ID, Map.of(
+				"customer_name", name,
+				"clinic_name", blankToDefault(clinicName, "Clinic"),
+				"rejection_reason", rejectionReason));
 	}
 
 	@Override

@@ -44,6 +44,7 @@ public class ApiUrl {
 
 	public static final String DOCTOR_BASE_URL = "/doctor";
 	public static final String DOCTOR_ME = DOCTOR_BASE_URL + "/me";
+	public static final String DOCTOR_REAPPLY = DOCTOR_BASE_URL + "/reapply";
 	public static final String DOCTOR_ME_AVAILABILITY = DOCTOR_ME + "/availability";
 
 	public static final String UPLOAD_SIGNUP_DOCUMENTS = "/upload/signup-documents";
@@ -113,6 +114,9 @@ public class ApiUrl {
 
 	// public controller
 	public static final String PUBLIC_BASE_URL = "/public";
+	public static final String PUBLIC_TIMEZONES = PUBLIC_BASE_URL + "/timezones";
+	public static final String PUBLIC_PLACES_AUTOCOMPLETE = PUBLIC_BASE_URL + "/places/autocomplete";
+	public static final String PUBLIC_PLACES_DETAILS = PUBLIC_BASE_URL + "/places/details";
 	public static final String SITEMAP = PUBLIC_BASE_URL + "/sitemap.xml";
 	public static final String PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG = PUBLIC_BASE_URL + "/whatsapp/embedded-signup-config";
 	public static final String PUBLIC_CONTACT = PUBLIC_BASE_URL + "/contact";
@@ -192,6 +196,7 @@ public class ApiUrl {
 	public static final String CLINIC_PATIENT_HEALTH_EVENTS = CLINIC_PATIENT_DETAIL + "/health-events";
 	public static final String CLINIC_SHUTDOWN = CLINIC_BY_UUID + "/shutdown";
 	public static final String CLINIC_REOPEN = CLINIC_BY_UUID + "/reopen";
+	public static final String CLINIC_REAPPLY = CLINIC_BY_UUID + "/reapply";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
 	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
 	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";

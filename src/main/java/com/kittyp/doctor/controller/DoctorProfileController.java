@@ -1,5 +1,6 @@
 package com.kittyp.doctor.controller;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 
@@ -23,8 +24,10 @@ import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
+import com.kittyp.doctor.dto.DoctorReapplyRequest;
 import com.kittyp.doctor.dto.DoctorVerificationModel;
 import com.kittyp.doctor.entity.DoctorProfile;
+import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.notification.service.WhatsAppConnectionService;
 import com.kittyp.notification.service.WhatsAppConnectionStatuses;
 import com.kittyp.notification.service.WhatsAppCredentialsVerifier;
@@ -101,8 +104,48 @@ public class DoctorProfileController {
                 profile.isCheckClinicPhotos(),
                 profile.getSubmittedAt(),
                 profile.getReviewedAt(),
-                profile.getReviewNotes());
+                profile.getReviewNotes(),
+                profile.getRejectionReason());
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PostMapping(ApiUrl.DOCTOR_REAPPLY)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<DoctorVerificationModel>> reapply(
+            @Valid @RequestBody DoctorReapplyRequest request) {
+        DoctorProfile profile = requireMyProfile();
+        if (profile.getStatus() != DoctorStatus.REJECTED) {
+            throw new CustomException("Only rejected doctor profiles can be resubmitted", HttpStatus.BAD_REQUEST);
+        }
+        if (StringUtils.hasText(request.getRegistrationNumber())) {
+            profile.setRegistrationNumber(request.getRegistrationNumber().trim());
+        }
+        if (StringUtils.hasText(request.getDegreeCertificateUrl())) {
+            profile.setDegreeCertificateUrl(request.getDegreeCertificateUrl().trim());
+        }
+        if (StringUtils.hasText(request.getRegistrationCertificateUrl())) {
+            profile.setRegistrationCertificateUrl(request.getRegistrationCertificateUrl().trim());
+        }
+        if (StringUtils.hasText(request.getGovernmentIdUrl())) {
+            profile.setGovernmentIdUrl(request.getGovernmentIdUrl().trim());
+        }
+        if (!StringUtils.hasText(profile.getRegistrationNumber())
+                || !StringUtils.hasText(profile.getDegreeCertificateUrl())
+                || !StringUtils.hasText(profile.getRegistrationCertificateUrl())) {
+            throw new CustomException("Registration number, degree, and registration certificate are required",
+                    HttpStatus.BAD_REQUEST);
+        }
+        profile.setCheckMobileOtp(false);
+        profile.setCheckEmailOtp(false);
+        profile.setCheckGovernmentId(false);
+        profile.setCheckDegree(false);
+        profile.setCheckRegistrationCertificate(false);
+        profile.setCheckRegistrationNumber(false);
+        profile.setReviewNotes(null);
+        profile.setSubmittedAt(LocalDateTime.now());
+        profile.setStatus(DoctorStatus.DOCUMENTS_SUBMITTED);
+        doctorProfileDao.save(profile);
+        return myProfile();
     }
 
     @GetMapping(ApiUrl.DOCTOR_WHATSAPP_SETTINGS)
