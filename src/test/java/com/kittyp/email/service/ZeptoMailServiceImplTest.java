@@ -77,6 +77,33 @@ class ZeptoMailServiceImplTest {
 				mailCaptor.getValue().getMergeInfo().get("rejection_reason"));
 	}
 
+	@Test
+	void doctorRejectionEmailIncludesExpectedMergeInfo() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		EmailAuditService auditService = mock(EmailAuditService.class);
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(TemplateConstant.ZOHO_DOCTOR_PROFILE_REJECTED_TEMPLATE_ID))
+				.thenReturn("doctor-rejected-template");
+		when(sender.sendEmail(any())).thenReturn(response());
+		ZeptoMailServiceImpl service = new ZeptoMailServiceImpl(
+				sender,
+				auditService,
+				mock(UserDao.class),
+				mock(VerificationCodeService.class),
+				mock(OrderDao.class),
+				environment);
+
+		service.sendDoctorProfileRejected(
+				"doctor@example.com", "Dr Casey", "Registration certificate is unreadable.");
+
+		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(mailCaptor.capture());
+		assertEquals("doctor-rejected-template", mailCaptor.getValue().getTemplateKey());
+		assertEquals("Dr Casey", mailCaptor.getValue().getMergeInfo().get("customer_name"));
+		assertEquals("Registration certificate is unreadable.",
+				mailCaptor.getValue().getMergeInfo().get("rejection_reason"));
+	}
+
 	private static ZeptoMailResponseModel response() {
 		ZeptoMailResponseModel.ZeptoMailData data = new ZeptoMailResponseModel.ZeptoMailData();
 		data.setCode("OK");
