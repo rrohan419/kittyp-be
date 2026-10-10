@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.kittyp.common.constants.AppConstant;
+import com.kittyp.common.constants.ExceptionConstant;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.util.PiiMasker;
 import com.kittyp.notification.service.NotificationInputSanitizer;
@@ -30,28 +34,23 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class PlacesProxyService {
 
-	private static final String AUTOCOMPLETE = "https://places.googleapis.com/v1/places:autocomplete";
-	private static final String DETAILS = "https://places.googleapis.com/v1/places/{placeId}";
-	private static final String DETAILS_FIELD_MASK = "displayName,formattedAddress,addressComponents,location";
-	private static final String API_KEY_HEADER = "X-Goog-Api-Key";
-	private static final String FIELD_MASK_HEADER = "X-Goog-FieldMask";
-	private static final String UNAVAILABLE_MESSAGE = "Address search is temporarily unavailable";
-	private static final String FAILED_MESSAGE = "Places lookup failed";
-
 	private final RestClient restClient;
 	private final ObjectMapper objectMapper;
 	private final String apiKey;
 	private final String referer;
+	private final Environment env;
 
 	public PlacesProxyService(
 			RestClient restClient,
 			ObjectMapper objectMapper,
-			@Value("${google.maps.api.key:}") String apiKey,
-			@Value("${google.maps.api.referer:}") String referer) {
+			@Value("${google.api.key:}") String apiKey,
+			@Value("${google.maps.api.referer:}") String referer,
+			Environment env) {
 		this.restClient = restClient;
 		this.objectMapper = objectMapper;
 		this.apiKey = apiKey == null ? "" : apiKey.trim();
 		this.referer = referer == null ? "" : referer.trim();
+		this.env = env;
 	}
 
 	public AutocompleteResponse autocomplete(String query, String sessionToken) {
@@ -77,7 +76,7 @@ public class PlacesProxyService {
 		}
 
 		ResponseEntity<String> response = restClient.post()
-				.uri(AUTOCOMPLETE)
+				.uri(env.getProperty(AppConstant.GOOGLE_AUTOCOMPLETE_API_URL))
 				.headers(this::applyGoogleHeaders)
 				.body(body.toString())
 				.retrieve()
@@ -110,7 +109,7 @@ public class PlacesProxyService {
 		}
 		requireApiKey("details");
 
-		String uri = UriComponentsBuilder.fromUriString(DETAILS)
+		String uri = UriComponentsBuilder.fromUriString(env.getProperty(AppConstant.GOOGLE_PLACE_DETAIL_API_URL))
 				.queryParam("sessionToken", blankToNull(sessionToken))
 				.buildAndExpand(placeId.trim())
 				.encode()
@@ -120,7 +119,7 @@ public class PlacesProxyService {
 				.uri(uri)
 				.headers(headers -> {
 					applyGoogleHeaders(headers);
-					headers.set(FIELD_MASK_HEADER, DETAILS_FIELD_MASK);
+					headers.set(KeyConstant.FIELD_MASK_HEADER, KeyConstant.DETAILS_FIELD_MASK);
 				})
 				.retrieve()
 				.onStatus(HttpStatusCode::isError, (request, res) -> {
@@ -151,7 +150,7 @@ public class PlacesProxyService {
 	}
 
 	private void applyGoogleHeaders(HttpHeaders headers) {
-		headers.set(API_KEY_HEADER, apiKey);
+		headers.set(KeyConstant.API_KEY_HEADER, apiKey);
 		if (!referer.isBlank()) {
 			headers.set(HttpHeaders.REFERER, referer);
 		}
@@ -159,8 +158,8 @@ public class PlacesProxyService {
 
 	private void requireApiKey(String operation) {
 		if (apiKey.isBlank()) {
-			log.error("Places {} unavailable: google.maps.api.key is blank", operation);
-			throw new CustomException(UNAVAILABLE_MESSAGE, HttpStatus.SERVICE_UNAVAILABLE);
+			log.error("Places {} unavailable: google.api.key is blank", operation);
+			throw new CustomException(env.getProperty(ExceptionConstant.GOOGLE_PLACES_UNAVAILABLE_MESSAGE), HttpStatus.SERVICE_UNAVAILABLE);
 		}
 	}
 
@@ -171,7 +170,7 @@ public class PlacesProxyService {
 			root = objectMapper.readTree(body == null || body.isBlank() ? "{}" : body);
 		} catch (Exception e) {
 			log.error("Places {} returned an unreadable response: httpStatus={}", operation, response.getStatusCode());
-			throw new CustomException(FAILED_MESSAGE, HttpStatus.BAD_GATEWAY, e);
+			throw new CustomException(env.getProperty(ExceptionConstant.GOOGLE_PLACES_FAILED_MESSAGE), HttpStatus.BAD_GATEWAY, e);
 		}
 		if (response.getStatusCode().isError()) {
 			throw googleFailure(root, operation, response.getStatusCode());
@@ -186,9 +185,9 @@ public class PlacesProxyService {
 				status.isBlank() ? "MISSING" : status, withoutApiKey(error.path("message").asText("")));
 		if (httpStatus.value() == HttpStatus.FORBIDDEN.value()
 				|| httpStatus.value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
-			return new CustomException(UNAVAILABLE_MESSAGE, HttpStatus.SERVICE_UNAVAILABLE);
+			return new CustomException(env.getProperty(ExceptionConstant.GOOGLE_PLACES_UNAVAILABLE_MESSAGE), HttpStatus.SERVICE_UNAVAILABLE);
 		}
-		return new CustomException(FAILED_MESSAGE, HttpStatus.BAD_GATEWAY);
+		return new CustomException(env.getProperty(ExceptionConstant.GOOGLE_PLACES_FAILED_MESSAGE), HttpStatus.BAD_GATEWAY);
 	}
 
 	private String withoutApiKey(String message) {

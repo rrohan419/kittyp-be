@@ -4,46 +4,49 @@
 package com.kittyp.common.constants;
 
 /**
- * @author rrohan419@gmail.com 
+ * @author rrohan419@gmail.com
  */
 public class AppConstant {
-	private AppConstant() {}
-	
-	public static final String KITTYP_EMAIL_TEMPLATE_LOGO= "https://www.kittyp.in/android-chrome-512x512.png";
-	public static final String KITTYP_PUSH_NOTIFICATION_LOGO= "https://www.kittyp.in/android-chrome-512x512.png";
+	private AppConstant() {
+	}
 
-		//AWS KEYS
-		public static final String AWS_INVOICE_BUCKET_NAME="aws.invoice.bucket.name";
-		public static final String S3_REGION="amazon.s3.region";
-		public static final String AWS_ACCESS_KEY_ID="aws.access.key.id";
-		public static final String AWS_SECRET_KEY = "aws.secret.key";
-		
-		// AWS S3 constants
-	    public static final String S3_BUCKET_NAME = "amazon.s3.bucket.name";
-	    public static final String S3_BASE_URL = "amazon.s3.base.url";
-	    public static final String S3_PRESIGNED_URL_EXPIRATION_TIME = "amazon.s3.presignedurl.expiration.minutes";
-	    public static final String S3_PUBLIC_BUCKET_NAME = "amazon.s3.public.bucket.name";
+	public static final String KITTYP_EMAIL_TEMPLATE_LOGO = "https://www.kittyp.in/android-chrome-512x512.png";
+	public static final String KITTYP_PUSH_NOTIFICATION_LOGO = "https://www.kittyp.in/android-chrome-512x512.png";
 
-	    // File
-	    public static final String MAX_FILE_SIZE_DOCUMENT = "max.file.size.document";
-	    public static final String MAX_FILE_SIZE_PROFILE = "max.file.size.profile";
-	    public static final String MAX_FILE_NAME_LENGTH = "max.file.name.length";
-	    public static final String ATTACHMENT_HEADER = "attachment;";
-	    public static final String FILE_NAME = "filename=";
-	    
-	    // Zoho
-	    public static final String KITTYP = "KittyP";
-		public static final String ZOHO_BEARER_KEY = "Zoho-enczapikey ";
-	    public static final String ZOHO_API_KEY="zoho.api.key";
-	    public static final String KITTYP_MAIL_ID ="kittyp.mail.id";
-	    public static final String KITTYP_SUPPORT_MAIL_ID = "kittyp.support.mail.id";
-	    public static final String ZOHO_MAIL_BASE_URL = "zoho.mail.base.url";
-	    public static final String ZOHO_EMAIL_SEND_URL="zoho.email.send.url.with.template";
-   
-	    public static final String ZEPTOMAIL_WEBHOOK_SECRET = "zeptomail.webhook.secret";
-	    
+	// AWS KEYS
+	public static final String AWS_INVOICE_BUCKET_NAME = "aws.invoice.bucket.name";
+	public static final String S3_REGION = "amazon.s3.region";
+	public static final String AWS_ACCESS_KEY_ID = "aws.access.key.id";
+	public static final String AWS_SECRET_KEY = "aws.secret.key";
 
-		// Google
-		public static final String GOOGLE_WEATHER_API_URL = "google.weather.api.url";
-		public static final String GOOGLE_API_KEY = "google.api.key=";
+	// AWS S3 constants
+	public static final String S3_BUCKET_NAME = "amazon.s3.bucket.name";
+	public static final String S3_BASE_URL = "amazon.s3.base.url";
+	public static final String S3_PRESIGNED_URL_EXPIRATION_TIME = "amazon.s3.presignedurl.expiration.minutes";
+	public static final String S3_PUBLIC_BUCKET_NAME = "amazon.s3.public.bucket.name";
+
+	// File
+	public static final String MAX_FILE_SIZE_DOCUMENT = "max.file.size.document";
+	public static final String MAX_FILE_SIZE_PROFILE = "max.file.size.profile";
+	public static final String MAX_FILE_NAME_LENGTH = "max.file.name.length";
+	public static final String ATTACHMENT_HEADER = "attachment;";
+	public static final String FILE_NAME = "filename=";
+
+	// Zoho
+	public static final String KITTYP = "KittyP";
+	public static final String ZOHO_BEARER_KEY = "Zoho-enczapikey ";
+	public static final String ZOHO_API_KEY = "zoho.api.key";
+	public static final String KITTYP_MAIL_ID = "kittyp.mail.id";
+	public static final String KITTYP_SUPPORT_MAIL_ID = "kittyp.support.mail.id";
+	public static final String ZOHO_MAIL_BASE_URL = "zoho.mail.base.url";
+	public static final String ZOHO_EMAIL_SEND_URL = "zoho.email.send.url.with.template";
+
+	public static final String ZEPTOMAIL_WEBHOOK_SECRET = "zeptomail.webhook.secret";
+
+	// Google
+	public static final String GOOGLE_WEATHER_API_URL = "google.weather.api.url";
+	public static final String GOOGLE_API_KEY = "google.api.key";
+	public static final String GOOGLE_PLACES_API_URL = "google.places.api.url";
+	public static final String GOOGLE_AUTOCOMPLETE_API_URL = "google.autocomplete.api.url";
+	public static final String GOOGLE_PLACE_DETAIL_API_URL = "google.place.detail.api.url";
 }
