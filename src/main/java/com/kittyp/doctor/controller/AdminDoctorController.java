@@ -78,8 +78,6 @@ public class AdminDoctorController {
     public ResponseEntity<SuccessResponse<DoctorVerificationModel>> updateChecklist(
             @PathVariable String uuid, @RequestBody DoctorChecklistUpdateRequest request) {
         DoctorProfile profile = doctorProfileDao.findByUuid(uuid);
-        if (request.getCheckMobileOtp() != null) profile.setCheckMobileOtp(request.getCheckMobileOtp());
-        if (request.getCheckEmailOtp() != null) profile.setCheckEmailOtp(request.getCheckEmailOtp());
         if (request.getCheckGovernmentId() != null) profile.setCheckGovernmentId(request.getCheckGovernmentId());
         if (request.getCheckDegree() != null) profile.setCheckDegree(request.getCheckDegree());
         if (request.getCheckRegistrationCertificate() != null) {
@@ -109,6 +107,12 @@ public class AdminDoctorController {
         DoctorProfile profile = doctorProfileDao.findByUuid(uuid);
         DoctorStatus previous = profile.getStatus();
         DoctorStatus next = request.getStatus();
+        String rejectionReason = request.getRejectionReason() == null
+                ? null
+                : request.getRejectionReason().trim();
+        if (next == DoctorStatus.REJECTED && (rejectionReason == null || rejectionReason.isBlank())) {
+            throw new CustomException("A rejection reason is required", HttpStatus.BAD_REQUEST);
+        }
 
         if (next == DoctorStatus.VERIFIED || next == DoctorStatus.PUBLISHED) {
             if (!allApplicableChecksPassed(profile)) {
@@ -122,6 +126,11 @@ public class AdminDoctorController {
         if (request.getReviewNotes() != null) {
             profile.setReviewNotes(request.getReviewNotes());
         }
+        if (next == DoctorStatus.REJECTED) {
+            profile.setRejectionReason(rejectionReason);
+        } else if (next == DoctorStatus.VERIFIED) {
+            profile.setRejectionReason(null);
+        }
         if (next == DoctorStatus.VERIFIED || next == DoctorStatus.PUBLISHED || next == DoctorStatus.REJECTED) {
             profile.setReviewedAt(LocalDateTime.now());
         }
@@ -129,6 +138,8 @@ public class AdminDoctorController {
         DoctorProfile saved = doctorProfileDao.save(profile);
         if (next == DoctorStatus.VERIFIED && previous != DoctorStatus.VERIFIED) {
             notifyDoctorVerified(saved);
+        } else if (next == DoctorStatus.REJECTED) {
+            notifyDoctorRejected(saved, rejectionReason);
         }
 
         Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
@@ -151,20 +162,33 @@ public class AdminDoctorController {
         log.info("Doctor profile verified email queued for {}", user.getEmail());
     }
 
+    private void notifyDoctorRejected(DoctorProfile profile, String rejectionReason) {
+        User user = profile.getUser();
+        if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+            log.warn("Skipping doctor rejection email for profile {}: owner email is unavailable", profile.getUuid());
+            return;
+        }
+        String name = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
+                + (user.getLastName() != null ? user.getLastName() : "")).trim();
+        try {
+            zeptoMailService.sendDoctorProfileRejected(user.getEmail(), name, rejectionReason);
+        } catch (RuntimeException e) {
+            log.warn("Failed to send doctor rejection email for profile {}: {}",
+                    profile.getUuid(), e.getMessage());
+        }
+    }
+
     private boolean anyChecked(DoctorProfile p) {
-        return p.isCheckMobileOtp() || p.isCheckEmailOtp() || p.isCheckGovernmentId() || p.isCheckDegree()
+        return p.isCheckGovernmentId() || p.isCheckDegree()
                 || p.isCheckRegistrationCertificate() || p.isCheckClinicAddress()
                 || p.isCheckRegistrationNumber() || p.isCheckGoogleMapsMatch() || p.isCheckClinicPhotos();
     }
 
     /**
-     * Doctor verification is credentials-only (OTP + documents). Clinic address, maps,
+     * Doctor verification is credentials-only. Clinic address, maps,
      * and photos are verified on the clinic account, not the doctor.
      */
     private boolean allApplicableChecksPassed(DoctorProfile p) {
-        if (!p.isCheckMobileOtp() || !p.isCheckEmailOtp()) {
-            return false;
-        }
         if (!p.isCheckDegree() || !p.isCheckRegistrationCertificate() || !p.isCheckRegistrationNumber()) {
             return false;
         }
@@ -239,6 +263,7 @@ public class AdminDoctorController {
                 p.isCheckClinicPhotos(),
                 p.getSubmittedAt(),
                 p.getReviewedAt(),
-                p.getReviewNotes());
+                p.getReviewNotes(),
+                p.getRejectionReason());
     }
 }

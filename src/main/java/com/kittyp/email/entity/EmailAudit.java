@@ -40,4 +40,7 @@ public class EmailAudit extends BaseEntity{
 	
 	@Column
 	private String recipientEmail;
+
+	@Column(nullable = false, length = 50)
+	private String provider;
 }

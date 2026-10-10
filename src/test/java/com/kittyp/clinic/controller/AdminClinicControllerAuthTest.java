@@ -67,7 +67,7 @@ class AdminClinicControllerAuthTest {
 		Mockito.reset(clinicService);
 		when(clinicService.listAllClinics()).thenReturn(List.of(SAMPLE));
 		when(clinicService.getByUuidForAdmin(anyString())).thenReturn(SAMPLE);
-		when(clinicService.updateStatusForAdmin(anyString(), any())).thenReturn(SAMPLE);
+		when(clinicService.updateStatusForAdmin(anyString(), any(), any())).thenReturn(SAMPLE);
 		mockMvc = MockMvcBuilders.webAppContextSetup(wac).apply(springSecurity()).build();
 	}
 
@@ -111,7 +111,17 @@ class AdminClinicControllerAuthTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"status\":\"VERIFIED\"}"))
 				.andExpect(status().isOk());
-		verify(clinicService).updateStatusForAdmin("CLINIC1", ClinicStatus.VERIFIED);
+		verify(clinicService).updateStatusForAdmin("CLINIC1", ClinicStatus.VERIFIED, null);
+	}
+
+	@Test
+	void updateStatus_rejectedPassesReason() throws Exception {
+		mockMvc.perform(patch("/api/v1/admin/clinics/CLINIC1/status")
+				.with(user("admin").authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"status\":\"REJECTED\",\"rejectionReason\":\"Missing license\"}"))
+				.andExpect(status().isOk());
+		verify(clinicService).updateStatusForAdmin("CLINIC1", ClinicStatus.REJECTED, "Missing license");
 	}
 
 	@Test
@@ -121,7 +131,7 @@ class AdminClinicControllerAuthTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"status\":\"VERIFIED\"}"))
 				.andExpect(status().isForbidden());
-		verify(clinicService, never()).updateStatusForAdmin(anyString(), eq(ClinicStatus.VERIFIED));
+		verify(clinicService, never()).updateStatusForAdmin(anyString(), eq(ClinicStatus.VERIFIED), any());
 	}
 
 	@Configuration

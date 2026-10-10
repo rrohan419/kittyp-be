@@ -50,7 +50,8 @@ public class AdminClinicController {
     @PreAuthorize(KeyConstant.IS_ROLE_ADMIN_OR_MODERATOR)
     public ResponseEntity<SuccessResponse<ClinicModel>> updateStatus(@PathVariable String uuid,
             @Valid @RequestBody ClinicStatusUpdateRequest request) {
-        return responseBuilder.buildSuccessResponse(clinicService.updateStatusForAdmin(uuid, request.status()),
+        return responseBuilder.buildSuccessResponse(
+                clinicService.updateStatusForAdmin(uuid, request.status(), request.rejectionReason()),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 }

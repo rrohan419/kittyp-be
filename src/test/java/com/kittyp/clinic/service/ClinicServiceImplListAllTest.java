@@ -2,6 +2,8 @@ package com.kittyp.clinic.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,12 +17,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.kittyp.clinic.dao.ClinicDao;
+import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.email.service.ZeptoMailService;
+import com.kittyp.common.exception.CustomException;
+import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.User;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +35,9 @@ class ClinicServiceImplListAllTest {
 	private ClinicDao clinicDao;
 
 	@Mock
+	private ClinicStaffDao clinicStaffDao;
+
+	@Mock
 	private ClinicDoctorRepository clinicDoctorRepository;
 
 	@Mock
@@ -37,6 +45,9 @@ class ClinicServiceImplListAllTest {
 
 	@Mock
 	private DoctorProfileDao doctorProfileDao;
+
+	@Mock
+	private UserDao userDao;
 
 	@InjectMocks
 	private ClinicServiceImpl clinicService;
@@ -73,10 +84,54 @@ class ClinicServiceImplListAllTest {
 		when(clinicDao.findByUuid("c1")).thenReturn(clinic);
 		when(clinicDao.saveClinic(clinic)).thenAnswer(invocation -> invocation.getArgument(0));
 
-		ClinicModel model = clinicService.updateStatusForAdmin("c1", ClinicStatus.VERIFIED);
+		ClinicModel model = clinicService.updateStatusForAdmin("c1", ClinicStatus.VERIFIED, null);
 
 		assertEquals("VERIFIED", model.status());
 		assertEquals(ClinicStatus.VERIFIED, clinic.getStatus());
+		assertNull(clinic.getRejectionReason());
+	}
+
+	@Test
+	void updateStatusForAdmin_rejectedStoresReasonAndNotifiesOwner() {
+		User owner = User.builder().email("owner@example.com").firstName("Casey").password("x").uuid("u1").build();
+		Clinic clinic = Clinic.builder().uuid("c1").name("Alpha").email("clinic@example.com")
+				.status(ClinicStatus.PENDING).owner(owner).build();
+		clinic.setId(1L);
+		when(clinicDao.findByUuid("c1")).thenReturn(clinic);
+		when(clinicDao.saveClinic(clinic)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		ClinicModel model = clinicService.updateStatusForAdmin("c1", ClinicStatus.REJECTED, "  Missing license  ");
+
+		assertEquals("REJECTED", model.status());
+		assertEquals("Missing license", model.rejectionReason());
+		assertEquals("Missing license", clinic.getRejectionReason());
+		verify(zeptoMailService).sendClinicProfileRejected(
+				"owner@example.com", "Casey", "Alpha", "Missing license");
+	}
+
+	@Test
+	void updateStatusForAdmin_rejectedRequiresReason() {
+		assertThrows(CustomException.class,
+				() -> clinicService.updateStatusForAdmin("c1", ClinicStatus.REJECTED, "  "));
+	}
+
+	@Test
+	void reapplyForVerification_resetsStatusAndKeepsRejectionReason() {
+		User owner = User.builder().email("owner@example.com").password("x").uuid("u1").build();
+		owner.setId(5L);
+		Clinic clinic = Clinic.builder().uuid("c1").name("Alpha").status(ClinicStatus.REJECTED)
+				.rejectionReason("Missing license").owner(owner).build();
+		clinic.setId(1L);
+		when(clinicDao.findByUuid("c1")).thenReturn(clinic);
+		when(userDao.userByEmail("owner@example.com")).thenReturn(owner);
+		when(clinicStaffDao.isActiveMember(1L, 5L)).thenReturn(false);
+		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(1L, 5L)).thenReturn(false);
+		when(clinicDao.saveClinic(clinic)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		ClinicModel model = clinicService.reapplyForVerification("c1", "owner@example.com");
+
+		assertEquals("PENDING", model.status());
+		assertEquals("Missing license", model.rejectionReason());
 	}
 
 	@Test
