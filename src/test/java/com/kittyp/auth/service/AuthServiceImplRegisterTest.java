@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
@@ -30,7 +31,9 @@ import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
+import com.kittyp.auth.dto.ActivateRoleRequest;
 import com.kittyp.common.constants.ResponseMessage;
+import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.dto.PublicSignupRequestDto;
 import com.kittyp.common.dto.SignupClinicRequestDto;
 import com.kittyp.common.dto.SignupDoctorRequestDto;
@@ -459,6 +462,38 @@ class AuthServiceImplRegisterTest {
 				&& Double.valueOf(12.9716).equals(clinic.getLatitude())
 				&& Double.valueOf(77.5946).equals(clinic.getLongitude())
 				&& "ChIJLxZ2B0cWrjsR7X7pV4".equals(clinic.getGooglePlaceId())));
+	}
+
+	@Test
+	void registerClinic_existingAccount_forwardsPlaceLocation() {
+		SignupClinicRequestDto req = new SignupClinicRequestDto();
+		req.setFirstName("Ada");
+		req.setEmail("ada@example.com");
+		req.setPassword("Passw0rd!");
+		req.setClinicName("Paws Clinic");
+		req.setAddress("1 Main Street, Example City");
+		req.setCity("Example City");
+		req.setLatitude(12.9716);
+		req.setLongitude(77.5946);
+		req.setGooglePlaceId("ChIJLxZ2B0cWrjsR7X7pV4");
+
+		User existing = new User();
+		existing.setId(4L);
+		existing.setEmail(req.getEmail());
+		existing.addRole(role(ERole.ROLE_DOCTOR));
+		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(true);
+		when(userDao.userByEmail(req.getEmail())).thenReturn(existing);
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
+		when(roleActivationFacade.activate(any(), any())).thenReturn(new MessageResponse("Clinic admin role added."));
+
+		authService.registerClinic(req);
+
+		verify(roleActivationFacade).activate(eq(req.getEmail()), argThat((ActivateRoleRequest activation) ->
+				"Example City".equals(activation.getCity())
+						&& Double.valueOf(12.9716).equals(activation.getLatitude())
+						&& Double.valueOf(77.5946).equals(activation.getLongitude())
+						&& "ChIJLxZ2B0cWrjsR7X7pV4".equals(activation.getGooglePlaceId())
+						&& "1 Main Street, Example City".equals(activation.getAddress())));
 	}
 
 	private void stubDoctorReady(PublicSignupRequestDto req) {

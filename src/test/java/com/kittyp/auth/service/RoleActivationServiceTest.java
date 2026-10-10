@@ -154,6 +154,11 @@ class RoleActivationServiceTest {
 		ActivateRoleRequest request = new ActivateRoleRequest();
 		request.setRole(SignupRole.CLINIC);
 		request.setClinicName("Paws Hospital");
+		request.setAddress("1 Main Street, Example City");
+		request.setCity("Example City");
+		request.setLatitude(12.9716);
+		request.setLongitude(77.5946);
+		request.setGooglePlaceId("ChIJLxZ2B0cWrjsR7X7pV4");
 
 		RoleActivationResult first = service.activate(user.getEmail(), request);
 		RoleActivationResult second = service.activate(user.getEmail(), request);
@@ -164,7 +169,11 @@ class RoleActivationServiceTest {
 		assertTrue(hasRole(user, ERole.ROLE_CLINIC_ADMIN));
 		verify(clinicDao, times(1)).saveClinic(argThat(clinic -> clinic.getStatus() == ClinicStatus.PENDING
 				&& clinic.getOwner() == user
-				&& "Paws Hospital".equals(clinic.getName())));
+				&& "Paws Hospital".equals(clinic.getName())
+				&& "Example City".equals(clinic.getCity())
+				&& Double.valueOf(12.9716).equals(clinic.getLatitude())
+				&& Double.valueOf(77.5946).equals(clinic.getLongitude())
+				&& "ChIJLxZ2B0cWrjsR7X7pV4".equals(clinic.getGooglePlaceId())));
 	}
 
 	@Test

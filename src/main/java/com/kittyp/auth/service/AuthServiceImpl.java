@@ -392,6 +392,10 @@ public class AuthServiceImpl implements AuthService {
 		activation.setClinicName(req.getClinicName());
 		activation.setLicenseNumber(req.getLicenseNumber());
 		activation.setAddress(req.getAddress());
+		activation.setCity(req.getCity());
+		activation.setLatitude(req.getLatitude());
+		activation.setLongitude(req.getLongitude());
+		activation.setGooglePlaceId(req.getGooglePlaceId());
 		activation.setPhone(req.getPhone());
 		activation.setTimezone(req.getTimezone());
 		activation.setRolePassword(req.getPassword());

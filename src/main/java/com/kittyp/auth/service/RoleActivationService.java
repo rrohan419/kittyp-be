@@ -136,6 +136,10 @@ public class RoleActivationService {
 				.name(clinicRequest.getClinicName())
 				.licenseNumber(clinicRequest.getLicenseNumber())
 				.address(clinicRequest.getAddress())
+				.city(clinicRequest.getCity())
+				.latitude(clinicRequest.getLatitude())
+				.longitude(clinicRequest.getLongitude())
+				.googlePlaceId(clinicRequest.getGooglePlaceId())
 				.phone(clinicRequest.getPhone())
 				.timezone(clinicRequest.getTimezone())
 				.email(user.getEmail())
@@ -201,6 +205,10 @@ public class RoleActivationService {
 		dto.setClinicName(request.getClinicName());
 		dto.setLicenseNumber(request.getLicenseNumber());
 		dto.setAddress(request.getAddress());
+		dto.setCity(request.getCity());
+		dto.setLatitude(request.getLatitude());
+		dto.setLongitude(request.getLongitude());
+		dto.setGooglePlaceId(request.getGooglePlaceId());
 		dto.setPhone(request.getPhone());
 		dto.setTimezone(request.getTimezone());
 		return dto;
