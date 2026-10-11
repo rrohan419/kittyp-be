@@ -222,6 +222,18 @@ public class ClinicServiceImpl implements ClinicService {
                 .profileImageUrl(blankToNull(request.profileImageUrl()))
                 .build();
         clinic = clinicDao.saveClinic(clinic);
+        DoctorProfile doctor = doctorProfileDao.findByUserId(owner.getId());
+        if (doctor != null
+                && !clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
+                        clinic.getId(), owner.getId())) {
+            clinicDoctorRepository.save(ClinicDoctor.builder()
+                    .clinic(clinic)
+                    .doctor(doctor)
+                    .role("doctor")
+                    .isActive(true)
+                    .joinedAt(LocalDate.now())
+                    .build());
+        }
         return clinicModel(clinic);
     }
 
@@ -3036,13 +3048,14 @@ public class ClinicServiceImpl implements ClinicService {
         }
     }
 
-    /** Personal practice: the clinic owner is an active doctor on this same clinic. */
+    /** Personal practice: the owner has an active owner affiliation on this clinic. */
     private boolean isPersonalPracticeClinic(Clinic clinic) {
         Long ownerUserId = resolveOwnerUserId(clinic);
         if (ownerUserId == null || clinic.getId() == null) {
             return false;
         }
-        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), ownerUserId);
+        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
+                clinic.getId(), ownerUserId, "owner");
     }
 
     private void requireClientAttachVerified(Clinic clinic, String userUuid) {
@@ -3266,7 +3279,7 @@ public class ClinicServiceImpl implements ClinicService {
         }
         for (Clinic owned : clinicDao.findAllByOwnerUserId(user.getId())) {
             if (owned.getId() != null && clinicDoctorRepository
-                    .existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(owned.getId(), user.getId())) {
+                    .existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(), user.getId(), "owner")) {
                 if (profile.getClinic() == null) {
                     profile.setClinic(owned);
                     doctorProfileDao.save(profile);
@@ -3324,17 +3337,14 @@ public class ClinicServiceImpl implements ClinicService {
         return isOwnerAffiliatedDoctor(clinic);
     }
 
-    /** Solo doctor practice: owner has a doctor profile or an active clinic affiliation. */
+    /** A personal practice requires an active owner affiliation at this clinic. */
     private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
         Long ownerUserId = resolveOwnerUserId(clinic);
         if (ownerUserId == null) {
             return false;
         }
-        if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
-                clinic.getId(), ownerUserId)) {
-            return true;
-        }
-        return doctorProfileDao.findByUserId(ownerUserId) != null;
+        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
+                clinic.getId(), ownerUserId, "owner");
     }
 
     private Long resolveOwnerUserId(Clinic clinic) {
