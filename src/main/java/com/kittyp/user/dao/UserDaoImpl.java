@@ -61,6 +61,11 @@ public class UserDaoImpl implements UserDao {
 				.orElseThrow(() -> new ResourceNotFoundException("email", "email", email));
 	}
 
+	@Override
+	public Optional<User> findOptionalByEmailIgnoreCase(String email) {
+		return userRepository.findByEmailIgnoreCase(email);
+	}
+
 	/**
 	 * @author rrohan419@gmail.com
 	 */

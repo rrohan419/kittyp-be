@@ -2,7 +2,9 @@ package com.kittyp.auth.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -95,31 +97,20 @@ public class AuthServiceImpl implements AuthService {
 	@Transactional
 	@Override
 	public MessageResponse registerUser(SignupRequestDto signupRequestDto) {
-
-		if (userDao.userPresentByEmail(signupRequestDto.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", signupRequestDto.getEmail());
+		User existingUser = findUserByEmail(signupRequestDto.getEmail());
+		boolean addingRole = existingUser != null && !userHasRole(existingUser, ERole.ROLE_USER);
+		if (addingRole && !verificationCodeService
+				.isVerified(VerificationCodeService.emailVerifiedKey(normalizeEmail(signupRequestDto.getEmail())))) {
+			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
 
-		// Create new user
-		User user = User.builder()
-				.email(signupRequestDto.getEmail()).password(encoder.encode(signupRequestDto.getPassword()))
-				.firstName(signupRequestDto.getFirstName()).lastName(signupRequestDto.getLastName()).build();
-		if (signupRequestDto instanceof PublicSignupRequestDto publicSignup) {
-			applyParentPhone(user, publicSignup.getPhoneNumber());
-		}
+		User user = createUserWithRole(signupRequestDto, ERole.ROLE_USER);
 
-		user = userDao.saveUser(user);
-
-		// Pet-parent path only. Client SignupRole.DOCTOR/CLINIC is dispatched in
-		// register().
-		// The legacy Set<String> roles field is ignored and cannot escalate privileges.
-		Role userRole = roleDao.roleByName(ERole.ROLE_USER);
-		if (userRole == null) {
-			throw new CustomException("Default ROLE_USER not found", HttpStatus.INTERNAL_SERVER_ERROR);
-		}
-		user.getUserRoles().add(new UserRole(user, userRole));
-		user = userDao.saveUser(user);
 		clinicOwnerUserLinkService.linkUserToClinicOwners(user);
+		if (addingRole) {
+			verificationCodeService.clearVerified(
+					VerificationCodeService.emailVerifiedKey(normalizeEmail(signupRequestDto.getEmail())));
+		}
 		zeptoMailService.sendWelcomeEmailforParent(user.getFirstName(), user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
@@ -140,9 +131,6 @@ public class AuthServiceImpl implements AuthService {
 	@Transactional
 	@Override
 	public MessageResponse registerDoctor(SignupDoctorRequestDto req) {
-		if (userDao.userPresentByEmail(req.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", req.getEmail());
-		}
 		if (req.getPhoneNumber() == null || req.getPhoneNumber().isBlank()) {
 			throw new CustomException("Phone number is required", HttpStatus.BAD_REQUEST);
 		}
@@ -154,7 +142,8 @@ public class AuthServiceImpl implements AuthService {
 			throw new CustomException("Degree and registration certificate uploads are required",
 					HttpStatus.BAD_REQUEST);
 		}
-		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()))) {
+		String email = normalizeEmail(req.getEmail());
+		if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(email))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
 		if (!verificationCodeService.isVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()))
@@ -164,6 +153,9 @@ public class AuthServiceImpl implements AuthService {
 		}
 
 		User user = createUserWithRole(req, ERole.ROLE_DOCTOR);
+		if (doctorProfileDao.findByUserId(user.getId()) != null) {
+			throw new ResourceAlreadyExistsException("Doctor profile", "email", email);
+		}
 		user.setPhoneNumber(req.getPhoneNumber());
 		user.setPhoneCountryCode("+91");
 		user = userDao.saveUser(user);
@@ -214,24 +206,19 @@ public class AuthServiceImpl implements AuthService {
 				.build());
 
 		Clinic personal = provisionPersonalPractice(user, profile);
+		linkDoctorToOwnedClinics(user, profile);
 		if (profile.getClinic() == null && personal != null) {
 			profile.setClinic(personal);
 			profile = doctorProfileDao.save(profile);
 		}
 
 		if (invite != null) {
-			clinicDoctorRepository.save(ClinicDoctor.builder()
-					.clinic(invite.getClinic())
-					.doctor(profile)
-					.role("doctor")
-					.isActive(true)
-					.joinedAt(java.time.LocalDate.now())
-					.build());
+			linkDoctorToClinic(invite.getClinic(), profile, "doctor");
 			invite.setStatus(ClinicDoctorInviteStatus.ACCEPTED);
 			clinicDoctorInviteRepository.save(invite);
 		}
 
-		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
+		verificationCodeService.clearVerified(VerificationCodeService.emailVerifiedKey(email));
 		verificationCodeService.clearVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
 
 		zeptoMailService.sendWelcomeEmailforDoctor(user.getEmail());
@@ -246,9 +233,9 @@ public class AuthServiceImpl implements AuthService {
 				throw new CustomException("Email is required", HttpStatus.BAD_REQUEST);
 			}
 			String email = request.getEmail().trim().toLowerCase();
-			if (userDao.userPresentByEmail(email)) {
-				throw new ResourceAlreadyExistsException("User", "email", email);
-			}
+			// if (userDao.userPresentByEmail(email)) {
+			// 	throw new ResourceAlreadyExistsException("User", "email", email);
+			// }
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
 			zeptoMailService.sendSignupOtpEmail(email, code, "EMAIL", null);
 			return new MessageResponse("OTP sent to email");
@@ -324,20 +311,24 @@ public class AuthServiceImpl implements AuthService {
 	@Transactional
 	@Override
 	public MessageResponse registerClinic(SignupClinicRequestDto signupClinicRequestDto) {
-		if (userDao.userPresentByEmail(signupClinicRequestDto.getEmail())) {
-			throw new ResourceAlreadyExistsException("User", "email", signupClinicRequestDto.getEmail());
-		}
 		if (signupClinicRequestDto.getClinicName() == null || signupClinicRequestDto.getClinicName().isBlank()) {
 			throw new CustomException("Clinic name is required", HttpStatus.BAD_REQUEST);
 		}
+		String email = normalizeEmail(signupClinicRequestDto.getEmail());
 		if (!verificationCodeService
-				.isVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()))) {
+				.isVerified(VerificationCodeService.emailVerifiedKey(email))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
 
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
+		boolean alreadyOwnsRegisteredClinic = clinicDao.findAllByOwnerUserId(user.getId()).stream()
+				.anyMatch(clinic -> !clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
+						clinic.getId(), user.getId(), "owner"));
+		if (alreadyOwnsRegisteredClinic) {
+			throw new ResourceAlreadyExistsException("Clinic profile", "owner email", email);
+		}
 
-		clinicDao.saveClinic(Clinic.builder()
+		Clinic clinic = clinicDao.saveClinic(Clinic.builder()
 				.name(signupClinicRequestDto.getClinicName())
 				.licenseNumber(signupClinicRequestDto.getLicenseNumber())
 				.address(signupClinicRequestDto.getAddress())
@@ -351,9 +342,13 @@ public class AuthServiceImpl implements AuthService {
 				.owner(user)
 				.status(ClinicStatus.PENDING)
 				.build());
+		DoctorProfile doctorProfile = doctorProfileDao.findByUserId(user.getId());
+		if (doctorProfile != null) {
+			linkDoctorToClinic(clinic, doctorProfile, "doctor");
+		}
 
 		verificationCodeService
-				.clearVerified(VerificationCodeService.emailVerifiedKey(signupClinicRequestDto.getEmail()));
+				.clearVerified(VerificationCodeService.emailVerifiedKey(email));
 		zeptoMailService.sendWelcomeEmailforClinicAdmin(user.getEmail());
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
@@ -361,8 +356,8 @@ public class AuthServiceImpl implements AuthService {
 	private Clinic provisionPersonalPractice(User user, DoctorProfile profile) {
 		if (user.getId() != null) {
 			for (Clinic owned : clinicDao.findAllByOwnerUserId(user.getId())) {
-				if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(owned.getId(),
-						user.getId())) {
+				if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(),
+						user.getId(), "owner")) {
 					return owned;
 				}
 			}
@@ -378,27 +373,75 @@ public class AuthServiceImpl implements AuthService {
 				.owner(user)
 				.status(ClinicStatus.VERIFIED)
 				.build());
-		clinicDoctorRepository.save(ClinicDoctor.builder()
-				.clinic(personal)
-				.doctor(profile)
-				.role("owner")
-				.isActive(true)
-				.joinedAt(java.time.LocalDate.now())
-				.build());
+		linkDoctorToClinic(personal, profile, "owner");
 		return personal;
 	}
 
+	private void linkDoctorToOwnedClinics(User user, DoctorProfile profile) {
+		for (Clinic clinic : clinicDao.findAllByOwnerUserId(user.getId())) {
+			linkDoctorToClinic(clinic, profile, "doctor");
+		}
+	}
+
+	private void linkDoctorToClinic(Clinic clinic, DoctorProfile profile, String role) {
+		if (clinic == null || profile == null
+				|| clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
+						clinic.getId(), profile.getUser().getId())) {
+			return;
+		}
+		clinicDoctorRepository.save(ClinicDoctor.builder()
+				.clinic(clinic)
+				.doctor(profile)
+				.role(role)
+				.isActive(true)
+				.joinedAt(java.time.LocalDate.now())
+				.build());
+	}
+
 	private User createUserWithRole(SignupRequestDto signupRequestDto, ERole roleName) {
-		User user = User.builder()
-				.email(signupRequestDto.getEmail())
+		String email = normalizeEmail(signupRequestDto.getEmail());
+		User user = findUserByEmail(email);
+		if (user != null) {
+			if (userHasRole(user, roleName)) {
+				throw new ResourceAlreadyExistsException(roleLabel(roleName), "email", email);
+			}
+			user.addRole(roleDao.roleByName(roleName));
+			return userDao.saveUser(user);
+		}
+
+		user = User.builder()
+				.email(email)
 				.password(encoder.encode(signupRequestDto.getPassword()))
 				.firstName(signupRequestDto.getFirstName())
 				.lastName(signupRequestDto.getLastName())
 				.build();
 
-		Role role = roleDao.roleByName(roleName);
-		user.addRole(role);
+		user.addRole(roleDao.roleByName(roleName));
 		return userDao.saveUser(user);
+	}
+
+	private User findUserByEmail(String email) {
+		String normalizedEmail = normalizeEmail(email);
+		Optional<User> existingUser = userDao.findOptionalByEmailIgnoreCase(normalizedEmail);
+		return existingUser.orElse(null);
+	}
+
+	private boolean userHasRole(User user, ERole roleName) {
+		return user.getUserRoles() != null && user.getUserRoles().stream()
+				.anyMatch(userRole -> userRole.getRole() != null && roleName.equals(userRole.getRole().getName()));
+	}
+
+	private String normalizeEmail(String email) {
+		return email.trim().toLowerCase(Locale.ROOT);
+	}
+
+	private String roleLabel(ERole roleName) {
+		return switch (roleName) {
+			case ROLE_USER -> "User account";
+			case ROLE_DOCTOR -> "Doctor account";
+			case ROLE_CLINIC_ADMIN -> "Clinic admin account";
+			default -> roleName.name();
+		};
 	}
 
 	@Override

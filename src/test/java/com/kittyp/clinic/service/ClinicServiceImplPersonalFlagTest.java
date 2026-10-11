@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -23,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
+import com.kittyp.clinic.dto.ClinicDtos.ClinicRequest;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorInvitePreview;
 import com.kittyp.clinic.dto.ClinicDtos.DoctorInviteRequest;
 import com.kittyp.clinic.entity.Clinic;
@@ -71,8 +74,6 @@ class ClinicServiceImplPersonalFlagTest {
 		User owner = userWithRoles(1L, "clinic@example.com", ERole.ROLE_CLINIC_ADMIN);
 		Clinic clinic = clinic(owner);
 		stubMineMembership(owner, clinic);
-		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), owner.getId()))
-				.thenReturn(false);
 
 		List<ClinicModel> mine = clinicService.mine(owner.getEmail());
 
@@ -85,13 +86,27 @@ class ClinicServiceImplPersonalFlagTest {
 		User owner = userWithRoles(2L, "doc@example.com", ERole.ROLE_DOCTOR);
 		Clinic clinic = clinic(owner);
 		stubMineMembership(owner, clinic);
-		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), owner.getId()))
+		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
+				clinic.getId(), owner.getId(), "owner"))
 				.thenReturn(true);
 
 		List<ClinicModel> mine = clinicService.mine(owner.getEmail());
 
 		assertEquals(1, mine.size());
 		assertTrue(Boolean.TRUE.equals(mine.get(0).personal()));
+	}
+
+	@Test
+	void mine_doctorOwnerWithoutAffiliation_personalFalse() {
+		User owner = userWithRoles(20L, "doctor-clinic-admin@example.com", ERole.ROLE_DOCTOR,
+				ERole.ROLE_CLINIC_ADMIN);
+		Clinic clinic = clinic(owner);
+		stubMineMembership(owner, clinic);
+
+		List<ClinicModel> mine = clinicService.mine(owner.getEmail());
+
+		assertEquals(1, mine.size());
+		assertFalse(Boolean.TRUE.equals(mine.get(0).personal()));
 	}
 
 	@Test
@@ -129,8 +144,6 @@ class ClinicServiceImplPersonalFlagTest {
 		when(clinicDao.findAllByOwnerUserId(owner.getId())).thenReturn(List.of(zeta, alpha));
 		when(clinicStaffDao.findActiveByUserId(owner.getId())).thenReturn(List.of());
 		when(clinicDoctorRepository.findByDoctor_User_IdAndIsActiveTrue(owner.getId())).thenReturn(List.of());
-		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(1L, 5L)).thenReturn(true);
-		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(2L, 5L)).thenReturn(true);
 
 		List<ClinicModel> mine = clinicService.mine(owner.getEmail());
 
@@ -201,12 +214,35 @@ class ClinicServiceImplPersonalFlagTest {
 		when(userDao.userByEmail(owner.getEmail())).thenReturn(owner);
 		when(clinicDao.findByUuid("personal-p")).thenReturn(clinic);
 		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(12L, 12L)).thenReturn(true);
+		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
+				12L, 12L, "owner")).thenReturn(true);
 		when(clinicDoctorInviteRepository.countByClinic_IdAndCreatedAtAfter(eq(12L), any())).thenReturn(0L);
 
 		CustomException ex = assertThrows(CustomException.class,
 				() -> clinicService.inviteDoctor("personal-p", new DoctorInviteRequest(null, null, null),
 						owner.getEmail()));
 		assertEquals("Provide either doctor email or doctor ID (not both)", ex.getMessage());
+	}
+
+	@Test
+	void createClinic_addsDoctorOwnerAsDoctor() {
+		User owner = userWithRoles(30L, "doctor-admin@example.com", ERole.ROLE_DOCTOR, ERole.ROLE_CLINIC_ADMIN);
+		com.kittyp.doctor.entity.DoctorProfile profile = com.kittyp.doctor.entity.DoctorProfile.builder()
+				.user(owner)
+				.build();
+		when(userDao.userByEmail(owner.getEmail())).thenReturn(owner);
+		when(doctorProfileDao.findByUserId(owner.getId())).thenReturn(profile);
+		when(clinicDao.saveClinic(any())).thenAnswer(invocation -> {
+			Clinic clinic = invocation.getArgument(0);
+			clinic.setId(300L);
+			return clinic;
+		});
+
+		clinicService.create(new ClinicRequest("New clinic", null, null, null, null, null, null), owner.getEmail());
+
+		verify(clinicDoctorRepository).save(argThat(affiliation -> affiliation.getClinic().getId().equals(300L)
+				&& affiliation.getDoctor() == profile
+				&& "doctor".equals(affiliation.getRole())));
 	}
 
 	private void stubMineMembership(User owner, Clinic clinic) {
