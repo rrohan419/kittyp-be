@@ -96,6 +96,13 @@ public class AuthController {
 				HttpStatus.OK);
 	}
 
+	@GetMapping(ApiUrl.SIGNUP_INVITE_VALIDATE)
+	public ResponseEntity<SuccessResponse<Map<String, String>>> validatePetParentSignupInvite(
+			@RequestParam String token) {
+		return responseBuilder.buildSuccessResponse(authService.validatePetParentSignupInvite(token),
+				ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
 	@PostMapping(ApiUrl.SOCIAL_SSO)
 	public ResponseEntity<SuccessResponse<JwtResponseModel>> socialSso(@RequestBody SocialSso socialSso) {
 		JwtResponseModel response = authService.googleUserSignin(socialSso);

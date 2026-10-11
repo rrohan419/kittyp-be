@@ -33,6 +33,7 @@ import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
+import com.kittyp.clinic.service.ClinicPetParentSignupInviteService;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.LoginRequestDto;
 import com.kittyp.common.dto.PublicSignupRequestDto;
@@ -78,6 +79,7 @@ public class AuthServiceImpl implements AuthService {
 	private final ClinicDoctorInviteRepository clinicDoctorInviteRepository;
 	private final DoctorProfileDao doctorProfileDao;
 	private final VerificationCodeService verificationCodeService;
+	private final ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
 	private final WhatsappOtpService whatsappOtpService;
 	private final Msg91OtpVerifyService msg91OtpVerifyService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
@@ -99,8 +101,15 @@ public class AuthServiceImpl implements AuthService {
 	public MessageResponse registerUser(SignupRequestDto signupRequestDto) {
 		User existingUser = findUserByEmail(signupRequestDto.getEmail());
 		boolean addingRole = existingUser != null && !userHasRole(existingUser, ERole.ROLE_USER);
-		if (addingRole && !verificationCodeService
-				.isVerified(VerificationCodeService.emailVerifiedKey(normalizeEmail(signupRequestDto.getEmail())))) {
+		String email = normalizeEmail(signupRequestDto.getEmail());
+		if (existingUser != null && userHasRole(existingUser, ERole.ROLE_USER)) {
+			throw new ResourceAlreadyExistsException("User", "email", email);
+		}
+		if (signupRequestDto.getInviteToken() != null && !signupRequestDto.getInviteToken().isBlank()) {
+			if (!clinicPetParentSignupInviteService.consumeInvite(signupRequestDto.getInviteToken(), email)) {
+				throw new CustomException("This clinic invitation is invalid or expired", HttpStatus.BAD_REQUEST);
+			}
+		} else if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(email))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
 
@@ -254,8 +263,14 @@ public class AuthServiceImpl implements AuthService {
 			whatsappOtpService.sendOtp(digits, code);
 			return new MessageResponse("OTP sent to whatsapp");
 		}
-		
+
 		throw new CustomException("channel must be EMAIL, WHATSAPP", HttpStatus.BAD_REQUEST);
+	}
+
+	@Override
+	public Map<String, String> validatePetParentSignupInvite(String token) {
+		String email = clinicPetParentSignupInviteService.getInvitedEmail(token);
+		return Map.of("email", email);
 	}
 
 	@Override

@@ -26,6 +26,7 @@ import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.AddOwnerPetRequest;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicPetListModel;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
@@ -88,7 +89,8 @@ class ClinicServiceImplUpdatePetTest {
 		when(clinicStaffDao.isActiveMember(clinic.getId(), owner.getId())).thenReturn(false);
 		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), owner.getId()))
 				.thenReturn(false);
-		when(petsRepository.findByUuidAndClinic_Id(PET_UUID, clinic.getId())).thenReturn(Optional.of(pet));
+		when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), PET_UUID))
+				.thenReturn(Optional.of(enrollment(clinic, clinicOwner, pet)));
 		when(petsRepository.save(any(Pet.class))).thenAnswer(inv -> inv.getArgument(0));
 
 		AddOwnerPetRequest request = new AddOwnerPetRequest("Milo", "Cat", "Siamese", "Female",
@@ -127,7 +129,8 @@ class ClinicServiceImplUpdatePetTest {
 		when(clinicStaffDao.isActiveMember(clinic.getId(), doctor.getId())).thenReturn(false);
 		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), doctor.getId()))
 				.thenReturn(true);
-		when(petsRepository.findByUuidAndClinic_Id(PET_UUID, clinic.getId())).thenReturn(Optional.of(pet));
+		when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), PET_UUID))
+				.thenReturn(Optional.of(enrollment(clinic, clinicOwner, pet)));
 		when(petsRepository.save(any(Pet.class))).thenAnswer(inv -> inv.getArgument(0));
 
 		AddOwnerPetRequest request = new AddOwnerPetRequest("Milo", "Cat", "Siamese", "female",
@@ -150,13 +153,8 @@ class ClinicServiceImplUpdatePetTest {
 		when(clinicStaffDao.isActiveMember(clinic.getId(), owner.getId())).thenReturn(false);
 		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), owner.getId()))
 				.thenReturn(false);
-		when(petsRepository.findByUuidAndClinic_Id(PET_UUID, clinic.getId())).thenReturn(Optional.empty());
 		when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), PET_UUID))
 				.thenReturn(Optional.empty());
-		when(doctorProfileDao.findByUserId(owner.getId())).thenReturn(null);
-		when(bookingDao.findByClinic(clinic.getId())).thenReturn(List.of());
-		when(healthEventDao.findByClinic(clinic.getId())).thenReturn(List.of());
-
 		CustomException ex = assertThrows(CustomException.class, () -> clinicService.updatePet(CLINIC_UUID, PET_UUID,
 				new AddOwnerPetRequest("Milo", null, null, null, null, null, null, null, null), EMAIL));
 		assertEquals("Pet is not a patient of this clinic.", ex.getMessage());
@@ -206,7 +204,6 @@ class ClinicServiceImplUpdatePetTest {
 	private static Pet pet(Clinic clinic, ClinicPetOwner clinicOwner) {
 		Pet pet = Pet.builder()
 				.uuid(PET_UUID)
-				.clinic(clinic)
 				.clinicOwner(clinicOwner)
 				.name("Old")
 				.type("Dog")
@@ -220,6 +217,10 @@ class ClinicServiceImplUpdatePetTest {
 				.build();
 		pet.setId(5L);
 		return pet;
+	}
+
+	private static ClinicPetEnrollment enrollment(Clinic clinic, ClinicPetOwner owner, Pet pet) {
+		return ClinicPetEnrollment.builder().clinic(clinic).clinicOwner(owner).pet(pet).build();
 	}
 
 	private static User userWithRoles(Long id, String email, ERole... roles) {

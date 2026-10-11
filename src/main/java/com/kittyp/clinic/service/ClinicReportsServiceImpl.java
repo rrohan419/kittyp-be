@@ -37,7 +37,7 @@ import com.kittyp.clinic.dto.ClinicReportsDto.VisitMetrics;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicDoctor;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
-import com.kittyp.clinic.repository.ClinicPatientPetRepository;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.doctor.entity.ConsultationInvoice;
 import com.kittyp.doctor.enums.ConsultationInvoiceStatus;
@@ -59,7 +59,7 @@ public class ClinicReportsServiceImpl implements ClinicReportsService {
     private final VisitRepository visitRepository;
     private final BookingRepository bookingRepository;
     private final ConsultationInvoiceRepository invoiceRepository;
-    private final ClinicPatientPetRepository patientRepository;
+    private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
     private final ClinicDoctorRepository clinicDoctorRepository;
     private final ObjectMapper objectMapper;
 
@@ -92,8 +92,8 @@ public class ClinicReportsServiceImpl implements ClinicReportsService {
                 new ReportPeriod(resolvedFrom, resolvedTo),
                 revenue(invoices),
                 visitMetrics(visitCounts, bookings),
-                new PatientMetrics(patientRepository.countByClinic_IdAndIsActiveTrue(clinic.getId()),
-                        patientRepository.countByClinic_IdAndIsActiveTrueAndCreatedAtBetween(
+                new PatientMetrics(clinicPetEnrollmentRepository.countActivePetsByClinicId(clinic.getId()),
+                        clinicPetEnrollmentRepository.countActivePetsCreatedByClinicBetween(
                                 clinic.getId(), fromDateTime, toDateTime)),
                 monthlyRevenue(invoices),
                 services(invoices),

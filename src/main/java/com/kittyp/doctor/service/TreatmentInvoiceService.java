@@ -44,7 +44,6 @@ import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.enums.ConsultationInvoiceStatus;
 import com.kittyp.doctor.enums.TreatmentInvoiceItemType;
 import com.kittyp.doctor.repository.ConsultationInvoiceRepository;
-import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorProfileRepository;
 import com.kittyp.payment.util.InvoicePdfFileNamer;
 import com.kittyp.payment.util.PdfGenerator;
@@ -74,7 +73,6 @@ public class TreatmentInvoiceService {
     private final ClinicDoctorRepository clinicDoctorRepository;
     private final ClinicPetOwnerRepository clinicPetOwnerRepository;
     private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
-    private final DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
     private final PetsRepository petsRepository;
     private final UserRepository userRepository;
     private final PetAccessGuard petAccessGuard;
@@ -136,7 +134,7 @@ public class TreatmentInvoiceService {
 
         String petUuid = blankToNull(request.getPetUuid());
         if (petUuid != null && clinic != null) {
-            Pet pet = requireInvoiceClinicPet(clinic, doctor, petUuid);
+            Pet pet = requireInvoiceClinicPet(clinic, petUuid);
             if (owner != null && pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null
                     && !pet.getClinicOwner().getLinkedUser().getId().equals(owner.getId())) {
                 throw new CustomException("Pet does not belong to the specified owner at this clinic.",
@@ -822,7 +820,7 @@ public class TreatmentInvoiceService {
 
         String petUuid = blankToNull(request.getPetUuid());
         if (petUuid != null) {
-            Pet pet = requireInvoiceClinicPet(clinic, doctor, petUuid);
+            Pet pet = requireInvoiceClinicPet(clinic, petUuid);
             if (owner != null && pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null
                     && !pet.getClinicOwner().getLinkedUser().getId().equals(owner.getId())) {
                 throw new CustomException("Pet does not belong to the specified owner at this clinic.",
@@ -1262,39 +1260,23 @@ public class TreatmentInvoiceService {
         return clinic;
     }
 
-    /**
-     * Clinic patient if registered ({@code clinic_id}), multi-clinic enrolled, or
-     * (personal practice only) on the doctor's patient roster.
-     */
-    private Pet requireInvoiceClinicPet(Clinic clinic, User doctorUser, String petUuid) {
+    /** Resolve invoice patients through the active clinic-specific relationship. */
+    private Pet requireInvoiceClinicPet(Clinic clinic, String petUuid) {
         String key = petUuid == null ? "" : petUuid.trim();
         Pet resolved = petsRepository.findByUuidIgnoreCase(key).orElse(null);
         if (resolved == null) {
-            resolved = petsRepository.findFirstByClinic_IdAndPatientNumberIgnoreCase(clinic.getId(), key).orElse(null);
+            resolved = clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
+                    .map(ClinicPetEnrollment::getPet)
+                    .filter(p -> p != null && p.getPatientNumber() != null
+                            && p.getPatientNumber().equalsIgnoreCase(key))
+                    .findFirst()
+                    .orElse(null);
         }
         String id = resolved != null ? resolved.getUuid() : key;
-        return petsRepository.findByUuidAndClinic_IdAndIsActiveTrue(id, clinic.getId())
-                .or(() -> clinicPetEnrollmentRepository
-                        .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), id)
-                        .map(ClinicPetEnrollment::getPet)
-                        .filter(p -> Boolean.TRUE.equals(p.getIsActive())))
-                .or(() -> {
-                    boolean personal = clinic.getOwner() != null && doctorUser != null
-                            && clinic.getOwner().getId().equals(doctorUser.getId());
-                    if (!personal) {
-                        return java.util.Optional.empty();
-                    }
-                    DoctorProfile profile = doctorProfileRepository.findByUser_Id(doctorUser.getId());
-                    if (profile == null) {
-                        return java.util.Optional.empty();
-                    }
-                    if (!doctorPatientEnrollmentRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrue(profile.getId(),
-                            id)) {
-                        return java.util.Optional.empty();
-                    }
-                    return petsRepository.findOptionalByUuid(id)
-                            .filter(p -> Boolean.TRUE.equals(p.getIsActive()));
-                })
+        return clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), id)
+                .map(ClinicPetEnrollment::getPet)
+                .filter(p -> Boolean.TRUE.equals(p.getIsActive()))
                 .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
     }
 

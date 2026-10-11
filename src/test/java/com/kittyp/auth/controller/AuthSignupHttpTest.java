@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -85,6 +86,33 @@ class AuthSignupHttpTest {
 		assertEquals(SignupRole.USER, captor.getValue().getRole());
 		verify(authService, never()).registerDoctor(any());
 		verify(authService, never()).registerClinic(any());
+	}
+
+	@Test
+	void signup_inviteTokenIsPassedThroughToRegistration() throws Exception {
+		String json = "{\"firstName\":\"Ada\",\"email\":\"ada@example.com\",\"password\":\"Passw0rd!\","
+				+ "\"role\":\"USER\",\"inviteToken\":\"signed-invite-token\"}";
+
+		mockMvc.perform(post("/api/v1/auth/signup")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(json))
+				.andExpect(status().isOk());
+
+		ArgumentCaptor<PublicSignupRequestDto> captor = ArgumentCaptor.forClass(PublicSignupRequestDto.class);
+		verify(authService).register(captor.capture());
+		assertEquals("signed-invite-token", captor.getValue().getInviteToken());
+	}
+
+	@Test
+	void signupInviteValidationPassesTokenToAuthService() throws Exception {
+		when(authService.validatePetParentSignupInvite("invite-token"))
+				.thenReturn(java.util.Map.of("email", "ada@example.com"));
+
+		mockMvc.perform(get("/api/v1/auth/signup/invite/validate")
+				.param("token", "invite-token"))
+				.andExpect(status().isOk());
+
+		verify(authService).validatePetParentSignupInvite("invite-token");
 	}
 
 	@Test

@@ -1,6 +1,5 @@
 package com.kittyp.visit.service;
 
-import java.time.LocalDate;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -15,18 +14,14 @@ import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
-import com.kittyp.booking.repository.BookingRepository;
+import com.kittyp.doctor.repository.DoctorProfileRepository;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
-import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/**
- * Enrolls a parent's pet after self-serve booking: personal practice → doctor roster;
- * clinic branch → clinic CRM enrollment (same pet, multi-clinic safe).
- */
+/** Enrolls the same pet separately with every clinic or doctor that provides care. */
 @Service
 @RequiredArgsConstructor
 public class ParentBookingEnrollmentService {
@@ -35,9 +30,8 @@ public class ParentBookingEnrollmentService {
 	private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
 	private final ClinicPetOwnerRepository clinicPetOwnerRepository;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
-	private final PetsRepository petsRepository;
-	private final BookingRepository bookingRepository;
 	private final UserRepository userRepository;
+	private final DoctorProfileRepository doctorProfileRepository;
 
 	/** Personal practice when the booked clinic is owned by the booked doctor. */
 	public static boolean isPersonalPractice(Clinic clinic, DoctorProfile doctor) {
@@ -47,12 +41,10 @@ public class ParentBookingEnrollmentService {
 
 	@Transactional
 	public void enrollAfterParentBooking(Clinic clinic, DoctorProfile doctor, Pet pet, User owner) {
-		if (isPersonalPractice(clinic, doctor)) {
-			// Attach to doctor roster only — never move/clear pets.clinic_id (pet may stay at Clinic One).
-			ensureDoctorEnrollment(doctor, pet, owner);
-			return;
-		}
 		ensureClinicEnrollment(clinic, pet, owner);
+		if (isPersonalPractice(clinic, doctor)) {
+			ensureDoctorEnrollment(doctor, pet, owner);
+		}
 	}
 
 	/**
@@ -64,121 +56,88 @@ public class ParentBookingEnrollmentService {
 		if (clinic == null || pet == null) {
 			return;
 		}
-		User owner = null;
-		if (pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null) {
-			owner = pet.getClinicOwner().getLinkedUser();
+		User owner = ownerForPet(pet);
+		enrollAfterStaffCare(clinic, null, pet);
+		DoctorProfile practiceDoctor = clinic.getOwner() == null
+				? null
+				: doctorProfileRepository.findByUser_Id(clinic.getOwner().getId());
+		if (owner != null && isPersonalPractice(clinic, practiceDoctor)) {
+			ensureDoctorEnrollment(practiceDoctor, pet, owner);
 		}
-		if (owner == null) {
-			owner = userRepository.findByPets_Uuid(pet.getUuid()).orElse(null);
-		}
-		if (owner == null && pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
-			owner = userRepository.findByUuidIgnoreCase(pet.getParentUserUuid()).orElse(null);
-		}
-		if (owner != null) {
-			enrollAfterParentBooking(clinic, null, pet, owner);
-			return;
-		}
-		ensureClinicEnrollmentWithPetOwner(clinic, pet);
 	}
 
 	/**
-	 * Staff walk-in / scheduled booking: share pet with personal doctor roster or clinic CRM.
-	 * Uses linked platform user when available; otherwise ensures clinic enrollment via clinic owner on the pet.
+	 * Staff walk-in / scheduled booking creates the clinic relationship, and adds the
+	 * doctor roster relationship for personal practices.
 	 */
 	@Transactional
 	public void enrollAfterStaffCare(Clinic clinic, DoctorProfile doctorOrNull, Pet pet) {
 		if (pet == null || clinic == null) {
 			return;
 		}
-		User owner = null;
-		if (pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null) {
-			owner = pet.getClinicOwner().getLinkedUser();
-		}
-		if (owner == null) {
-			owner = userRepository.findByPets_Uuid(pet.getUuid()).orElse(null);
-		}
-		if (owner == null && pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
-			owner = userRepository.findByUuidIgnoreCase(pet.getParentUserUuid()).orElse(null);
-		}
-		if (doctorOrNull != null && isPersonalPractice(clinic, doctorOrNull)) {
-			if (owner != null) {
-				ensureDoctorEnrollment(doctorOrNull, pet, owner);
-			}
-			return;
-		}
+		User owner = ownerForPet(pet);
 		if (owner != null) {
 			ensureClinicEnrollment(clinic, pet, owner);
-			return;
+		} else {
+			ensureClinicEnrollmentWithPetOwner(clinic, pet);
 		}
-		ensureClinicEnrollmentWithPetOwner(clinic, pet);
+		if (doctorOrNull != null && isPersonalPractice(clinic, doctorOrNull) && owner != null) {
+			ensureDoctorEnrollment(doctorOrNull, pet, owner);
+		}
 	}
 
 	private void ensureClinicEnrollmentWithPetOwner(Clinic clinic, Pet pet) {
-		ClinicPetOwner clinicOwner = pet.getClinicOwner();
-		if (clinicOwner == null) {
-			return;
-		}
-		ClinicPetEnrollment existing = clinicPetEnrollmentRepository
-				.findByClinic_IdAndPet_IdAndIsActiveTrue(clinic.getId(), pet.getId())
-				.orElse(null);
-		if (existing == null) {
-			ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder()
+		ClinicPetOwner sourceOwner = pet.getClinicOwner();
+		ClinicPetOwner clinicOwner;
+		if (sourceOwner != null && sourceOwner.getClinic() != null
+				&& sourceOwner.getClinic().getId().equals(clinic.getId())) {
+			clinicOwner = sourceOwner;
+		} else if (sourceOwner != null) {
+			String email = ClinicOwnerUserLinkService.normalizeEmail(sourceOwner.getEmail());
+			clinicOwner = email == null ? null : clinicPetOwnerRepository
+					.findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), email)
+					.orElse(null);
+			if (clinicOwner == null) {
+				clinicOwner = ClinicPetOwner.builder()
+						.clinic(clinic)
+						.firstName(sourceOwner.getFirstName())
+						.lastName(sourceOwner.getLastName())
+						.email(email == null ? "owner+" + UUID.randomUUID() + "@kittyp.in" : email)
+						.phone(sourceOwner.getPhone() == null || sourceOwner.getPhone().isBlank()
+								? ClinicOwnerUserLinkService.PLACEHOLDER_PHONE
+								: sourceOwner.getPhone())
+						.alternatePhone(sourceOwner.getAlternatePhone())
+						.address(sourceOwner.getAddress())
+						.notes(sourceOwner.getNotes())
+						.linkedUser(sourceOwner.getLinkedUser())
+						.build();
+				clinicOwner.setIsActive(true);
+				clinicOwner = clinicPetOwnerRepository.save(clinicOwner);
+			}
+		} else {
+			clinicOwner = ClinicPetOwner.builder()
 					.clinic(clinic)
-					.pet(pet)
-					.clinicOwner(clinicOwner)
+					.firstName("Client")
+					.lastName("")
+					.email("owner+" + UUID.randomUUID() + "@kittyp.local")
+					.phone(ClinicOwnerUserLinkService.PLACEHOLDER_PHONE)
 					.build();
-			enrollment.setIsActive(true);
-			clinicPetEnrollmentRepository.save(enrollment);
-		} else if (existing.getClinicOwner() == null
-				|| !existing.getClinicOwner().getId().equals(clinicOwner.getId())) {
-			existing.setClinicOwner(clinicOwner);
-			clinicPetEnrollmentRepository.save(existing);
+			clinicOwner.setIsActive(true);
+			clinicOwner = clinicPetOwnerRepository.save(clinicOwner);
 		}
-		if (pet.getClinic() == null) {
-			pet.setClinic(clinic);
-			pet.setClinicOwner(clinicOwner);
-			if (pet.getRegisteredAt() == null) {
-				pet.setRegisteredAt(LocalDate.now());
-			}
-			petsRepository.save(pet);
-		}
-	}
-
-	/**
-	 * Idempotent backfill: personal bookings → doctor enrollment; clinic bookings → clinic enrollment.
-	 */
-	@Transactional
-	public int backfillFromBookings() {
-		int n = 0;
-		for (com.kittyp.booking.entity.Booking booking : bookingRepository.findAll()) {
-			if (booking == null || !Boolean.TRUE.equals(booking.getIsActive())) {
-				continue;
-			}
-			Clinic clinic = booking.getClinic();
-			DoctorProfile doctor = booking.getDoctor();
-			Pet pet = booking.getPet();
-			User owner = booking.getOwner();
-			if (clinic == null || doctor == null || pet == null || owner == null) {
-				continue;
-			}
-			// Touch lazy associations inside this transaction.
-			clinic.getOwner();
-			doctor.getUser();
-			enrollAfterParentBooking(clinic, doctor, pet, owner);
-			n++;
-		}
-		return n;
+		saveClinicEnrollment(clinic, pet, clinicOwner);
 	}
 
 	private void ensureDoctorEnrollment(DoctorProfile doctor, Pet pet, User owner) {
 		DoctorPatientEnrollment existing = doctorPatientEnrollmentRepository
-				.findByDoctor_IdAndPet_IdAndIsActiveTrue(doctor.getId(), pet.getId())
+				.findByDoctor_IdAndPet_Id(doctor.getId(), pet.getId())
 				.orElse(null);
 		if (existing != null) {
+			existing.setIsActive(true);
 			if (existing.getOwnerUser() == null || !existing.getOwnerUser().getId().equals(owner.getId())) {
 				existing.setOwnerUser(owner);
-				doctorPatientEnrollmentRepository.save(existing);
 			}
+			doctorPatientEnrollmentRepository.save(existing);
 			return;
 		}
 		DoctorPatientEnrollment enrollment = DoctorPatientEnrollment.builder()
@@ -192,33 +151,31 @@ public class ParentBookingEnrollmentService {
 
 	private void ensureClinicEnrollment(Clinic clinic, Pet pet, User owner) {
 		ClinicPetOwner clinicOwner = ensureClinicPetOwner(clinic, owner);
+		saveClinicEnrollment(clinic, pet, clinicOwner);
+	}
 
-		ClinicPetEnrollment existing = clinicPetEnrollmentRepository
-				.findByClinic_IdAndPet_IdAndIsActiveTrue(clinic.getId(), pet.getId())
-				.orElse(null);
-		if (existing == null) {
-			ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder()
-					.clinic(clinic)
-					.pet(pet)
-					.clinicOwner(clinicOwner)
-					.build();
-			enrollment.setIsActive(true);
-			clinicPetEnrollmentRepository.save(enrollment);
-		} else if (existing.getClinicOwner() == null
-				|| !existing.getClinicOwner().getId().equals(clinicOwner.getId())) {
-			existing.setClinicOwner(clinicOwner);
-			clinicPetEnrollmentRepository.save(existing);
-		}
+	private void saveClinicEnrollment(Clinic clinic, Pet pet, ClinicPetOwner clinicOwner) {
+		ClinicPetEnrollment enrollment = clinicPetEnrollmentRepository
+				.findByClinic_IdAndPet_Id(clinic.getId(), pet.getId())
+				.orElseGet(() -> ClinicPetEnrollment.builder()
+						.clinic(clinic)
+						.pet(pet)
+						.build());
+		enrollment.setClinicOwner(clinicOwner);
+		enrollment.setIsActive(true);
+		clinicOwner.setIsActive(true);
+		clinicPetEnrollmentRepository.save(enrollment);
+	}
 
-		// First formal home clinic only — never steal from another clinic.
-		if (pet.getClinic() == null) {
-			pet.setClinic(clinic);
-			pet.setClinicOwner(clinicOwner);
-			if (pet.getRegisteredAt() == null) {
-				pet.setRegisteredAt(LocalDate.now());
-			}
-			petsRepository.save(pet);
+	private User ownerForPet(Pet pet) {
+		if (pet.getClinicOwner() != null && pet.getClinicOwner().getLinkedUser() != null) {
+			return pet.getClinicOwner().getLinkedUser();
 		}
+		User owner = userRepository.findByPets_Uuid(pet.getUuid()).orElse(null);
+		if (owner == null && pet.getParentUserUuid() != null && !pet.getParentUserUuid().isBlank()) {
+			owner = userRepository.findByUuidIgnoreCase(pet.getParentUserUuid()).orElse(null);
+		}
+		return owner;
 	}
 
 	private ClinicPetOwner ensureClinicPetOwner(Clinic clinic, User platformUser) {

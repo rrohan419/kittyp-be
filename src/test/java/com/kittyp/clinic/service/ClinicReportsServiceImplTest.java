@@ -19,7 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.clinic.dto.ClinicReportsDto.ReportModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
-import com.kittyp.clinic.repository.ClinicPatientPetRepository;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.entity.ConsultationInvoice;
@@ -42,7 +42,7 @@ class ClinicReportsServiceImplTest {
     @Mock
     private ConsultationInvoiceRepository invoiceRepository;
     @Mock
-    private ClinicPatientPetRepository patientRepository;
+    private ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
     @Mock
     private ClinicDoctorRepository clinicDoctorRepository;
         @Spy
@@ -75,8 +75,8 @@ class ClinicReportsServiceImplTest {
         when(invoiceRepository.findForClinicReport(org.mockito.ArgumentMatchers.eq(7L),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(invoice));
-        when(patientRepository.countByClinic_IdAndIsActiveTrue(7L)).thenReturn(4L);
-        when(patientRepository.countByClinic_IdAndIsActiveTrueAndCreatedAtBetween(
+        when(clinicPetEnrollmentRepository.countActivePetsByClinicId(7L)).thenReturn(4L);
+        when(clinicPetEnrollmentRepository.countActivePetsCreatedByClinicBetween(
                 org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(1L);
         when(clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(7L)).thenReturn(List.of());

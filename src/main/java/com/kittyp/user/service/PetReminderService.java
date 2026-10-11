@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.notification.service.OutboundMessageService;
@@ -34,6 +36,7 @@ public class PetReminderService {
 
     private final PetReminderRepository petReminderRepository;
     private final PetsRepository petsRepository;
+    private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
     private final UserDao userDao;
     private final PetAccessGuard petAccessGuard;
     private final UserService userService;
@@ -155,15 +158,17 @@ public class PetReminderService {
     }
 
     private WhatsAppSenderCredentials resolveSender(Pet pet) {
-        Clinic clinic = pet != null ? pet.getClinic() : null;
-        if (clinic != null) {
-            WhatsAppSenderCredentials clinicSender = WhatsAppSenderCredentials.of(
-                    clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
-            if (clinicSender.isConfigured()) {
-                return clinicSender;
-            }
+        if (pet == null) {
+            return WhatsAppSenderCredentials.of(null, null);
         }
-        return WhatsAppSenderCredentials.of(null, null);
+        List<ClinicPetEnrollment> enrollments = clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId());
+        if (enrollments.size() != 1) {
+            return WhatsAppSenderCredentials.of(null, null);
+        }
+        Clinic clinic = enrollments.get(0).getClinic();
+        return clinic == null
+                ? WhatsAppSenderCredentials.of(null, null)
+                : WhatsAppSenderCredentials.of(clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
     }
 
     private PetReminderModel toModel(PetReminder reminder) {

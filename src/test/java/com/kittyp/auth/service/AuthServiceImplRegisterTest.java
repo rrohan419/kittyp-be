@@ -29,6 +29,7 @@ import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
+import com.kittyp.clinic.service.ClinicPetParentSignupInviteService;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.PublicSignupRequestDto;
 import com.kittyp.common.dto.SignupClinicRequestDto;
@@ -56,6 +57,7 @@ class AuthServiceImplRegisterTest {
 	private ClinicDoctorInviteRepository clinicDoctorInviteRepository;
 	private DoctorProfileDao doctorProfileDao;
 	private VerificationCodeService verificationCodeService;
+	private ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
 	private RecordingLinkService clinicOwnerUserLinkService;
 	private AuthServiceImpl authService;
 
@@ -70,6 +72,7 @@ class AuthServiceImplRegisterTest {
 		clinicDoctorInviteRepository = mock(ClinicDoctorInviteRepository.class);
 		doctorProfileDao = mock(DoctorProfileDao.class);
 		verificationCodeService = new VerificationCodeService();
+		clinicPetParentSignupInviteService = mock(ClinicPetParentSignupInviteService.class);
 		clinicOwnerUserLinkService = new RecordingLinkService();
 
 		when(encoder.encode(any())).thenReturn("encoded");
@@ -90,6 +93,7 @@ class AuthServiceImplRegisterTest {
 				clinicDoctorInviteRepository,
 				doctorProfileDao,
 				verificationCodeService,
+				clinicPetParentSignupInviteService,
 				null,
 				null,
 				clinicOwnerUserLinkService,
@@ -100,6 +104,7 @@ class AuthServiceImplRegisterTest {
 	void register_userRole_assignsRoleUserOnly() {
 		PublicSignupRequestDto req = baseRequest();
 		req.setRole(SignupRole.USER);
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
 		req.setClinicName("ShouldBeIgnored");
 		req.setRegistrationNumber("VET-HACK");
 		req.setDegreeCertificateUrl("https://evil.example/cert.pdf");
@@ -124,6 +129,7 @@ class AuthServiceImplRegisterTest {
 	void register_omittedRole_defaultsToUser() {
 		PublicSignupRequestDto req = baseRequest();
 		req.setRole(null);
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
 
 		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(false);
 		when(roleDao.roleByName(ERole.ROLE_USER)).thenReturn(role(ERole.ROLE_USER));
@@ -139,6 +145,7 @@ class AuthServiceImplRegisterTest {
 	void register_legacyRolesArray_cannotEscalateToAdmin() {
 		PublicSignupRequestDto req = baseRequest();
 		req.setRole(SignupRole.USER);
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
 		req.setRoles(Set.of("ROLE_ADMIN", "ROLE_MODERATOR", "ROLE_CLINIC_STAFF"));
 
 		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(false);
@@ -162,6 +169,32 @@ class AuthServiceImplRegisterTest {
 		assertThrows(ResourceAlreadyExistsException.class, () -> authService.register(req));
 		verify(roleDao, never()).roleByName(any());
 		verify(userDao, never()).saveUser(any());
+	}
+
+	@Test
+	void register_userRequiresOtpWhenInviteIsNotProvided() {
+		PublicSignupRequestDto req = baseRequest();
+		req.setRole(SignupRole.USER);
+
+		CustomException ex = assertThrows(CustomException.class, () -> authService.register(req));
+		assertEquals("Email OTP verification required", ex.getMessage());
+		verify(roleDao, never()).roleByName(ERole.ROLE_USER);
+		verify(userDao, never()).saveUser(any());
+	}
+
+	@Test
+	void register_userCanUseMatchingClinicInviteInsteadOfOtp() {
+		PublicSignupRequestDto req = baseRequest();
+		req.setRole(SignupRole.USER);
+		req.setInviteToken("valid-invite");
+		when(clinicPetParentSignupInviteService.consumeInvite("valid-invite", req.getEmail())).thenReturn(true);
+		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(false);
+		when(roleDao.roleByName(ERole.ROLE_USER)).thenReturn(role(ERole.ROLE_USER));
+
+		authService.register(req);
+
+		verify(clinicPetParentSignupInviteService).consumeInvite("valid-invite", req.getEmail());
+		verify(roleDao).roleByName(ERole.ROLE_USER);
 	}
 
 	@Test

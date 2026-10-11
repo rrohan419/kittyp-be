@@ -22,6 +22,7 @@ public class ApiUrl {
 	public static final String SIGNUP_CLINIC = SIGNUP + "/clinic";
 	public static final String SIGNUP_OTP_SEND = SIGNUP + "/otp/send";
 	public static final String SIGNUP_OTP_VERIFY = SIGNUP + "/otp/verify";
+	public static final String SIGNUP_INVITE_VALIDATE = SIGNUP + "/invite/validate";
 	public static final String SIGNIN = AUTH_BASE_URL + "/signin";
 	public static final String SOCIAL_SSO = AUTH_BASE_URL + "/social-sso";
 	public static final String SEND_CODE = AUTH_BASE_URL + "/send-code";

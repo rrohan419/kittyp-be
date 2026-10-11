@@ -26,6 +26,8 @@ public interface AuthService {
 	MessageResponse sendSignupOtp(SignupOtpSendRequest request);
 
 	Map<String, Boolean> verifySignupOtp(SignupOtpVerifyRequest request);
+
+	Map<String, String> validatePetParentSignupInvite(String token);
 	
 	JwtResponseModel loginUser(LoginRequestDto loginRequestDto, String clientIp);
 

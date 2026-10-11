@@ -360,7 +360,7 @@ public final class ClinicDtos {
             @NotBlank String ownerFirstName,
             String ownerLastName,
             @NotBlank @Email String ownerEmail,
-            @NotBlank String ownerPhone,
+            String ownerPhone,
             String ownerAddress,
             String ownerAlternatePhone,
             String ownerNotes,

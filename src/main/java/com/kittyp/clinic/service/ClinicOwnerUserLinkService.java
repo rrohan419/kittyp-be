@@ -1,5 +1,6 @@
 package com.kittyp.clinic.service;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -13,18 +14,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.clinic.entity.ClinicPetOwner;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
-import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
 /**
  * Links clinic pet owners to platform users by shared email or phone,
- * and attaches existing {@code pets} rows to the user (no duplicate pets).
+ * and attaches clinic-enrolled {@code pets} rows to the user (no duplicate pets).
  *
  * Timing: works whether the parent already has a KittyP account when the clinic
  * registers them, or signs up months/years later with the same email/phone.
@@ -38,13 +40,10 @@ public class ClinicOwnerUserLinkService {
 
 	private static final Logger log = LoggerFactory.getLogger(ClinicOwnerUserLinkService.class);
 
-	/** Used when a clinic owner row is created before the parent has a valid phone. */
-	public static final String PLACEHOLDER_PHONE = "0000000000";
-
 	private final ClinicPetOwnerRepository clinicPetOwnerRepository;
+	private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
 	private final UserRepository userRepository;
 	private final UserDao userDao;
-	private final PetsRepository petsRepository;
 
 	public static String normalizePhoneDigits(String phone) {
 		if (phone == null) {
@@ -287,7 +286,15 @@ public class ClinicOwnerUserLinkService {
 
 	/** Attach clinic-registered pets (already in {@code pets}) to the platform user. */
 	private void attachPetsToUser(ClinicPetOwner owner, User user) {
-		List<Pet> clinicPets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId());
+		List<Pet> clinicPets = new ArrayList<>();
+		for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository
+				.findByClinic_IdAndIsActiveTrue(owner.getClinic().getId())) {
+			if (enrollment.getClinicOwner() != null
+					&& enrollment.getClinicOwner().getId().equals(owner.getId())
+					&& enrollment.getPet() != null) {
+				clinicPets.add(enrollment.getPet());
+			}
+		}
 		User managed = userDao.userByUuid(user.getUuid());
 		Set<String> owned = managed.getPets() == null ? Set.of()
 				: managed.getPets().stream().map(Pet::getUuid).collect(Collectors.toSet());

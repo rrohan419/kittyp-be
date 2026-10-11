@@ -201,6 +201,18 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	public void sendClinicPetParentInviteEmail(String recipientEmail, String customerName, String petName,
+			String clinicName, String inviteUrl) {
+		String name = blankToDefault(customerName, "Pet parent");
+		sendDedicated(recipientEmail, name, TemplateConstant.ZEPTO_CLINIC_PET_PARENT_INVITE_EMAIL_TEMPLATE_ID,
+				Map.of(
+						"customer_name", name,
+						"pet_name", blankToDefault(petName, "your pet"),
+						"clinic_name", blankToDefault(clinicName, "Clinic"),
+						"invite_url", blankToDefault(inviteUrl, "")));
+	}
+
+	@Override
 	public void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName,
 			String acceptUrl) {
 		log.info("Clinic doctor invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);

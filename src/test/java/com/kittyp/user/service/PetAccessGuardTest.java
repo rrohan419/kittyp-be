@@ -16,10 +16,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.kittyp.clinic.dao.ClinicStaffDao;
+import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.user.entity.Pet;
@@ -37,6 +41,8 @@ class PetAccessGuardTest {
     private PetsRepository petsRepository;
     @Mock
     private ClinicDoctorRepository clinicDoctorRepository;
+    @Mock
+    private ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
     @Mock
     private ClinicStaffDao clinicStaffDao;
     @Mock
@@ -76,6 +82,8 @@ class PetAccessGuardTest {
     @Test
     void strangerDeniedForeignPet() {
         when(petsRepository.findOptionalByUuid("pet-uuid")).thenReturn(Optional.of(pet));
+        Mockito.lenient().when(clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId()))
+                .thenReturn(List.of());
         when(doctorProfileDao.findByUserId(2L)).thenReturn(null);
         assertFalse(guard.canAccessPet(stranger, "pet-uuid"));
         assertThrows(CustomException.class, () -> guard.requirePetAccess(stranger, "pet-uuid"));
@@ -84,8 +92,23 @@ class PetAccessGuardTest {
     @Test
     void clinicalAccessDeniedForOwnerOnly() {
         when(petsRepository.findOptionalByUuid("pet-uuid")).thenReturn(Optional.of(pet));
+        Mockito.lenient().when(clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId()))
+                .thenReturn(List.of());
         when(doctorProfileDao.findByUserId(1L)).thenReturn(null);
         assertThrows(CustomException.class, () -> guard.requireClinicalAccess(owner, "pet-uuid"));
+    }
+
+    @Test
+    void clinicalAccessUsesThePetClinicRelationship() {
+        Clinic clinic = Clinic.builder().build();
+        clinic.setId(3L);
+        ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder().clinic(clinic).pet(pet).build();
+        when(petsRepository.findOptionalByUuid("pet-uuid")).thenReturn(Optional.of(pet));
+        when(clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId()))
+                .thenReturn(List.of(enrollment));
+        when(clinicStaffDao.isActiveMember(3L, 2L)).thenReturn(true);
+
+        assertTrue(guard.hasClinicalRelationship(stranger, "pet-uuid"));
     }
 
     @Test
