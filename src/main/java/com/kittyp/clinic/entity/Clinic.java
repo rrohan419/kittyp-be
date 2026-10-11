@@ -57,6 +57,10 @@ public class Clinic extends BaseEntity implements HasPublicId {
     /** WGS84 longitude for nearby ranking (optional). */
     private Double longitude;
 
+    /** Google Places ID for retrieving additional place details when needed. */
+    @Column(name = "google_place_id", length = 512)
+    private String googlePlaceId;
+
     private String phone;
 
     private String email;
@@ -68,6 +72,9 @@ public class Clinic extends BaseEntity implements HasPublicId {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ClinicStatus status;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
 
     private String timezone;
 

@@ -168,4 +168,7 @@ public class DoctorProfile extends BaseEntity implements HasPublicId {
 
     @Column(columnDefinition = "TEXT")
     private String reviewNotes;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
 }

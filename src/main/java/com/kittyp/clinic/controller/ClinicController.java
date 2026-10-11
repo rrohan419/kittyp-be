@@ -107,6 +107,12 @@ public class ClinicController {
         return success(clinicService.update(uuid, request, email()));
     }
 
+    @PostMapping(ApiUrl.CLINIC_REAPPLY)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<ClinicModel>> reapply(@PathVariable String uuid) {
+        return success(clinicService.reapplyForVerification(uuid, email()));
+    }
+
     @GetMapping(ApiUrl.CLINIC_DOCTORS)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<List<DoctorModel>>> doctors(@PathVariable String uuid) {

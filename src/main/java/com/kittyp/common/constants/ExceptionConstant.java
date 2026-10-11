@@ -38,4 +38,8 @@ public class ExceptionConstant {
     
 	// ai 
 	public static final String NUTRITION_PLAN_NOT_FOUND = "nutrition.plan.not.found";
+
+	// Google Places
+	public static final String GOOGLE_PLACES_UNAVAILABLE_MESSAGE = "google.places.unavailable.message";
+	public static final String GOOGLE_PLACES_FAILED_MESSAGE = "google.places.failed.message";
 }

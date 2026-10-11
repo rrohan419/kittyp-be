@@ -16,6 +16,8 @@ public interface ClinicDoctorRepository extends JpaRepository<ClinicDoctor, Long
 
     boolean existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(Long clinicId, Long userId);
 
+    boolean existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(Long clinicId, Long userId, String role);
+
     boolean existsByDoctor_IdAndIsActiveTrue(Long doctorId);
 
     @Query("select distinct cd.doctor.id from ClinicDoctor cd where cd.isActive = true")
@@ -34,6 +36,7 @@ public interface ClinicDoctorRepository extends JpaRepository<ClinicDoctor, Long
                   select 1 from ClinicDoctor ownerAff
                   where ownerAff.clinic = cd.clinic
                     and ownerAff.isActive = true
+                    and ownerAff.role = 'owner'
                     and ownerAff.doctor.user = cd.clinic.owner
                 )
               )

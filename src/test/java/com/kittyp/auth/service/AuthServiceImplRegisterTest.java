@@ -156,7 +156,8 @@ class AuthServiceImplRegisterTest {
 	void register_duplicateEmail_rejectsWithoutProvisioning() {
 		PublicSignupRequestDto req = baseRequest();
 		req.setRole(SignupRole.USER);
-		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(true);
+		User existingUser = existingUser(req.getEmail(), ERole.ROLE_USER);
+		when(userDao.findOptionalByEmailIgnoreCase(req.getEmail())).thenReturn(Optional.of(existingUser));
 
 		assertThrows(ResourceAlreadyExistsException.class, () -> authService.register(req));
 		verify(roleDao, never()).roleByName(any());
@@ -393,6 +394,11 @@ class AuthServiceImplRegisterTest {
 		req.setEmail("ada@example.com");
 		req.setPassword("Passw0rd!");
 		req.setClinicName("Paws Clinic");
+		req.setAddress("1 Main Street, Example City");
+		req.setCity("Example City");
+		req.setLatitude(12.9716);
+		req.setLongitude(77.5946);
+		req.setGooglePlaceId("ChIJLxZ2B0cWrjsR7X7pV4");
 
 		when(userDao.userPresentByEmail(req.getEmail())).thenReturn(false);
 		when(roleDao.roleByName(ERole.ROLE_CLINIC_ADMIN)).thenReturn(role(ERole.ROLE_CLINIC_ADMIN));
@@ -402,6 +408,130 @@ class AuthServiceImplRegisterTest {
 		authService.registerClinic(req);
 
 		verify(roleDao).roleByName(ERole.ROLE_CLINIC_ADMIN);
+		verify(clinicDao).saveClinic(argThat(clinic -> "Example City".equals(clinic.getCity())
+				&& Double.valueOf(12.9716).equals(clinic.getLatitude())
+				&& Double.valueOf(77.5946).equals(clinic.getLongitude())
+				&& "ChIJLxZ2B0cWrjsR7X7pV4".equals(clinic.getGooglePlaceId())));
+	}
+
+	@Test
+	void registerDoctor_reusesExistingAccountAndPreservesCredentials() {
+		SignupDoctorRequestDto req = new SignupDoctorRequestDto();
+		req.setFirstName("New Name");
+		req.setEmail("ada@example.com");
+		req.setPassword("DifferentPass!");
+		req.setPhoneNumber("9876543210");
+		req.setRegistrationNumber("VET-1");
+		req.setDegreeCertificateUrl("https://files.example/degree.pdf");
+		req.setRegistrationCertificateUrl("https://files.example/reg.pdf");
+
+		User existingUser = existingUser(req.getEmail(), ERole.ROLE_USER);
+		when(userDao.findOptionalByEmailIgnoreCase(req.getEmail())).thenReturn(Optional.of(existingUser));
+		when(roleDao.roleByName(ERole.ROLE_DOCTOR)).thenReturn(role(ERole.ROLE_DOCTOR));
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
+		verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
+		when(doctorProfileDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+		authService.registerDoctor(req);
+
+		assertEquals("existing-hash", existingUser.getPassword());
+		assertEquals("Existing", existingUser.getFirstName());
+		assertEquals(Set.of(ERole.ROLE_USER, ERole.ROLE_DOCTOR),
+				existingUser.getUserRoles().stream().map(userRole -> userRole.getRole().getName()).collect(
+						java.util.stream.Collectors.toSet()));
+		verify(encoder, never()).encode(any());
+		verify(doctorProfileDao, atLeastOnce()).save(argThat(profile -> profile.getUser() == existingUser));
+	}
+
+	@Test
+	void registerDoctor_linksDoctorToAllOwnedClinics() {
+		SignupDoctorRequestDto req = new SignupDoctorRequestDto();
+		req.setEmail("ada@example.com");
+		req.setPassword("Passw0rd!");
+		req.setPhoneNumber("9876543210");
+		req.setRegistrationNumber("VET-1");
+		req.setDegreeCertificateUrl("https://files.example/degree.pdf");
+		req.setRegistrationCertificateUrl("https://files.example/reg.pdf");
+		User existingUser = existingUser(req.getEmail(), ERole.ROLE_CLINIC_ADMIN);
+		Clinic ownedClinic = Clinic.builder().name("Owned organization").owner(existingUser).build();
+		ownedClinic.setId(77L);
+		when(userDao.findOptionalByEmailIgnoreCase(req.getEmail())).thenReturn(Optional.of(existingUser));
+		when(roleDao.roleByName(ERole.ROLE_DOCTOR)).thenReturn(role(ERole.ROLE_DOCTOR));
+		when(clinicDao.findAllByOwnerUserId(existingUser.getId())).thenReturn(List.of(ownedClinic));
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
+		verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
+		when(doctorProfileDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+		authService.registerDoctor(req);
+
+		verify(clinicDoctorRepository).save(argThat(affiliation -> affiliation.getClinic() == ownedClinic
+				&& "doctor".equals(affiliation.getRole())));
+	}
+
+	@Test
+	void registerClinic_addsExistingDoctorOwnerToNewClinic() {
+		SignupClinicRequestDto req = new SignupClinicRequestDto();
+		req.setEmail("ada@example.com");
+		req.setPassword("Passw0rd!");
+		req.setClinicName("Paws Clinic");
+		User existingUser = existingUser(req.getEmail(), ERole.ROLE_DOCTOR);
+		com.kittyp.doctor.entity.DoctorProfile profile = com.kittyp.doctor.entity.DoctorProfile.builder()
+				.user(existingUser)
+				.build();
+		when(userDao.findOptionalByEmailIgnoreCase(req.getEmail())).thenReturn(Optional.of(existingUser));
+		when(roleDao.roleByName(ERole.ROLE_CLINIC_ADMIN)).thenReturn(role(ERole.ROLE_CLINIC_ADMIN));
+		when(doctorProfileDao.findByUserId(existingUser.getId())).thenReturn(profile);
+		when(clinicDao.saveClinic(any())).thenAnswer(invocation -> {
+			Clinic clinic = invocation.getArgument(0);
+			clinic.setId(88L);
+			return clinic;
+		});
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
+
+		authService.registerClinic(req);
+
+		verify(clinicDoctorRepository).save(argThat(affiliation -> affiliation.getClinic().getId().equals(88L)
+				&& affiliation.getDoctor() == profile
+				&& "doctor".equals(affiliation.getRole())));
+	}
+
+	@Test
+	void registerDoctor_rejectsExistingDoctorRole() {
+		SignupDoctorRequestDto req = new SignupDoctorRequestDto();
+		req.setEmail("ada@example.com");
+		req.setPhoneNumber("9876543210");
+		req.setRegistrationNumber("VET-1");
+		req.setDegreeCertificateUrl("https://files.example/degree.pdf");
+		req.setRegistrationCertificateUrl("https://files.example/reg.pdf");
+		User existingUser = existingUser(req.getEmail(), ERole.ROLE_DOCTOR);
+		when(userDao.findOptionalByEmailIgnoreCase(req.getEmail())).thenReturn(Optional.of(existingUser));
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
+		verificationCodeService.markVerified(VerificationCodeService.phoneVerifiedKey(req.getPhoneNumber()));
+
+		ResourceAlreadyExistsException ex = assertThrows(ResourceAlreadyExistsException.class,
+				() -> authService.registerDoctor(req));
+
+		assertEquals("Doctor account", ex.getResourceName());
+		verify(doctorProfileDao, never()).save(any());
+		verify(userDao, never()).saveUser(any());
+	}
+
+	@Test
+	void registerClinic_rejectsExistingClinicProfile() {
+		SignupClinicRequestDto req = new SignupClinicRequestDto();
+		req.setEmail("ada@example.com");
+		req.setPassword("Passw0rd!");
+		req.setClinicName("Another Clinic");
+		User existingUser = existingUser(req.getEmail(), ERole.ROLE_USER);
+		when(userDao.findOptionalByEmailIgnoreCase(req.getEmail())).thenReturn(Optional.of(existingUser));
+		when(roleDao.roleByName(ERole.ROLE_CLINIC_ADMIN)).thenReturn(role(ERole.ROLE_CLINIC_ADMIN));
+		when(clinicDao.findAllByOwnerUserId(existingUser.getId()))
+				.thenReturn(List.of(Clinic.builder().name("Existing Clinic").build()));
+		verificationCodeService.markVerified(VerificationCodeService.emailVerifiedKey(req.getEmail()));
+
+		assertThrows(ResourceAlreadyExistsException.class, () -> authService.registerClinic(req));
+
+		verify(clinicDao, never()).saveClinic(any());
 	}
 
 	private void stubDoctorReady(PublicSignupRequestDto req) {
@@ -455,6 +585,18 @@ class AuthServiceImplRegisterTest {
 		Role role = new Role();
 		role.setName(name);
 		return role;
+	}
+
+	private static User existingUser(String email, ERole roleName) {
+		User user = User.builder()
+				.email(email)
+				.password("existing-hash")
+				.firstName("Existing")
+				.lastName("User")
+				.build();
+		user.setId(42L);
+		user.addRole(role(roleName));
+		return user;
 	}
 
 	private static final class RecordingLinkService extends ClinicOwnerUserLinkService {

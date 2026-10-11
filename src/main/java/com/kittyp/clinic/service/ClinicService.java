@@ -54,7 +54,9 @@ public interface ClinicService {
     ClinicModel getByUuidForAdmin(String clinicUuid);
 
     /** Platform admin/moderator: VERIFIED or REJECTED only. */
-    ClinicModel updateStatusForAdmin(String clinicUuid, ClinicStatus status);
+    ClinicModel updateStatusForAdmin(String clinicUuid, ClinicStatus status, String rejectionReason);
+
+    ClinicModel reapplyForVerification(String clinicUuid, String email);
 
     ClinicModel update(String clinicUuid, ClinicRequest request, String email);
 

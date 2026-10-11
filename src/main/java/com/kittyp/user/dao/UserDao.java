@@ -14,6 +14,8 @@ public interface UserDao {
 	boolean userPresentByEmail(String email);
 	
 	User userByEmail(String email);
+
+	Optional<User> findOptionalByEmailIgnoreCase(String email);
 	
 	User userByUuid(String uuid);
 

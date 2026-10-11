@@ -53,4 +53,8 @@ public class KeyConstant {
 	public static final String WHATSAPP_MESSAGE_TEMPLATE_LANGUAGE = "language";
 	public static final String WHATSAPP_MESSAGE_TEMPLATE_LANGUAGE_CODE = "code";
 	
+	// Google Places
+	public static final String DETAILS_FIELD_MASK = "displayName,formattedAddress,addressComponents,location";
+	public static final String API_KEY_HEADER = "X-Goog-Api-Key";
+	public static final String FIELD_MASK_HEADER = "X-Goog-FieldMask";
 }

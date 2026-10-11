@@ -6,8 +6,6 @@ import lombok.Setter;
 @Getter
 @Setter
 public class DoctorChecklistUpdateRequest {
-    private Boolean checkMobileOtp;
-    private Boolean checkEmailOtp;
     private Boolean checkGovernmentId;
     private Boolean checkDegree;
     private Boolean checkRegistrationCertificate;

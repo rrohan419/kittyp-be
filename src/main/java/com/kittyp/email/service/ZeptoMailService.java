@@ -47,7 +47,11 @@ public interface ZeptoMailService {
 
 	void sendDoctorProfileVerified(String email, String doctorName, String dashboardUrl);
 
+	void sendDoctorProfileRejected(String email, String doctorName, String rejectionReason);
+
 	void sendClinicProfileVerified(String email, String customerName, String clinicName, String clinicUrl);
+
+	void sendClinicProfileRejected(String email, String customerName, String clinicName, String rejectionReason);
 
 	void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
 			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename);

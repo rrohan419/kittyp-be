@@ -9,6 +9,8 @@ import java.security.MessageDigest;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +47,7 @@ public class EmailAuditServiceImpl implements EmailAuditService {
 	 * @author rrohan419@gmail.com
 	 */
 	@Override
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void saveEmailAudit(EmailAuditDto emailAuditDto) {
 		EmailAudit emailAudit = mapper.convert(emailAuditDto, EmailAudit.class);
 		emailAuditDao.save(emailAudit);

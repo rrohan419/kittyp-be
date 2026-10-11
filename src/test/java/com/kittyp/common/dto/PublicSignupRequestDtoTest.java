@@ -44,12 +44,18 @@ class PublicSignupRequestDtoTest {
 	void jackson_copiesDoctorAndClinicFields() throws Exception {
 		String json = "{\"firstName\":\"Ada\",\"email\":\"ada@example.com\",\"password\":\"Passw0rd!\","
 				+ "\"role\":\"DOCTOR\",\"phoneNumber\":\"9876543210\",\"registrationNumber\":\"VET-1\","
-				+ "\"clinicName\":\"Paws\",\"address\":\"1 Main\",\"phone\":\"111\"}";
+				+ "\"clinicName\":\"Paws\",\"address\":\"1 Main\",\"city\":\"Example City\","
+				+ "\"latitude\":12.9716,\"longitude\":77.5946,"
+				+ "\"googlePlaceId\":\"ChIJLxZ2B0cWrjsR7X7pV4\",\"phone\":\"111\"}";
 		PublicSignupRequestDto parsed = objectMapper.readValue(json, PublicSignupRequestDto.class);
 		assertEquals("9876543210", parsed.toDoctorRequest().getPhoneNumber());
 		assertEquals("VET-1", parsed.toDoctorRequest().getRegistrationNumber());
 		assertEquals("Paws", parsed.toClinicRequest().getClinicName());
 		assertEquals("1 Main", parsed.toClinicRequest().getAddress());
+		assertEquals("Example City", parsed.toClinicRequest().getCity());
+		assertEquals(12.9716, parsed.toClinicRequest().getLatitude());
+		assertEquals(77.5946, parsed.toClinicRequest().getLongitude());
+		assertEquals("ChIJLxZ2B0cWrjsR7X7pV4", parsed.toClinicRequest().getGooglePlaceId());
 	}
 
 	private static String signupJson(String role) {
