@@ -34,6 +34,9 @@ public interface ZeptoMailService {
 	/** Clinic doctor invitation with accept link. */
 	void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);
 
+	/** Clinic doctor invite for an email that does not yet have a Kittyp account. */
+	void sendClinicDoctorInviteNewUserEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);
+
 	/** Clinic staff invitation with complete-signup link. */
 	void sendClinicStaffInviteEmail(String recipientEmail, String staffName, String clinicName, String acceptUrl);
 

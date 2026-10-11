@@ -18,6 +18,8 @@ public class TemplateConstant {
 	/** Owner consent OTP when clinic staff adds a pet on their behalf (reuses signup OTP template by default). */
 	public static final String ZEPTO_CLINIC_PET_CONSENT_OTP_EMAIL_TEMPLATE_ID = "zoho.clinic.pet.consent.otp.email.template.id";
 	public static final String ZEPTO_CLINIC_DOCTOR_INVITE_EMAIL_TEMPLATE_ID = "zoho.clinic.doctor.invite.email.template.id";
+	/** Invite sent when the email is not already a Kittyp account. */
+	public static final String ZEPTO_CLINIC_DOCTOR_INVITE_NEW_USER_EMAIL_TEMPLATE_ID = "zoho.clinic.doctor.invite.new.user.email.template.id";
 	public static final String ZEPTO_CLINIC_STAFF_INVITE_EMAIL_TEMPLATE_ID = "zoho.clinic.staff.invite.email.template.id";
 	public static final String ZEPTO_CLINIC_DOCTOR_INVITE_RESPONSE_EMAIL_TEMPLATE_ID = "zoho.clinic.doctor.invite.response.email.template.id";
 	public static final String ZEPTO_RESET_PASSWORD_CODE_EMAIL_TEMPLATE_ID = "zoho.password.reset.code.email.template.id";

@@ -714,10 +714,19 @@ public class ClinicServiceImpl implements ClinicService {
 
         String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/clinic-invite/accept?token=" + invite.getToken();
         // Email may fail locally (missing Zepto template); invite is still stored and returned with token.
-        zeptoMailService.sendClinicDoctorInviteEmail(inviteEmail, doctorName, clinic.getName(), acceptUrl);
+        sendDoctorInviteEmail(inviteEmail, doctorName, clinic.getName(), acceptUrl);
 
         // Include token so the clinic UI can show a shareable accept link when email is delayed.
         return inviteModel(invite, true);
+    }
+
+    /** Existing Kittyp accounts get the doctor invite. New emails get the signup invite. */
+    private void sendDoctorInviteEmail(String inviteEmail, String doctorName, String clinicName, String acceptUrl) {
+        if (userDao.userPresentByEmail(inviteEmail)) {
+            zeptoMailService.sendClinicDoctorInviteEmail(inviteEmail, doctorName, clinicName, acceptUrl);
+            return;
+        }
+        zeptoMailService.sendClinicDoctorInviteNewUserEmail(inviteEmail, doctorName, clinicName, acceptUrl);
     }
 
     @Override
@@ -840,8 +849,7 @@ public class ClinicServiceImpl implements ClinicService {
         }
 
         String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/clinic-invite/accept?token=" + invite.getToken();
-        zeptoMailService.sendClinicDoctorInviteReminderEmail(invite.getEmail(), invite.getDoctorName(),
-                clinic.getName(), acceptUrl);
+        sendDoctorInviteEmail(invite.getEmail(), invite.getDoctorName(), clinic.getName(), acceptUrl);
         invite.setLastRemindedAt(LocalDateTime.now());
         invite = clinicDoctorInviteRepository.save(invite);
         return inviteModel(invite, true);
