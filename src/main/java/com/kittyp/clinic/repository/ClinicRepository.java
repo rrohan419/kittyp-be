@@ -25,7 +25,9 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
     List<Clinic> findAllFetchOwner();
 
     /**
-     * Organization clinics only: excludes personal practices (owner is an active affiliated doctor).
+     * Organization clinics for the admin list. Personal practices stay on Doctors:
+     * an active roster row with role {@code owner} whose doctor user is the clinic owner.
+     * An owner who is also a doctor (role {@code doctor}) remains an organization clinic.
      */
     @Query("""
             SELECT c FROM Clinic c LEFT JOIN FETCH c.owner
@@ -34,6 +36,7 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
                  SELECT 1 FROM ClinicDoctor cd
                  WHERE cd.clinic = c
                    AND cd.isActive = true
+                   AND cd.role = 'owner'
                    AND cd.doctor.user = c.owner
                )
             """)
@@ -46,6 +49,7 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
                  SELECT 1 FROM ClinicDoctor cd
                  WHERE cd.clinic = c
                    AND cd.isActive = true
+                   AND cd.role = 'owner'
                    AND cd.doctor.user.id = c.owner.id
                )
             """)
@@ -60,6 +64,7 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
                     SELECT 1 FROM ClinicDoctor cd
                     WHERE cd.clinic = c
                       AND cd.isActive = true
+                      AND cd.role = 'owner'
                       AND cd.doctor.user.id = c.owner.id
                 )
             )
