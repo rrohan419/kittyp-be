@@ -20,6 +20,7 @@ import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
@@ -47,7 +48,7 @@ class ClinicOwnerUserLinkServicePhoneSyncTest {
 	@Test
 	void syncOwnerPhoneFromUser_replacesPlaceholder() {
 		User user = user(1L, "parent@example.com", "9876543210");
-		ClinicPetOwner owner = owner(10L, "parent@example.com", ClinicOwnerUserLinkService.PLACEHOLDER_PHONE, user);
+		ClinicPetOwner owner = owner(10L, "parent@example.com", KeyConstant.PLACEHOLDER_PHONE, user);
 
 		when(clinicPetOwnerRepository.save(any(ClinicPetOwner.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -73,18 +74,18 @@ class ClinicOwnerUserLinkServicePhoneSyncTest {
 	@Test
 	void syncOwnerPhoneFromUser_noOpWhenUserPhoneInvalid() {
 		User user = user(1L, "parent@example.com", "123");
-		ClinicPetOwner owner = owner(10L, "parent@example.com", ClinicOwnerUserLinkService.PLACEHOLDER_PHONE, user);
+		ClinicPetOwner owner = owner(10L, "parent@example.com", KeyConstant.PLACEHOLDER_PHONE, user);
 
 		ClinicPetOwner updated = service.syncOwnerPhoneFromUser(owner, user);
 
-		assertEquals(ClinicOwnerUserLinkService.PLACEHOLDER_PHONE, updated.getPhone());
+		assertEquals(KeyConstant.PLACEHOLDER_PHONE, updated.getPhone());
 		verify(clinicPetOwnerRepository, never()).save(any());
 	}
 
 	@Test
 	void linkUserToClinicOwners_syncsPhoneOnAlreadyLinkedOwners() {
 		User user = user(1L, "parent@example.com", "9123456789");
-		ClinicPetOwner owner = owner(10L, "parent@example.com", ClinicOwnerUserLinkService.PLACEHOLDER_PHONE, user);
+		ClinicPetOwner owner = owner(10L, "parent@example.com", KeyConstant.PLACEHOLDER_PHONE, user);
 
 		when(clinicPetOwnerRepository.findByIsActiveTrueAndEmailIgnoreCase("parent@example.com"))
 				.thenReturn(List.of(owner));

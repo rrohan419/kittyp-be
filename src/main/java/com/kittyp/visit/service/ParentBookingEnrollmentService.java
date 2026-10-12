@@ -11,6 +11,7 @@ import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
@@ -104,7 +105,7 @@ public class ParentBookingEnrollmentService {
 						.lastName(sourceOwner.getLastName())
 						.email(email == null ? "owner+" + UUID.randomUUID() + "@kittyp.in" : email)
 						.phone(sourceOwner.getPhone() == null || sourceOwner.getPhone().isBlank()
-								? ClinicOwnerUserLinkService.PLACEHOLDER_PHONE
+								? KeyConstant.PLACEHOLDER_PHONE
 								: sourceOwner.getPhone())
 						.alternatePhone(sourceOwner.getAlternatePhone())
 						.address(sourceOwner.getAddress())
@@ -120,7 +121,7 @@ public class ParentBookingEnrollmentService {
 					.firstName("Client")
 					.lastName("")
 					.email("owner+" + UUID.randomUUID() + "@kittyp.local")
-					.phone(ClinicOwnerUserLinkService.PLACEHOLDER_PHONE)
+					.phone(KeyConstant.PLACEHOLDER_PHONE)
 					.build();
 			clinicOwner.setIsActive(true);
 			clinicOwner = clinicPetOwnerRepository.save(clinicOwner);
@@ -193,7 +194,7 @@ public class ParentBookingEnrollmentService {
 		if (owner == null) {
 			String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
 			if (phone == null || !phone.matches("\\d{10}")) {
-				phone = ClinicOwnerUserLinkService.PLACEHOLDER_PHONE;
+				phone = KeyConstant.PLACEHOLDER_PHONE;
 			}
 			String email = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
 			if (email == null || email.isBlank()) {

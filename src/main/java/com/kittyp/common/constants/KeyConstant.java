@@ -35,6 +35,7 @@ public class KeyConstant {
 	public static final String UPDATED_AT = "updatedAt";
 	public static final String CREATED_AT = "createdAt";
 	public static final String TAGS = "tags";
+	public static String PLACEHOLDER_PHONE = "0000000000";
 	
 	// shipping type
 	public static final String EXPRESS_SHIPPING = "EXPRESS";
