@@ -38,6 +38,8 @@ import com.kittyp.booking.entity.Booking;
 import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
+import com.kittyp.clinic.dto.ClinicContactOtpVerifyRequest;
+import com.kittyp.clinic.dto.ClinicContactOtpSendRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
@@ -96,6 +98,7 @@ import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicStaffInviteRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
+import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.util.SafePhotoUrl;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.PaginationSupport;
@@ -115,6 +118,8 @@ import com.kittyp.health.enums.HealthEventType;
 import com.kittyp.notification.entity.NotificationLog;
 import com.kittyp.notification.enums.NotificationType;
 import com.kittyp.notification.repository.NotificationLogRepository;
+import com.kittyp.notification.service.Msg91OtpVerifyService;
+import com.kittyp.notification.service.WhatsappOtpService;
 import com.kittyp.user.dao.PetDao;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
@@ -163,6 +168,8 @@ public class ClinicServiceImpl implements ClinicService {
     private final UserDao userDao;
     private final PetDao petDao;
     private final ZeptoMailService zeptoMailService;
+    private final WhatsappOtpService whatsappOtpService;
+    private final Msg91OtpVerifyService msg91OtpVerifyService;
     private final ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
     private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
     private final ConsultationInvoiceRepository consultationInvoiceRepository;
@@ -349,11 +356,33 @@ public class ClinicServiceImpl implements ClinicService {
         Clinic clinic = access(clinicUuid, email);
         requireClinicManager(clinic, userDao.userByEmail(email));
         requireOperational(clinic);
+        String oldEmail = ClinicOwnerUserLinkService.normalizeEmail(clinic.getEmail());
+        String newEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
+        if (!Objects.equals(oldEmail, newEmail) && newEmail != null) {
+            if (!newEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new CustomException("Enter a valid practice email", HttpStatus.BAD_REQUEST);
+            }
+            if (!verificationCodeService.isVerified(
+                    VerificationCodeService.clinicContactEmailVerifiedKey(clinic.getUuid(), newEmail))) {
+                throw new CustomException("Verify the new practice email before saving", HttpStatus.BAD_REQUEST);
+            }
+        }
+        String oldPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(clinic.getPhone());
+        String newPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+        if (!Objects.equals(oldPhone, newPhone) && newPhone != null) {
+            if (!newPhone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            if (!verificationCodeService.isVerified(
+                    VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), newPhone))) {
+                throw new CustomException("Verify the new practice phone before saving", HttpStatus.BAD_REQUEST);
+            }
+        }
         clinic.setName(request.name());
         clinic.setLicenseNumber(request.licenseNumber());
         clinic.setAddress(request.address());
-        clinic.setPhone(request.phone());
-        clinic.setEmail(request.email());
+        clinic.setPhone(newPhone);
+        clinic.setEmail(newEmail);
         clinic.setTimezone(request.timezone());
         clinic.setOperatingHours(request.operatingHours());
         if (request.city() != null) {
@@ -368,7 +397,104 @@ public class ClinicServiceImpl implements ClinicService {
         if (request.profileImageUrl() != null) {
             clinic.setProfileImageUrl(blankToNull(request.profileImageUrl()));
         }
-        return clinicModel(clinicDao.saveClinic(clinic));
+        Clinic savedClinic = clinicDao.saveClinic(clinic);
+        if (!Objects.equals(oldEmail, newEmail) && newEmail != null) {
+            verificationCodeService.clearVerified(
+                    VerificationCodeService.clinicContactEmailVerifiedKey(clinic.getUuid(), newEmail));
+        }
+        if (!Objects.equals(oldPhone, newPhone) && newPhone != null) {
+            verificationCodeService.clearVerified(
+                    VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), newPhone));
+        }
+        return clinicModel(savedClinic);
+    }
+
+    @Override
+    public MessageResponse sendClinicContactOtp(String clinicUuid, ClinicContactOtpSendRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireOperational(clinic);
+        String channel = request.channel() == null ? "" : request.channel().trim().toUpperCase(Locale.ROOT);
+        if ("EMAIL".equals(channel)) {
+            String newEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
+            if (newEmail == null || !newEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new CustomException("Enter a valid practice email", HttpStatus.BAD_REQUEST);
+            }
+            if (newEmail.equals(ClinicOwnerUserLinkService.normalizeEmail(clinic.getEmail()))) {
+                throw new CustomException("New practice email must be different", HttpStatus.BAD_REQUEST);
+            }
+            String key = VerificationCodeService.clinicContactEmailOtpKey(clinic.getUuid(), newEmail);
+            String code = verificationCodeService.generateCode(key);
+            User owner = clinic.getOwner();
+            String customerName = owner == null ? null : owner.getFirstName();
+            zeptoMailService.sendUpdateOtpEmail(newEmail, code, customerName, "Clinic", newEmail);
+            return new MessageResponse("OTP sent to the new practice email");
+        }
+        if ("WHATSAPP".equals(channel)) {
+            String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+            if (phone == null || !phone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            if (phone.equals(ClinicOwnerUserLinkService.normalizePhoneDigits(clinic.getPhone()))) {
+                throw new CustomException("New practice phone must be different", HttpStatus.BAD_REQUEST);
+            }
+            String key = VerificationCodeService.clinicContactPhoneOtpKey(clinic.getUuid(), phone);
+            String code = verificationCodeService.generateCode(key);
+            whatsappOtpService.sendOtp(phone, code);
+            return new MessageResponse("WhatsApp OTP sent to the new practice phone");
+        }
+        throw new CustomException("channel must be EMAIL or WHATSAPP", HttpStatus.BAD_REQUEST);
+    }
+
+    @Override
+    public Map<String, Boolean> verifyClinicContactOtp(
+            String clinicUuid, ClinicContactOtpVerifyRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireOperational(clinic);
+        String channel = request.channel() == null ? "" : request.channel().trim().toUpperCase(Locale.ROOT);
+        boolean verified;
+        if ("EMAIL".equals(channel)) {
+            String newEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
+            if (newEmail == null || !newEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new CustomException("Enter a valid practice email", HttpStatus.BAD_REQUEST);
+            }
+            verified = verificationCodeService.verifyCode(
+                    VerificationCodeService.clinicContactEmailOtpKey(clinic.getUuid(), newEmail),
+                    request.code(), true);
+            if (verified) {
+                verificationCodeService.markVerified(
+                        VerificationCodeService.clinicContactEmailVerifiedKey(clinic.getUuid(), newEmail));
+            }
+        } else if ("WHATSAPP".equals(channel)) {
+            String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+            if (phone == null || !phone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            verified = verificationCodeService.verifyCode(
+                    VerificationCodeService.clinicContactPhoneOtpKey(clinic.getUuid(), phone),
+                    request.code(), true);
+            if (verified) {
+                verificationCodeService.markVerified(
+                        VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), phone));
+            }
+        } else if ("PHONE".equals(channel)) {
+            String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+            if (phone == null || !phone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            verified = msg91OtpVerifyService.verifyOtp(request.accessToken());
+            if (verified) {
+                verificationCodeService.markVerified(
+                        VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), phone));
+            }
+        } else {
+            throw new CustomException("channel must be EMAIL, WHATSAPP, or PHONE", HttpStatus.BAD_REQUEST);
+        }
+        if (!verified) {
+            throw new CustomException("Invalid or expired OTP", HttpStatus.BAD_REQUEST);
+        }
+        return Map.of("verified", true);
     }
 
     @Override

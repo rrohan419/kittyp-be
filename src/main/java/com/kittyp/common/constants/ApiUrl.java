@@ -143,6 +143,8 @@ public class ApiUrl {
 	public static final String CLINIC_BASE_URL = "/clinic";
 	public static final String CLINIC_MINE = CLINIC_BASE_URL + "/mine";
 	public static final String CLINIC_BY_UUID = CLINIC_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String CLINIC_CONTACT_OTP_SEND = CLINIC_BY_UUID + "/contact/otp/send";
+	public static final String CLINIC_CONTACT_OTP_VERIFY = CLINIC_BY_UUID + "/contact/otp/verify";
 	public static final String CLINIC_REPORTS = CLINIC_BY_UUID + "/reports";
 	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
 	public static final String CLINIC_DOCTOR_BY_UUID = CLINIC_DOCTORS + "/{doctorUuid}";

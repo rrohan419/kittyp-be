@@ -129,6 +129,22 @@ public class VerificationCodeService {
         return "profile-phone-ok:" + userUuid + ":" + phone.trim();
     }
 
+    public static String clinicContactEmailOtpKey(String clinicUuid, String email) {
+        return "clinic-contact-email:" + clinicUuid.trim() + ":" + email.trim().toLowerCase();
+    }
+
+    public static String clinicContactEmailVerifiedKey(String clinicUuid, String email) {
+        return "clinic-contact-email-ok:" + clinicUuid.trim() + ":" + email.trim().toLowerCase();
+    }
+
+    public static String clinicContactPhoneOtpKey(String clinicUuid, String phone) {
+        return "clinic-contact-phone:" + clinicUuid.trim() + ":" + phone.trim();
+    }
+
+    public static String clinicContactPhoneVerifiedKey(String clinicUuid, String phone) {
+        return "clinic-contact-phone-ok:" + clinicUuid.trim() + ":" + phone.trim();
+    }
+
     /** One-pet consent OTP: staff adding a pet on behalf of an existing owner (email channel). */
     public static String clinicPetConsentOtpKey(String clinicUuid, String ownerEmail, String petName) {
         return "clinic-pet-consent:" + clinicUuid.trim() + ":" + normalizeEmail(ownerEmail) + ":"
