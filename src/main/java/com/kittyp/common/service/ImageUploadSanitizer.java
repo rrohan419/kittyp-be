@@ -2,6 +2,7 @@ package com.kittyp.common.service;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -74,7 +75,7 @@ public class ImageUploadSanitizer {
 		}
 		long pixels = (long) image.getWidth() * (long) image.getHeight();
 		if (image.getWidth() > MAX_SIDE || image.getHeight() > MAX_SIDE || pixels > MAX_PIXELS) {
-			throw new CustomException(UNSAFE_IMAGE, HttpStatus.BAD_REQUEST);
+			image = fitLimits(image);
 		}
 
 		boolean jpeg = "image/jpeg".equals(type);
@@ -192,6 +193,45 @@ public class ImageUploadSanitizer {
 			}
 		}
 		return true;
+	}
+
+	/** Shrink a decoded photo so the stored file stays within the side and pixel caps. */
+	private static BufferedImage fitLimits(BufferedImage source) {
+		int width = source.getWidth();
+		int height = source.getHeight();
+		double scale = 1d;
+		if (width > MAX_SIDE) {
+			scale = Math.min(scale, (double) MAX_SIDE / width);
+		}
+		if (height > MAX_SIDE) {
+			scale = Math.min(scale, (double) MAX_SIDE / height);
+		}
+		long pixels = (long) width * (long) height;
+		if (pixels > MAX_PIXELS) {
+			scale = Math.min(scale, Math.sqrt((double) MAX_PIXELS / (double) pixels));
+		}
+		int targetW = Math.max(1, (int) Math.floor(width * scale));
+		int targetH = Math.max(1, (int) Math.floor(height * scale));
+		while ((long) targetW * (long) targetH > MAX_PIXELS) {
+			if (targetW >= targetH && targetW > 1) {
+				targetW--;
+			} else if (targetH > 1) {
+				targetH--;
+			} else {
+				break;
+			}
+		}
+		BufferedImage scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = scaled.createGraphics();
+		try {
+			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			g.setColor(Color.WHITE);
+			g.fillRect(0, 0, targetW, targetH);
+			g.drawImage(source, 0, 0, targetW, targetH, null);
+		} finally {
+			g.dispose();
+		}
+		return scaled;
 	}
 
 	private static byte[] writeJpeg(BufferedImage source) throws IOException {
