@@ -9,8 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
@@ -38,6 +40,7 @@ public class PetAccessGuard {
 
     private final PetsRepository petsRepository;
     private final ClinicDoctorRepository clinicDoctorRepository;
+    private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
     private final ClinicStaffDao clinicStaffDao;
     private final DoctorProfileDao doctorProfileDao;
     private final VisitRepository visitRepository;
@@ -117,8 +120,11 @@ public class PetAccessGuard {
             return false;
         }
         String id = pet.getUuid();
-        Clinic clinic = pet.getClinic();
-        if (clinic != null) {
+        for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId())) {
+            Clinic clinic = enrollment.getClinic();
+            if (clinic == null) {
+                continue;
+            }
             Long clinicId = clinic.getId();
             if (clinic.getOwner() != null && clinic.getOwner().getId().equals(user.getId())) {
                 return true;

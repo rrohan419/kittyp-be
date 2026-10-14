@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import com.kittyp.article.dao.ArticleDao;
 import com.kittyp.article.enums.ArticleStatus;
 import com.kittyp.clinic.repository.ClinicRepository;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.common.model.AdminDashboardResponse;
 import com.kittyp.doctor.enums.DoctorStatus;
 import com.kittyp.doctor.repository.DoctorProfileRepository;
@@ -39,7 +40,7 @@ public class AdminServiceImpl implements AdminService{
         Integer totalOrders = orderDao.countOfOrderByStatus(true, orderStatuses);
         Integer articleCount = articleDao.countByIsActiveAndStatusIn(true, articleStatuses);
         long pendingDoctorsCount = doctorProfileRepository.countByStatusIn(pendingDoctorStatuses);
-        long clinicsCount = clinicRepository.countOrganizationClinics();
+        long clinicsCount = clinicRepository.countByPracticeModel(PracticeModel.ORGANIZATION);
         return new AdminDashboardResponse(
                 totalProducts, totalOrders, totalUsers, articleCount, pendingDoctorsCount, clinicsCount);
 

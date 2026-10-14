@@ -1,6 +1,8 @@
 package com.kittyp.clinic.service;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
@@ -12,6 +14,9 @@ import com.kittyp.clinic.dto.ClinicDtos.AddPatientRequest;
 import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicDoctorDetailModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
+import com.kittyp.clinic.dto.ClinicContactOtpVerifyRequest;
+import com.kittyp.clinic.dto.ClinicContactOtpSendRequest;
+import com.kittyp.common.model.MessageResponse;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicOwnerProfileModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicPetListModel;
@@ -59,6 +64,10 @@ public interface ClinicService {
     ClinicModel reapplyForVerification(String clinicUuid, String email);
 
     ClinicModel update(String clinicUuid, ClinicRequest request, String email);
+
+    MessageResponse sendClinicContactOtp(String clinicUuid, ClinicContactOtpSendRequest request, String email);
+
+    Map<String, Boolean> verifyClinicContactOtp(String clinicUuid, ClinicContactOtpVerifyRequest request, String email);
 
     /** Owner or staff/admin of this clinic (not affiliated-only doctors). */
     void requireClinicManager(String clinicUuid, String email);

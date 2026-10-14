@@ -22,6 +22,7 @@ public class ApiUrl {
 	public static final String SIGNUP_CLINIC = SIGNUP + "/clinic";
 	public static final String SIGNUP_OTP_SEND = SIGNUP + "/otp/send";
 	public static final String SIGNUP_OTP_VERIFY = SIGNUP + "/otp/verify";
+	public static final String SIGNUP_INVITE_VALIDATE = SIGNUP + "/invite/validate";
 	public static final String SIGNIN = AUTH_BASE_URL + "/signin";
 	public static final String SOCIAL_SSO = AUTH_BASE_URL + "/social-sso";
 	public static final String SEND_CODE = AUTH_BASE_URL + "/send-code";
@@ -142,6 +143,8 @@ public class ApiUrl {
 	public static final String CLINIC_BASE_URL = "/clinic";
 	public static final String CLINIC_MINE = CLINIC_BASE_URL + "/mine";
 	public static final String CLINIC_BY_UUID = CLINIC_BASE_URL + PATH_VARIABLE_UUID;
+	public static final String CLINIC_CONTACT_OTP_SEND = CLINIC_BY_UUID + "/contact/otp/send";
+	public static final String CLINIC_CONTACT_OTP_VERIFY = CLINIC_BY_UUID + "/contact/otp/verify";
 	public static final String CLINIC_REPORTS = CLINIC_BY_UUID + "/reports";
 	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
 	public static final String CLINIC_DOCTOR_BY_UUID = CLINIC_DOCTORS + "/{doctorUuid}";

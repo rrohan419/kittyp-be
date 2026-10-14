@@ -1,5 +1,6 @@
 package com.kittyp.auth.service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -30,9 +31,11 @@ import com.kittyp.clinic.entity.ClinicDoctor;
 import com.kittyp.clinic.entity.ClinicDoctorInvite;
 import com.kittyp.clinic.enums.ClinicDoctorInviteStatus;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
+import com.kittyp.clinic.service.ClinicPetParentSignupInviteService;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.LoginRequestDto;
 import com.kittyp.common.dto.PublicSignupRequestDto;
@@ -78,6 +81,7 @@ public class AuthServiceImpl implements AuthService {
 	private final ClinicDoctorInviteRepository clinicDoctorInviteRepository;
 	private final DoctorProfileDao doctorProfileDao;
 	private final VerificationCodeService verificationCodeService;
+	private final ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
 	private final WhatsappOtpService whatsappOtpService;
 	private final Msg91OtpVerifyService msg91OtpVerifyService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
@@ -99,8 +103,15 @@ public class AuthServiceImpl implements AuthService {
 	public MessageResponse registerUser(SignupRequestDto signupRequestDto) {
 		User existingUser = findUserByEmail(signupRequestDto.getEmail());
 		boolean addingRole = existingUser != null && !userHasRole(existingUser, ERole.ROLE_USER);
-		if (addingRole && !verificationCodeService
-				.isVerified(VerificationCodeService.emailVerifiedKey(normalizeEmail(signupRequestDto.getEmail())))) {
+		String email = normalizeEmail(signupRequestDto.getEmail());
+		if (existingUser != null && userHasRole(existingUser, ERole.ROLE_USER)) {
+			throw new ResourceAlreadyExistsException("User", "email", email);
+		}
+		if (signupRequestDto.getInviteToken() != null && !signupRequestDto.getInviteToken().isBlank()) {
+			if (!clinicPetParentSignupInviteService.consumeInvite(signupRequestDto.getInviteToken(), email)) {
+				throw new CustomException("This clinic invitation is invalid or expired", HttpStatus.BAD_REQUEST);
+			}
+		} else if (!verificationCodeService.isVerified(VerificationCodeService.emailVerifiedKey(email))) {
 			throw new CustomException("Email OTP verification required", HttpStatus.BAD_REQUEST);
 		}
 
@@ -254,8 +265,14 @@ public class AuthServiceImpl implements AuthService {
 			whatsappOtpService.sendOtp(digits, code);
 			return new MessageResponse("OTP sent to whatsapp");
 		}
-		
+
 		throw new CustomException("channel must be EMAIL, WHATSAPP", HttpStatus.BAD_REQUEST);
+	}
+
+	@Override
+	public Map<String, String> validatePetParentSignupInvite(String token) {
+		String email = clinicPetParentSignupInviteService.getInvitedEmail(token);
+		return Map.of("email", email);
 	}
 
 	@Override
@@ -322,8 +339,7 @@ public class AuthServiceImpl implements AuthService {
 
 		User user = createUserWithRole(signupClinicRequestDto, ERole.ROLE_CLINIC_ADMIN);
 		boolean alreadyOwnsRegisteredClinic = clinicDao.findAllByOwnerUserId(user.getId()).stream()
-				.anyMatch(clinic -> !clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
-						clinic.getId(), user.getId(), "owner"));
+				.anyMatch(clinic -> clinic.getPracticeModel() == PracticeModel.ORGANIZATION);
 		if (alreadyOwnsRegisteredClinic) {
 			throw new ResourceAlreadyExistsException("Clinic profile", "owner email", email);
 		}
@@ -340,6 +356,7 @@ public class AuthServiceImpl implements AuthService {
 				.timezone(signupClinicRequestDto.getTimezone())
 				.email(user.getEmail())
 				.owner(user)
+				.practiceModel(PracticeModel.ORGANIZATION)
 				.status(ClinicStatus.PENDING)
 				.build());
 		DoctorProfile doctorProfile = doctorProfileDao.findByUserId(user.getId());
@@ -356,8 +373,17 @@ public class AuthServiceImpl implements AuthService {
 	private Clinic provisionPersonalPractice(User user, DoctorProfile profile) {
 		if (user.getId() != null) {
 			for (Clinic owned : clinicDao.findAllByOwnerUserId(user.getId())) {
-				if (clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(),
-						user.getId(), "owner")) {
+				if (owned.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE) {
+					if (!clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(),
+							user.getId(), "owner")) {
+						clinicDoctorRepository.save(ClinicDoctor.builder()
+								.clinic(owned)
+								.doctor(profile)
+								.role("owner")
+								.isActive(true)
+								.joinedAt(LocalDate.now())
+								.build());
+					}
 					return owned;
 				}
 			}
@@ -371,7 +397,8 @@ public class AuthServiceImpl implements AuthService {
 				.email(user.getEmail())
 				.phone(profile.getPhoneNumber() != null ? profile.getPhoneNumber() : user.getPhoneNumber())
 				.owner(user)
-				.status(ClinicStatus.VERIFIED)
+				.practiceModel(PracticeModel.PERSONAL_PRACTICE)
+				.status(ClinicStatus.NOT_REQUIRED)
 				.build());
 		linkDoctorToClinic(personal, profile, "owner");
 		return personal;

@@ -14,6 +14,7 @@ import com.kittyp.common.entity.PublicIdEntityListener;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
+import com.kittyp.visit.enums.VisitUrgency;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -75,6 +76,11 @@ public class Booking extends BaseEntity implements HasPublicId {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private BookingStatus status;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private VisitUrgency urgency = VisitUrgency.ROUTINE;
 
     private BigDecimal price;
 

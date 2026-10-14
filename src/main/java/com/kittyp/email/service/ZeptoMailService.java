@@ -18,8 +18,9 @@ public interface ZeptoMailService {
 
 	void sendOrderConfirmationEmail(String recipientEmail, String orderNumber);
 
-	/** Sends a signup OTP email. purpose e.g. "email" or "phone". */
 	void sendSignupOtpEmail(String recipientEmail, String code, String purpose, String phoneHint);
+
+	void sendUpdateOtpEmail(String recipientEmail, String code, String name, String accountType, String newEmail);
 
 	/**
 	 * Owner consent OTP: clinic staff is adding pet {@code petName} on the owner's profile.
@@ -30,6 +31,10 @@ public interface ZeptoMailService {
 
 	/** Parent must confirm before their KittyP account is attached as a clinic client. */
 	void sendClinicClientAttachOtpEmail(String recipientEmail, String ownerName, String clinicName, String code);
+
+	/** Invite a clinic client without a KittyP account to sign up as a pet parent. */
+	void sendClinicPetParentInviteEmail(String recipientEmail, String customerName, String petName,
+			String clinicName, String inviteUrl);
 
 	/** Clinic doctor invitation with accept link. */
 	void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName, String acceptUrl);

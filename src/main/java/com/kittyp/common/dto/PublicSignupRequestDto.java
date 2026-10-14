@@ -85,5 +85,6 @@ public class PublicSignupRequestDto extends SignupRequestDto {
 		target.setPassword(getPassword());
 		target.setRole(getRole());
 		target.setRoles(getRoles());
+		target.setInviteToken(getInviteToken());
 	}
 }

@@ -11,6 +11,8 @@ public interface DoctorPatientEnrollmentRepository extends JpaRepository<DoctorP
 
 	Optional<DoctorPatientEnrollment> findByDoctor_IdAndPet_IdAndIsActiveTrue(Long doctorId, Long petId);
 
+	Optional<DoctorPatientEnrollment> findByDoctor_IdAndPet_Id(Long doctorId, Long petId);
+
 	Optional<DoctorPatientEnrollment> findByDoctor_IdAndPet_UuidAndIsActiveTrue(Long doctorId, String petUuid);
 
 	List<DoctorPatientEnrollment> findByDoctor_IdAndIsActiveTrue(Long doctorId);

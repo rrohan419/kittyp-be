@@ -143,11 +143,15 @@ public class VisitServiceImpl implements VisitService {
         if (request.doctorUuid() != null && !request.doctorUuid().isBlank()) {
             doctor = requireClinicDoctor(clinic, request.doctorUuid());
             requirePracticeReady(doctor);
-            requireDoctorAvailableAt(doctor, DoctorHours.nowLocal(availabilityTimezone(doctor, clinic)));
         }
 
         Pet pet = resolvePetForWalkIn(clinic, request);
-        ClinicPetOwner owner = pet.getClinicOwner();
+        parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
+        ClinicPetOwner owner = clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
+                .map(ClinicPetEnrollment::getClinicOwner)
+                .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+        owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
 
         Visit visit = Visit.builder()
                 .uuid(UUID.randomUUID().toString())
@@ -163,7 +167,6 @@ public class VisitServiceImpl implements VisitService {
                 .build();
         visit.setIsActive(true);
         visit = visitDao.save(visit);
-        parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         if (doctor != null) {
             notifyDoctorOfPatient(visit, "assigned");
         }
@@ -213,13 +216,16 @@ public class VisitServiceImpl implements VisitService {
         WalkInCreateRequest petRequest = new WalkInCreateRequest(
                 request.petUuid(), request.owner(), request.newPet(), null, null, null);
         Pet pet = resolvePetForWalkIn(clinic, petRequest);
-        ClinicPetOwner clinicOwner = pet.getClinicOwner();
-        if (clinicOwner != null) {
-            clinicOwner = clinicOwnerUserLinkService.linkOwnerIfUserExists(clinicOwner);
-        }
+        parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
+        ClinicPetOwner clinicOwner = clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
+                .map(ClinicPetEnrollment::getClinicOwner)
+                .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+        clinicOwner = clinicOwnerUserLinkService.linkOwnerIfUserExists(clinicOwner);
         User ownerUser = resolvePlatformOwner(pet);
 
         BookingMode mode = request.mode() == null ? BookingMode.IN_PERSON : request.mode();
+        VisitUrgency urgency = request.urgency() == null ? VisitUrgency.ROUTINE : request.urgency();
         String notes = blankToNull(request.notes());
 
         Booking booking = Booking.builder()
@@ -232,6 +238,7 @@ public class VisitServiceImpl implements VisitService {
                 .timezone(clinic.getTimezone())
                 .mode(mode)
                 .status(BookingStatus.CONFIRMED)
+                .urgency(urgency)
                 .notes(notes)
                 .build();
         booking.setIsActive(true);
@@ -243,7 +250,6 @@ public class VisitServiceImpl implements VisitService {
             }
         }
 
-        parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         notifyDoctorOfBooking(booking);
         return toBookingModel(booking);
     }
@@ -302,7 +308,8 @@ public class VisitServiceImpl implements VisitService {
         boolean hasNotes = request.notes() != null;
         boolean hasStatus = request.status() != null;
         boolean hasMode = request.mode() != null;
-        if (!hasDoctor && !hasSlot && !hasNotes && !hasStatus && !hasMode) {
+        boolean hasUrgency = request.urgency() != null;
+        if (!hasDoctor && !hasSlot && !hasNotes && !hasStatus && !hasMode && !hasUrgency) {
             throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
         }
 
@@ -372,6 +379,9 @@ public class VisitServiceImpl implements VisitService {
         }
         if (hasMode) {
             booking.setMode(request.mode());
+        }
+        if (hasUrgency) {
+            booking.setUrgency(request.urgency());
         }
         jitsiMeetService.ensureVideoRoom(booking);
         return toBookingModel(bookingRepository.save(booking));
@@ -487,14 +497,6 @@ public class VisitServiceImpl implements VisitService {
         LocalDateTime nowClinic = DoctorHours.nowLocal(clinic == null ? null : clinic.getTimezone());
         if (slotStart.isBefore(nowClinic.minusMinutes(5))) {
             throw new CustomException("Cannot book a slot in the past", HttpStatus.BAD_REQUEST);
-        }
-    }
-
-    /** Walk-in "here now": doctor must have a window covering this instant. */
-    private void requireDoctorAvailableAt(DoctorProfile doctor, LocalDateTime when) {
-        LocalTime now = when.toLocalTime();
-        if (!DoctorHours.fitsWindow(doctorWindowsOn(doctor, when.toLocalDate()), now, now)) {
-            throw new CustomException("Doctor is not available at this time", HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -620,6 +622,12 @@ public class VisitServiceImpl implements VisitService {
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.NO_SHOW) {
             throw new CustomException("Cannot start treatment for a cancelled booking", HttpStatus.BAD_REQUEST);
         }
+        if (booking.getSlotStart() != null
+                && booking.getSlotStart().toLocalDate().isBefore(LocalDate.now())) {
+            throw new CustomException(
+                    "This appointment is in the past. Cancel it or mark it as no-show before closing it.",
+                    HttpStatus.BAD_REQUEST);
+        }
         if (booking.getClinic() == null || booking.getPet() == null) {
             throw new CustomException("Booking is missing clinic or pet", HttpStatus.BAD_REQUEST);
         }
@@ -641,11 +649,18 @@ public class VisitServiceImpl implements VisitService {
             throw new CustomException("Treatment already started for this booking", HttpStatus.BAD_REQUEST);
         }
 
-        ClinicPetOwner owner = booking.getPet().getClinicOwner();
-        if (owner != null) {
-            owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
-        }
         User platformOwner = resolvePlatformOwner(booking.getPet());
+        if (platformOwner != null) {
+            parentBookingEnrollmentService.enrollAfterParentBooking(
+                    booking.getClinic(), profile, booking.getPet(), platformOwner);
+        } else {
+            parentBookingEnrollmentService.enrollAfterStaffCare(booking.getClinic(), profile, booking.getPet());
+        }
+        ClinicPetOwner owner = clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(booking.getClinic().getId(), booking.getPet().getUuid())
+                .map(ClinicPetEnrollment::getClinicOwner)
+                .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+        owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
         if (booking.getOwner() == null && platformOwner != null) {
             booking.setOwner(platformOwner);
             bookingRepository.save(booking);
@@ -661,7 +676,7 @@ public class VisitServiceImpl implements VisitService {
                 .source(VisitSource.SCHEDULED)
                 .channel(booking.getMode() == null ? BookingMode.IN_PERSON : booking.getMode())
                 .status(VisitStatus.IN_PROGRESS)
-                .urgency(VisitUrgency.ROUTINE)
+                .urgency(booking.getUrgency() == null ? VisitUrgency.ROUTINE : booking.getUrgency())
                 .reasonForVisit(blankToNull(booking.getNotes()))
                 .checkedInAt(now)
                 .startedAt(now)
@@ -671,13 +686,6 @@ public class VisitServiceImpl implements VisitService {
 
         booking.setStatus(BookingStatus.COMPLETED);
         bookingRepository.save(booking);
-        if (platformOwner != null) {
-            parentBookingEnrollmentService.enrollAfterParentBooking(
-                    booking.getClinic(), profile, booking.getPet(), platformOwner);
-        } else {
-            parentBookingEnrollmentService.enrollAfterStaffCare(booking.getClinic(), profile, booking.getPet());
-        }
-
         return toModel(visit, true);
     }
 
@@ -828,6 +836,13 @@ public class VisitServiceImpl implements VisitService {
         requirePracticeReady(requireDoctorProfile(email));
         if (!STARTABLE.contains(visit.getStatus()) && visit.getStatus() != VisitStatus.IN_PROGRESS) {
             throw new CustomException("Cannot start visit from status " + visit.getStatus(), HttpStatus.BAD_REQUEST);
+        }
+        if (visit.getCreatedAt() != null
+                && visit.getCreatedAt().toLocalDate().isBefore(LocalDate.now())
+                && visit.getStatus() != VisitStatus.IN_PROGRESS) {
+            throw new CustomException(
+                    "This visit is in the past. Cancel it or mark it as no-show before attending.",
+                    HttpStatus.BAD_REQUEST);
         }
         if (visit.getDoctor() == null) {
             visit.setDoctor(requireDoctorProfile(email));
@@ -1311,25 +1326,17 @@ public class VisitServiceImpl implements VisitService {
         if (pet != null) {
             return pet;
         }
-        return petsRepository.findFirstByClinic_IdAndPatientNumberIgnoreCase(clinic.getId(), key).orElse(null);
+        return clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
+                .map(ClinicPetEnrollment::getPet)
+                .filter(enrolledPet -> enrolledPet != null && enrolledPet.getPatientNumber() != null
+                        && enrolledPet.getPatientNumber().equalsIgnoreCase(key))
+                .findFirst()
+                .orElse(null);
     }
 
     private boolean petBelongsToClinic(Clinic clinic, Pet pet) {
-        if (pet.getClinic() != null && pet.getClinic().getId().equals(clinic.getId())) {
-            return true;
-        }
-        if (clinicPetEnrollmentRepository
-                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
-                .isPresent()) {
-            return true;
-        }
-        DoctorProfile practiceDoctor = clinic.getOwner() == null
-                ? null
-                : doctorProfileDao.findByUserId(clinic.getOwner().getId());
-        return practiceDoctor != null
-                && ParentBookingEnrollmentService.isPersonalPractice(clinic, practiceDoctor)
-                && doctorPatientEnrollmentRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrue(
-                        practiceDoctor.getId(), pet.getUuid());
+        return clinicPetEnrollmentRepository
+                .existsByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid());
     }
 
     private Pet resolvePetForWalkIn(Clinic clinic, WalkInCreateRequest request) {
@@ -1376,7 +1383,6 @@ public class VisitServiceImpl implements VisitService {
         owner = clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
 
         Pet pet = Pet.builder()
-                .clinic(clinic)
                 .clinicOwner(owner)
                 .name(petReq.name().trim())
                 .type(blankToNull(petReq.species()))
@@ -1415,8 +1421,11 @@ public class VisitServiceImpl implements VisitService {
                     .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
                     .orElse(null);
             if (owner != null) {
-                List<Pet> pets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId());
-                if (pets == null || pets.isEmpty()) {
+                boolean hasClinicPets = clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
+                        .filter(enrollment -> enrollment.getClinicOwner() != null
+                                && enrollment.getClinicOwner().getId().equals(owner.getId()))
+                        .anyMatch(enrollment -> enrollment.getPet() != null);
+                if (!hasClinicPets) {
                     return;
                 }
             }
@@ -1639,7 +1648,8 @@ public class VisitServiceImpl implements VisitService {
                 doctorSpecialization,
                 doctorPhotoUrl,
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.getUrgency() == null ? VisitUrgency.ROUTINE : booking.getUrgency());
     }
 
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {
@@ -1805,7 +1815,7 @@ public class VisitServiceImpl implements VisitService {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
             return;
         }
-        // Already linked to a different platform user — do not claim via email/phone.
+        // Already linked to a different platform user — do not claim via email.
         if (owner != null && owner.getLinkedUser() != null
                 && !owner.getLinkedUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("You do not have access to this pet");
@@ -1814,14 +1824,6 @@ public class VisitServiceImpl implements VisitService {
             String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(owner.getEmail());
             String userEmail = ClinicOwnerUserLinkService.normalizeEmail(user.getEmail());
             if (ownerEmail != null && ownerEmail.equals(userEmail)) {
-                clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
-                return;
-            }
-            // Phone claim only when the digits uniquely match this user (same rule as link service).
-            String ownerPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(owner.getPhone());
-            String userPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(user.getPhoneNumber());
-            if (ownerPhone != null && ownerPhone.equals(userPhone) && ownerPhone.matches("\\d{10}")
-                    && clinicOwnerUserLinkService.isUniquePhoneMatch(user, ownerPhone)) {
                 clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
                 return;
             }

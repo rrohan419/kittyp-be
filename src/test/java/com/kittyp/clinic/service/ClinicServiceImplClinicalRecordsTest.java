@@ -26,6 +26,7 @@ import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
@@ -80,7 +81,9 @@ class ClinicServiceImplClinicalRecordsTest {
         Visit visit = Visit.builder().uuid(VISIT_UUID).clinic(clinic).pet(pet).build();
 
         stubClinicAccess(doctor, clinic, true);
-        when(petsRepository.findByUuidAndClinic_Id(PET_UUID, clinic.getId())).thenReturn(Optional.of(pet));
+        when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), PET_UUID))
+                .thenReturn(Optional.of(ClinicPetEnrollment.builder()
+                        .clinic(clinic).clinicOwner(clinicOwner).pet(pet).build()));
         when(visitDao.findByUuidAndClinicId(VISIT_UUID, clinic.getId())).thenReturn(Optional.of(visit));
         when(healthEventDao.save(any(HealthEvent.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -157,7 +160,6 @@ class ClinicServiceImplClinicalRecordsTest {
     private static Pet pet(Clinic clinic, ClinicPetOwner clinicOwner) {
         Pet pet = Pet.builder()
                 .uuid(PET_UUID)
-                .clinic(clinic)
                 .clinicOwner(clinicOwner)
                 .name("Milo")
                 .type("Dog")

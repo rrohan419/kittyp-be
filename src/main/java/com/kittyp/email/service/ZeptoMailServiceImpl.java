@@ -147,6 +147,24 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	public void sendUpdateOtpEmail(String recipientEmail, String code, String name, String accountType,
+			String newEmail) {
+		String customerName = name == null || name.isBlank() ? "Kittyp user" : name.trim();
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(Map.of(
+				"account_type", accountType,
+				"expiry_minutes", "10",
+				"otp", code,
+				"customer_name", customerName,
+				"new_email", newEmail));
+		mailDto.setRecipientEmail(recipientEmail);
+		mailDto.setRecipientName(customerName);
+		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_EMAIL_CHANGE_OTP_TEMPLATE_ID));
+		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+		addEmailAuditLog(responseModel, recipientEmail);
+	}
+
+	@Override
 	public void sendClinicPetConsentOtpEmail(String recipientEmail, String ownerName, String clinicName, String petName,
 			String code) {
 		String clinic = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName.trim();
@@ -198,6 +216,18 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			log.warn("Failed to send clinic pet-consent OTP to {}: {} (OTP remains in cache)", recipientEmail,
 					e.getMessage());
 		}
+	}
+
+	@Override
+	public void sendClinicPetParentInviteEmail(String recipientEmail, String customerName, String petName,
+			String clinicName, String inviteUrl) {
+		String name = blankToDefault(customerName, "Pet parent");
+		sendDedicated(recipientEmail, name, TemplateConstant.ZEPTO_CLINIC_PET_PARENT_INVITE_EMAIL_TEMPLATE_ID,
+				Map.of(
+						"customer_name", name,
+						"pet_name", blankToDefault(petName, "your pet"),
+						"clinic_name", blankToDefault(clinicName, "Clinic"),
+						"invite_url", blankToDefault(inviteUrl, "")));
 	}
 
 	@Override

@@ -50,6 +50,37 @@ class ZeptoMailServiceImplTest {
 	}
 
 	@Test
+	void emailChangeOtpUsesDedicatedTemplateAndMergeInfo() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		EmailAuditService auditService = mock(EmailAuditService.class);
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(TemplateConstant.ZEPTO_EMAIL_CHANGE_OTP_TEMPLATE_ID))
+				.thenReturn("email-change-otp-template");
+		when(sender.sendEmail(any())).thenReturn(response());
+		ZeptoMailServiceImpl service = new ZeptoMailServiceImpl(
+				sender,
+				auditService,
+				mock(UserDao.class),
+				mock(VerificationCodeService.class),
+				mock(OrderDao.class),
+				environment);
+
+		service.sendUpdateOtpEmail("new@example.com", "123456", "Rohan", "Clinic", "new@example.com");
+
+		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(mailCaptor.capture());
+		ZeptoMailDto mail = mailCaptor.getValue();
+		assertEquals("email-change-otp-template", mail.getTemplateKey());
+		assertEquals("new@example.com", mail.getRecipientEmail());
+		assertEquals("Rohan", mail.getRecipientName());
+		assertEquals("Clinic", mail.getMergeInfo().get("account_type"));
+		assertEquals("10", mail.getMergeInfo().get("expiry_minutes"));
+		assertEquals("123456", mail.getMergeInfo().get("otp"));
+		assertEquals("Rohan", mail.getMergeInfo().get("customer_name"));
+		assertEquals("new@example.com", mail.getMergeInfo().get("new_email"));
+	}
+
+	@Test
 	void clinicRejectionEmailIncludesExpectedMergeInfo() {
 		ZeptoMailSender sender = mock(ZeptoMailSender.class);
 		EmailAuditService auditService = mock(EmailAuditService.class);
@@ -75,6 +106,38 @@ class ZeptoMailServiceImplTest {
 		assertEquals("Paws Clinic", mailCaptor.getValue().getMergeInfo().get("clinic_name"));
 		assertEquals("Please upload a valid license.",
 				mailCaptor.getValue().getMergeInfo().get("rejection_reason"));
+	}
+
+	@Test
+	void clinicPetParentInviteUsesProvidedTemplateAndMergeInfo() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		EmailAuditService auditService = mock(EmailAuditService.class);
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(TemplateConstant.ZEPTO_CLINIC_PET_PARENT_INVITE_EMAIL_TEMPLATE_ID))
+				.thenReturn("pet-parent-invite-template");
+		when(sender.sendEmail(any())).thenReturn(response());
+		ZeptoMailServiceImpl service = new ZeptoMailServiceImpl(
+				sender,
+				auditService,
+				mock(UserDao.class),
+				mock(VerificationCodeService.class),
+				mock(OrderDao.class),
+				environment);
+
+		service.sendClinicPetParentInviteEmail("owner@example.com", "Rohan", "Milo", "Happy Paws",
+				"https://kittyp.in/signup?role=USER&email=owner%40example.com");
+
+		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(mailCaptor.capture());
+		ZeptoMailDto mail = mailCaptor.getValue();
+		assertEquals("pet-parent-invite-template", mail.getTemplateKey());
+		assertEquals("owner@example.com", mail.getRecipientEmail());
+		assertEquals("Rohan", mail.getRecipientName());
+		assertEquals("Rohan", mail.getMergeInfo().get("customer_name"));
+		assertEquals("Milo", mail.getMergeInfo().get("pet_name"));
+		assertEquals("Happy Paws", mail.getMergeInfo().get("clinic_name"));
+		assertEquals("https://kittyp.in/signup?role=USER&email=owner%40example.com",
+				mail.getMergeInfo().get("invite_url"));
 	}
 
 	@Test

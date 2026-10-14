@@ -23,6 +23,7 @@ import com.kittyp.clinic.dao.ClinicStaffDao;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicPetMedicalProfileModel;
 import com.kittyp.clinic.dto.ClinicDtos.InvoiceSummaryModel;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
@@ -150,7 +151,9 @@ class ClinicServiceImplPetInvoicesTest {
         when(clinicStaffDao.isActiveMember(clinic.getId(), admin.getId())).thenReturn(false);
         when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), admin.getId()))
                 .thenReturn(false);
-        when(petsRepository.findByUuidAndClinic_Id(PET_UUID, clinic.getId())).thenReturn(Optional.of(pet));
+        when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), PET_UUID))
+                .thenReturn(Optional.of(ClinicPetEnrollment.builder()
+                        .clinic(clinic).clinicOwner(pet.getClinicOwner()).pet(pet).build()));
     }
 
     private static Clinic clinic(User owner) {
@@ -180,7 +183,6 @@ class ClinicServiceImplPetInvoicesTest {
     private static Pet pet(Clinic clinic, ClinicPetOwner clinicOwner) {
         Pet pet = Pet.builder()
                 .uuid(PET_UUID)
-                .clinic(clinic)
                 .clinicOwner(clinicOwner)
                 .name("Milo")
                 .type("Dog")

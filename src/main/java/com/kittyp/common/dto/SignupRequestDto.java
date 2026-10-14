@@ -36,6 +36,9 @@ public class SignupRequestDto {
 	/** Ignored server-side. Kept for API compatibility — never used for provisioning. */
 	private Set<String> roles;
 
+	/** Single-use clinic pet-parent invite token, optional for regular signup. */
+	private String inviteToken;
+
 	@NotBlank
 	@Size(min = 8, max = 72)
 	@Pattern(

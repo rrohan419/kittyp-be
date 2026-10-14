@@ -6,6 +6,7 @@ import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.common.entity.HasPublicId;
 import com.kittyp.common.entity.PublicIdEntityListener;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.user.entity.User;
 
 import org.hibernate.annotations.DynamicUpdate;
@@ -19,6 +20,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -64,6 +66,11 @@ public class Clinic extends BaseEntity implements HasPublicId {
     private String phone;
 
     private String email;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "practice_model", length = 32)
+    @Builder.Default
+    private PracticeModel practiceModel = PracticeModel.ORGANIZATION;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_user_id")
@@ -111,4 +118,11 @@ public class Clinic extends BaseEntity implements HasPublicId {
     /** MISSING | PENDING | APPROVED | REJECTED | ERROR */
     @Column(name = "whatsapp_invoice_template_status", length = 32)
     private String whatsappInvoiceTemplateStatus;
+
+    @PrePersist
+    private void setDefaultPracticeModel() {
+        if (practiceModel == null) {
+            practiceModel = PracticeModel.ORGANIZATION;
+        }
+    }
 }

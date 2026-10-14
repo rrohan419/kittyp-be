@@ -58,13 +58,12 @@ class VisitServiceImplAvailabilityTest {
 	private VisitServiceImpl visitService;
 
 	@Test
-	void createWalkIn_assignedDoctorOnClosedException_rejected() {
-		Fixture f = stubVerifiedClinicWithDoctor();
-		when(doctorAvailabilityRepository.findByDoctor_Id(5L)).thenReturn(Optional.of(closedToday(f.doctor)));
+	void createWalkIn_assignedDoctor_doesNotCheckOnlineAvailability() {
+		stubVerifiedClinicWithDoctor();
 
 		CustomException ex = assertThrows(CustomException.class,
 				() -> visitService.createWalkIn("clinic-v", walkInWithDoctor(), "staff@example.com"));
-		assertEquals("Doctor is not available at this time", ex.getMessage());
+		assertEquals("Provide petUuid or owner + newPet for walk-in", ex.getMessage());
 	}
 
 	@Test
@@ -118,10 +117,6 @@ class VisitServiceImplAvailabilityTest {
 		when(clinicDao.findByUuid("clinic-v")).thenReturn(clinic);
 		when(userDao.userByEmail("staff@example.com")).thenReturn(staff);
 		return new Fixture(clinic, doctor);
-	}
-
-	private static DoctorAvailability closedToday(DoctorProfile doctor) {
-		return closedOn(doctor, LocalDate.now());
 	}
 
 	private static DoctorAvailability closedOn(DoctorProfile doctor, LocalDate day) {

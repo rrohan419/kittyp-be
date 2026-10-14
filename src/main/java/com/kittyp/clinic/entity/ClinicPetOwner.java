@@ -29,7 +29,7 @@ import lombok.ToString;
 
 /**
  * Clinic-managed pet owner / client (not a platform User account until linked).
- * Pets live in the shared {@code pets} table via {@link Pet#getClinicOwner()}.
+ * The clinic-specific pet relationship is stored in {@link ClinicPetEnrollment}.
  */
 @Entity
 @Table(name = "clinic_pet_owners")
@@ -57,7 +57,7 @@ public class ClinicPetOwner extends BaseEntity implements HasPublicId {
 	@Column(nullable = false)
 	private String email;
 
-	@Column(nullable = false, length = 20)
+	@Column(length = 20)
 	private String phone;
 
 	@Column(name = "alternate_phone", length = 20)

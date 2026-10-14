@@ -1,6 +1,7 @@
 package com.kittyp.clinic.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
+import com.kittyp.clinic.dto.ClinicContactOtpVerifyRequest;
+import com.kittyp.clinic.dto.ClinicContactOtpSendRequest;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
 import com.kittyp.clinic.dto.ClinicDtos.HealthEventModel;
 import com.kittyp.clinic.dto.ClinicDtos.MarkVaccineGivenRequest;
@@ -105,6 +108,20 @@ public class ClinicController {
     public ResponseEntity<SuccessResponse<ClinicModel>> update(@PathVariable String uuid,
             @RequestBody @Valid ClinicRequest request) {
         return success(clinicService.update(uuid, request, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_CONTACT_OTP_SEND)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<MessageResponse>> sendClinicContactOtp(@PathVariable String uuid,
+            @RequestBody @Valid ClinicContactOtpSendRequest request) {
+        return success(clinicService.sendClinicContactOtp(uuid, request, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_CONTACT_OTP_VERIFY)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<Map<String, Boolean>>> verifyClinicContactOtp(
+            @PathVariable String uuid, @RequestBody @Valid ClinicContactOtpVerifyRequest request) {
+        return success(clinicService.verifyClinicContactOtp(uuid, request, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_REAPPLY)

@@ -8,6 +8,7 @@ import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.health.enums.HealthEventStatus;
 import com.kittyp.health.enums.HealthEventType;
+import com.kittyp.visit.enums.VisitUrgency;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -32,24 +33,32 @@ public final class ClinicDtos {
 
     public record ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
             String timezone, String operatingHours, String status, Boolean personal, Boolean whatsappConfigured,
-            String city, Double latitude, Double longitude, String profileImageUrl, String rejectionReason) {
+            String city, Double latitude, Double longitude, String profileImageUrl, String rejectionReason,
+            String practiceModel) {
         /** Backward-compatible ctor without personal / whatsapp / geo flags. */
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status) {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, false, false,
-                    null, null, null, null, null);
+                    null, null, null, null, null, null);
         }
 
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status, Boolean personal) {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal, false,
-                    null, null, null, null, null);
+                    null, null, null, null, null, null);
         }
 
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status, Boolean personal, Boolean whatsappConfigured) {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal,
-                    whatsappConfigured, null, null, null, null, null);
+                    whatsappConfigured, null, null, null, null, null, null);
+        }
+
+        public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
+                String timezone, String operatingHours, String status, Boolean personal, Boolean whatsappConfigured,
+                String city, Double latitude, Double longitude, String profileImageUrl, String rejectionReason) {
+            this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal,
+                    whatsappConfigured, city, latitude, longitude, profileImageUrl, rejectionReason, null);
         }
     }
 
@@ -268,26 +277,26 @@ public final class ClinicDtos {
     public record BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
             LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
             String notes, String clinicUuid, String clinicName, String doctorName, String doctorSpecialization,
-            String doctorPhotoUrl, String species, String videoJoinUrl) {
+            String doctorPhotoUrl, String species, String videoJoinUrl, VisitUrgency urgency) {
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, VisitUrgency.ROUTINE);
         }
 
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes, String clinicUuid) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    clinicUuid, null, null, null, null, null, null);
+                    clinicUuid, null, null, null, null, null, null, VisitUrgency.ROUTINE);
         }
 
         public BookingModel(String uuid, String petUuid, String petName, String ownerName, String doctorUuid,
                 LocalDateTime slotStart, LocalDateTime slotEnd, String timezone, BookingStatus status, String mode,
                 String notes, String clinicUuid, String clinicName) {
             this(uuid, petUuid, petName, ownerName, doctorUuid, slotStart, slotEnd, timezone, status, mode, notes,
-                    clinicUuid, clinicName, null, null, null, null, null);
+                    clinicUuid, clinicName, null, null, null, null, null, VisitUrgency.ROUTINE);
         }
     }
 
@@ -360,7 +369,7 @@ public final class ClinicDtos {
             @NotBlank String ownerFirstName,
             String ownerLastName,
             @NotBlank @Email String ownerEmail,
-            @NotBlank String ownerPhone,
+            String ownerPhone,
             String ownerAddress,
             String ownerAlternatePhone,
             String ownerNotes,

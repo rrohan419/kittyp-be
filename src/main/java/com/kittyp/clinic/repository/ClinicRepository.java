@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.enums.PracticeModel;
 
 public interface ClinicRepository extends JpaRepository<Clinic, Long> {
 
@@ -24,46 +25,28 @@ public interface ClinicRepository extends JpaRepository<Clinic, Long> {
     @Query("SELECT c FROM Clinic c LEFT JOIN FETCH c.owner")
     List<Clinic> findAllFetchOwner();
 
-    /**
-     * Organization clinics only: excludes personal practices (owner is an active affiliated doctor).
-     */
     @Query("""
             SELECT c FROM Clinic c LEFT JOIN FETCH c.owner
-            WHERE c.owner IS NULL
-               OR NOT EXISTS (
-                 SELECT 1 FROM ClinicDoctor cd
-                 WHERE cd.clinic = c
-                   AND cd.isActive = true
-                   AND cd.doctor.user = c.owner
-               )
+            WHERE c.practiceModel = com.kittyp.clinic.enums.PracticeModel.ORGANIZATION
             """)
     List<Clinic> findAllOrganizationFetchOwner();
 
+    @Query("SELECT COUNT(c) FROM Clinic c WHERE c.practiceModel = :practiceModel")
+    long countByPracticeModel(@Param("practiceModel") PracticeModel practiceModel);
+
     @Query("""
-            SELECT COUNT(c) FROM Clinic c
-            WHERE c.owner IS NULL
-               OR NOT EXISTS (
-                 SELECT 1 FROM ClinicDoctor cd
-                 WHERE cd.clinic = c
-                   AND cd.isActive = true
-                   AND cd.doctor.user.id = c.owner.id
-               )
+            SELECT c FROM Clinic c
+            WHERE c.isActive = true
+              AND (c.status = com.kittyp.clinic.enums.ClinicStatus.VERIFIED
+                   OR c.status = com.kittyp.clinic.enums.ClinicStatus.NOT_REQUIRED)
             """)
-    long countOrganizationClinics();
+    List<Clinic> findDiscoverable();
 
     Clinic findByOwner_Id(Long ownerUserId);
 
     List<Clinic> findAllByOwner_Id(Long ownerUserId);
 
     List<Clinic> findByStatusAndIsActiveTrue(ClinicStatus status);
-
-    /** Active, admin-verified clinics for parent discovery (city/q filtered in service). */
-    @Query("""
-            SELECT c FROM Clinic c
-            WHERE c.isActive = true
-              AND c.status = com.kittyp.clinic.enums.ClinicStatus.VERIFIED
-            """)
-    List<Clinic> findDiscoverable();
 
     List<Clinic> findByWhatsappBusinessAccountId(String whatsappBusinessAccountId);
 }

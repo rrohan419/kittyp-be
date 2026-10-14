@@ -31,12 +31,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import com.kittyp.booking.dao.BookingDao;
 import com.kittyp.booking.entity.Booking;
 import com.kittyp.booking.enums.BookingStatus;
 import com.kittyp.clinic.dao.ClinicDao;
 import com.kittyp.clinic.dao.ClinicStaffDao;
+import com.kittyp.clinic.dto.ClinicContactOtpVerifyRequest;
+import com.kittyp.clinic.dto.ClinicContactOtpSendRequest;
 import com.kittyp.clinic.dto.ClinicDtos.AddVaccineDueRequest;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordModel;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicalRecordRequest;
@@ -81,7 +84,6 @@ import com.kittyp.clinic.dto.ClinicDtos.VaccineScheduleModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicDoctor;
 import com.kittyp.clinic.entity.ClinicDoctorInvite;
-import com.kittyp.clinic.entity.ClinicPatientPet;
 import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.entity.ClinicStaff;
@@ -89,14 +91,16 @@ import com.kittyp.clinic.entity.ClinicStaffInvite;
 import com.kittyp.clinic.enums.ClinicDoctorInviteStatus;
 import com.kittyp.clinic.enums.ClinicStaffInviteStatus;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
-import com.kittyp.clinic.repository.ClinicPatientPetRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicStaffInviteRepository;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
+import com.kittyp.common.model.MessageResponse;
 import com.kittyp.common.util.SafePhotoUrl;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.PaginationSupport;
@@ -116,6 +120,8 @@ import com.kittyp.health.enums.HealthEventType;
 import com.kittyp.notification.entity.NotificationLog;
 import com.kittyp.notification.enums.NotificationType;
 import com.kittyp.notification.repository.NotificationLogRepository;
+import com.kittyp.notification.service.Msg91OtpVerifyService;
+import com.kittyp.notification.service.WhatsappOtpService;
 import com.kittyp.user.dao.PetDao;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
@@ -152,7 +158,6 @@ public class ClinicServiceImpl implements ClinicService {
     private final ClinicDoctorRepository clinicDoctorRepository;
     private final ClinicDoctorInviteRepository clinicDoctorInviteRepository;
     private final ClinicPetOwnerRepository clinicPetOwnerRepository;
-    private final ClinicPatientPetRepository clinicPatientPetRepository;
     private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
     private final DoctorPatientEnrollmentRepository doctorPatientEnrollmentRepository;
     private final PetsRepository petsRepository;
@@ -165,6 +170,9 @@ public class ClinicServiceImpl implements ClinicService {
     private final UserDao userDao;
     private final PetDao petDao;
     private final ZeptoMailService zeptoMailService;
+    private final WhatsappOtpService whatsappOtpService;
+    private final Msg91OtpVerifyService msg91OtpVerifyService;
+    private final ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
     private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
     private final ConsultationInvoiceRepository consultationInvoiceRepository;
     private final VisitDao visitDao;
@@ -194,7 +202,7 @@ public class ClinicServiceImpl implements ClinicService {
         return clinics.values().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
-                .map(clinic -> clinicModel(clinic, user))
+                .map(this::clinicModel)
                 .toList();
     }
 
@@ -204,7 +212,7 @@ public class ClinicServiceImpl implements ClinicService {
         return clinicDao.findAllOrganizationFetchOwner().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
-                .map(clinic -> clinicModel(clinic, false))
+                .map(this::clinicModel)
                 .toList();
     }
 
@@ -217,7 +225,8 @@ public class ClinicServiceImpl implements ClinicService {
         }
         Clinic clinic = Clinic.builder().name(request.name())
                 .licenseNumber(request.licenseNumber()).address(request.address()).phone(request.phone()).email(request.email())
-                .timezone(request.timezone()).operatingHours(request.operatingHours()).owner(owner).status(ClinicStatus.PENDING)
+                .timezone(request.timezone()).operatingHours(request.operatingHours()).owner(owner)
+                .practiceModel(PracticeModel.ORGANIZATION).status(ClinicStatus.PENDING)
                 .city(blankToNull(request.city())).latitude(request.latitude()).longitude(request.longitude())
                 .profileImageUrl(blankToNull(request.profileImageUrl()))
                 .build();
@@ -239,7 +248,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public ClinicModel get(String clinicUuid, String email) {
-        return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
+        return clinicModel(access(clinicUuid, email));
     }
 
     @Override
@@ -265,6 +274,10 @@ public class ClinicServiceImpl implements ClinicService {
         if (clinic == null) {
             throw new ResourceNotFoundException("clinic", "uuid", clinicUuid);
         }
+        if (clinic.getPracticeModel() != PracticeModel.ORGANIZATION) {
+            throw new CustomException("Personal practices do not require clinic verification",
+                    HttpStatus.BAD_REQUEST);
+        }
         if (clinic.getStatus() == ClinicStatus.SHUTDOWN) {
             throw new CustomException("Reopen the clinic before changing verification status", HttpStatus.BAD_REQUEST);
         }
@@ -285,6 +298,10 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicModel reapplyForVerification(String clinicUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireClinicManager(clinic, userDao.userByEmail(email));
+        if (clinic.getPracticeModel() != PracticeModel.ORGANIZATION) {
+            throw new CustomException("Personal practices do not require clinic verification",
+                    HttpStatus.BAD_REQUEST);
+        }
         if (clinic.getStatus() != ClinicStatus.REJECTED) {
             throw new CustomException("Only rejected clinics can be resubmitted", HttpStatus.BAD_REQUEST);
         }
@@ -350,11 +367,33 @@ public class ClinicServiceImpl implements ClinicService {
         Clinic clinic = access(clinicUuid, email);
         requireClinicManager(clinic, userDao.userByEmail(email));
         requireOperational(clinic);
+        String oldEmail = ClinicOwnerUserLinkService.normalizeEmail(clinic.getEmail());
+        String newEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
+        if (!Objects.equals(oldEmail, newEmail) && newEmail != null) {
+            if (!newEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new CustomException("Enter a valid practice email", HttpStatus.BAD_REQUEST);
+            }
+            if (!verificationCodeService.isVerified(
+                    VerificationCodeService.clinicContactEmailVerifiedKey(clinic.getUuid(), newEmail))) {
+                throw new CustomException("Verify the new practice email before saving", HttpStatus.BAD_REQUEST);
+            }
+        }
+        String oldPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(clinic.getPhone());
+        String newPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+        if (!Objects.equals(oldPhone, newPhone) && newPhone != null) {
+            if (!newPhone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            if (!verificationCodeService.isVerified(
+                    VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), newPhone))) {
+                throw new CustomException("Verify the new practice phone before saving", HttpStatus.BAD_REQUEST);
+            }
+        }
         clinic.setName(request.name());
         clinic.setLicenseNumber(request.licenseNumber());
         clinic.setAddress(request.address());
-        clinic.setPhone(request.phone());
-        clinic.setEmail(request.email());
+        clinic.setPhone(newPhone);
+        clinic.setEmail(newEmail);
         clinic.setTimezone(request.timezone());
         clinic.setOperatingHours(request.operatingHours());
         if (request.city() != null) {
@@ -369,7 +408,104 @@ public class ClinicServiceImpl implements ClinicService {
         if (request.profileImageUrl() != null) {
             clinic.setProfileImageUrl(blankToNull(request.profileImageUrl()));
         }
-        return clinicModel(clinicDao.saveClinic(clinic));
+        Clinic savedClinic = clinicDao.saveClinic(clinic);
+        if (!Objects.equals(oldEmail, newEmail) && newEmail != null) {
+            verificationCodeService.clearVerified(
+                    VerificationCodeService.clinicContactEmailVerifiedKey(clinic.getUuid(), newEmail));
+        }
+        if (!Objects.equals(oldPhone, newPhone) && newPhone != null) {
+            verificationCodeService.clearVerified(
+                    VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), newPhone));
+        }
+        return clinicModel(savedClinic);
+    }
+
+    @Override
+    public MessageResponse sendClinicContactOtp(String clinicUuid, ClinicContactOtpSendRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireOperational(clinic);
+        String channel = request.channel() == null ? "" : request.channel().trim().toUpperCase(Locale.ROOT);
+        if ("EMAIL".equals(channel)) {
+            String newEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
+            if (newEmail == null || !newEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new CustomException("Enter a valid practice email", HttpStatus.BAD_REQUEST);
+            }
+            if (newEmail.equals(ClinicOwnerUserLinkService.normalizeEmail(clinic.getEmail()))) {
+                throw new CustomException("New practice email must be different", HttpStatus.BAD_REQUEST);
+            }
+            String key = VerificationCodeService.clinicContactEmailOtpKey(clinic.getUuid(), newEmail);
+            String code = verificationCodeService.generateCode(key);
+            User owner = clinic.getOwner();
+            String customerName = owner == null ? null : owner.getFirstName();
+            zeptoMailService.sendUpdateOtpEmail(newEmail, code, customerName, "Clinic", newEmail);
+            return new MessageResponse("OTP sent to the new practice email");
+        }
+        if ("WHATSAPP".equals(channel)) {
+            String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+            if (phone == null || !phone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            if (phone.equals(ClinicOwnerUserLinkService.normalizePhoneDigits(clinic.getPhone()))) {
+                throw new CustomException("New practice phone must be different", HttpStatus.BAD_REQUEST);
+            }
+            String key = VerificationCodeService.clinicContactPhoneOtpKey(clinic.getUuid(), phone);
+            String code = verificationCodeService.generateCode(key);
+            whatsappOtpService.sendOtp(phone, code);
+            return new MessageResponse("WhatsApp OTP sent to the new practice phone");
+        }
+        throw new CustomException("channel must be EMAIL or WHATSAPP", HttpStatus.BAD_REQUEST);
+    }
+
+    @Override
+    public Map<String, Boolean> verifyClinicContactOtp(
+            String clinicUuid, ClinicContactOtpVerifyRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        requireOperational(clinic);
+        String channel = request.channel() == null ? "" : request.channel().trim().toUpperCase(Locale.ROOT);
+        boolean verified;
+        if ("EMAIL".equals(channel)) {
+            String newEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
+            if (newEmail == null || !newEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new CustomException("Enter a valid practice email", HttpStatus.BAD_REQUEST);
+            }
+            verified = verificationCodeService.verifyCode(
+                    VerificationCodeService.clinicContactEmailOtpKey(clinic.getUuid(), newEmail),
+                    request.code(), true);
+            if (verified) {
+                verificationCodeService.markVerified(
+                        VerificationCodeService.clinicContactEmailVerifiedKey(clinic.getUuid(), newEmail));
+            }
+        } else if ("WHATSAPP".equals(channel)) {
+            String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+            if (phone == null || !phone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            verified = verificationCodeService.verifyCode(
+                    VerificationCodeService.clinicContactPhoneOtpKey(clinic.getUuid(), phone),
+                    request.code(), true);
+            if (verified) {
+                verificationCodeService.markVerified(
+                        VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), phone));
+            }
+        } else if ("PHONE".equals(channel)) {
+            String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+            if (phone == null || !phone.matches("\\d{10}")) {
+                throw new CustomException("Practice phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+            }
+            verified = msg91OtpVerifyService.verifyOtp(request.accessToken());
+            if (verified) {
+                verificationCodeService.markVerified(
+                        VerificationCodeService.clinicContactPhoneVerifiedKey(clinic.getUuid(), phone));
+            }
+        } else {
+            throw new CustomException("channel must be EMAIL, WHATSAPP, or PHONE", HttpStatus.BAD_REQUEST);
+        }
+        if (!verified) {
+            throw new CustomException("Invalid or expired OTP", HttpStatus.BAD_REQUEST);
+        }
+        return Map.of("verified", true);
     }
 
     @Override
@@ -380,7 +516,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public ClinicModel switchClinic(String clinicUuid, String email) {
-        return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
+        return clinicModel(access(clinicUuid, email));
     }
 
     @Override
@@ -403,7 +539,9 @@ public class ClinicServiceImpl implements ClinicService {
         if (clinic.getStatus() != ClinicStatus.SHUTDOWN) {
             return clinicModel(clinic);
         }
-        clinic.setStatus(ClinicStatus.VERIFIED);
+        clinic.setStatus(clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE
+                ? ClinicStatus.NOT_REQUIRED
+                : ClinicStatus.VERIFIED);
         return clinicModel(clinicDao.saveClinic(clinic));
     }
 
@@ -504,14 +642,21 @@ public class ClinicServiceImpl implements ClinicService {
             }
             Pet pet = visit.getPet();
             ClinicPetOwner owner = visit.getClinicOwner();
-            if (pet == null || owner == null) {
+            if (pet == null) {
+                continue;
+            }
+            owner = clinicPetEnrollmentRepository
+                    .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
+                    .map(ClinicPetEnrollment::getClinicOwner)
+                    .orElse(owner);
+            if (owner == null) {
                 continue;
             }
             LocalDateTime when = visit.getCompletedAt() != null ? visit.getCompletedAt()
                     : visit.getStartedAt() != null ? visit.getStartedAt()
                             : visit.getCheckedInAt() != null ? visit.getCheckedInAt() : visit.getCreatedAt();
             patients.merge(pet.getUuid(),
-                    new ClinicDoctorPatientModel(toPetListModel(pet), ownerSummary(owner), 1, when),
+                    new ClinicDoctorPatientModel(toAppointmentPetModel(clinic, pet), ownerSummary(owner), 1, when),
                     (existing, added) -> new ClinicDoctorPatientModel(existing.pet(), existing.owner(),
                             existing.appointmentCount() + 1,
                             laterOf(existing.lastAppointment(), added.lastAppointment())));
@@ -521,95 +666,6 @@ public class ClinicServiceImpl implements ClinicService {
                         .comparing(ClinicDoctorPatientModel::lastAppointment, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(p -> p.pet().name(), Comparator.nullsLast(String::compareToIgnoreCase)))
                 .toList();
-    }
-
-    /**
-     * Previously copied pets from a doctor's other clinics / personal roster into this clinic.
-     * Disabled — clinic data must stay isolated from doctor personal branches.
-     */
-    private void importDoctorPatientsIntoClinic(Clinic target, DoctorProfile doctor) {
-        // no-op
-    }
-
-    private ClinicPetOwner findOrCreateImportedOwner(Clinic target, ClinicPetOwner source, DoctorProfile doctor) {
-        String email = source.getEmail() == null ? null : source.getEmail().trim().toLowerCase();
-        if (email != null) {
-            Optional<ClinicPetOwner> existing = clinicPetOwnerRepository
-                    .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(target.getId(), email);
-            if (existing.isPresent()) {
-                ClinicPetOwner owner = existing.get();
-                String tag = "doctor:" + doctor.getUuid();
-                if (owner.getNotes() == null || !owner.getNotes().contains(tag)) {
-                    owner.setNotes(((owner.getNotes() == null ? "" : owner.getNotes() + "\n") + tag).trim());
-                    owner = clinicPetOwnerRepository.save(owner);
-                }
-                return owner;
-            }
-        }
-        String tag = "Imported with doctor " + fullName(doctor.getUser()) + "\ndoctor:" + doctor.getUuid();
-        return clinicPetOwnerRepository.save(ClinicPetOwner.builder()
-                .clinic(target)
-                .firstName(source.getFirstName())
-                .lastName(source.getLastName())
-                .email(email != null ? email : "unknown+" + UUID.randomUUID() + "@kittyp.local")
-                .phone(source.getPhone() == null || source.getPhone().isBlank() ? "0000000000" : source.getPhone())
-                .alternatePhone(source.getAlternatePhone())
-                .address(source.getAddress())
-                .notes(tag)
-                .linkedUser(source.getLinkedUser())
-                .build());
-    }
-
-    private ClinicPetOwner findOrCreateDoctorAsOwner(Clinic target, User doctorUser, DoctorProfile doctor) {
-        String email = doctorUser.getEmail().trim().toLowerCase();
-        Optional<ClinicPetOwner> existing = clinicPetOwnerRepository
-                .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(target.getId(), email);
-        if (existing.isPresent()) {
-            ClinicPetOwner owner = existing.get();
-            if (owner.getLinkedUser() == null) {
-                owner.setLinkedUser(doctorUser);
-                owner = clinicPetOwnerRepository.save(owner);
-            }
-            return owner;
-        }
-        String phone = doctorUser.getPhoneNumber();
-        if (phone == null || phone.isBlank()) {
-            phone = doctor.getPhoneNumber();
-        }
-        if (phone == null || phone.isBlank()) {
-            phone = "0000000000";
-        }
-        return clinicPetOwnerRepository.save(ClinicPetOwner.builder()
-                .clinic(target)
-                .firstName(doctorUser.getFirstName() == null ? "Doctor" : doctorUser.getFirstName())
-                .lastName(doctorUser.getLastName())
-                .email(email)
-                .phone(phone)
-                .notes("Doctor as pet owner\ndoctor:" + doctor.getUuid())
-                .linkedUser(doctorUser)
-                .build());
-    }
-
-    private Pet copyPetToClinic(Clinic target, ClinicPetOwner owner, Pet source, String importKey) {
-        return Pet.builder()
-                .clinic(target)
-                .clinicOwner(owner)
-                .name(source.getName())
-                .type(source.getType())
-                .breed(source.getBreed())
-                .gender(source.getGender())
-                .dateOfBirth(source.getDateOfBirth())
-                .weight(source.getWeight())
-                .microchipNumber(source.getMicrochipNumber())
-                .profilePicture(source.getProfilePicture())
-                .patientNumber(importKey)
-                .activityLevel(source.getActivityLevel())
-                .currentFoodBrand(source.getCurrentFoodBrand())
-                .healthConditions(source.getHealthConditions())
-                .allergies(source.getAllergies())
-                .isNeutered(source.isNeutered())
-                .registeredAt(source.getRegisteredAt() != null ? source.getRegisteredAt() : LocalDate.now())
-                .build();
     }
 
     @Override
@@ -1288,43 +1344,20 @@ public class ClinicServiceImpl implements ClinicService {
     @Transactional
     public List<PatientModel> patients(String clinicUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
-        hideLegacyDoctorImportPets(clinic);
-        User viewer = userDao.userByEmail(email);
-        if (rosterVisitScoped(clinic, viewer)) {
-            Map<String, PatientModel> visited = new HashMap<>();
-            for (String petUuid : visitedPetUuids(clinic)) {
-                Pet pet = petsRepository.findByUuid(petUuid);
-                if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || isLegacyDoctorImport(pet)) {
-                    continue;
-                }
-                visited.put(petUuid, patientModelForPet(pet, null));
-            }
-            return visited.values().stream()
-                    .sorted(Comparator.comparing(PatientModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
-                    .toList();
-        }
         Map<String, PatientModel> activity = patientMap(clinic);
-        Map<String, PatientModel> merged = new HashMap<>(activity);
-        for (Pet pet : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
-            if (isLegacyDoctorImport(pet)) {
-                continue;
-            }
-            PatientModel clinicPet = toClinicPatientModel(pet);
-            PatientModel prior = activity.get(pet.getUuid());
-            LocalDateTime last = laterOf(clinicPet.lastVisit(), prior == null ? null : prior.lastVisit());
-            merged.put(pet.getUuid(), withLastVisit(clinicPet, last));
-        }
+        Map<String, PatientModel> patients = new HashMap<>();
         for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
             Pet pet = enrollment.getPet();
-            if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || isLegacyDoctorImport(pet)) {
+            if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || isLegacyDoctorImport(pet)
+                    || enrollment.getClinicOwner() == null) {
                 continue;
             }
             PatientModel clinicPet = toClinicPatientModel(pet, enrollment.getClinicOwner());
-            PatientModel prior = merged.get(pet.getUuid());
+            PatientModel prior = activity.get(pet.getUuid());
             LocalDateTime last = laterOf(clinicPet.lastVisit(), prior == null ? null : prior.lastVisit());
-            merged.put(pet.getUuid(), withLastVisit(clinicPet, last));
+            patients.put(pet.getUuid(), withLastVisit(clinicPet, last));
         }
-        return merged.values().stream()
+        return patients.values().stream()
                 .sorted(Comparator.comparing(PatientModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
@@ -1340,31 +1373,7 @@ public class ClinicServiceImpl implements ClinicService {
         if (access.platformOwner() != null) {
             return platformOwnerPatientDetail(clinic, access.pet(), access.platformOwner());
         }
-
-        Map<String, PatientModel> clinicPatients = patientMap(clinic);
-        PatientModel patient = clinicPatients.get(petUuid);
-        if (patient == null) {
-            throw new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND);
-        }
-        User owner = userDao.userByPetUuid(petUuid);
-        OwnerSummaryModel ownerSummary = new OwnerSummaryModel(owner.getUuid(), fullName(owner), owner.getEmail(),
-                formatPhone(owner), primaryAddress(owner));
-        Set<String> clinicPetUuids = clinicPatients.keySet();
-        List<Pet> ownedPets = owner.getPets() == null ? List.of() : owner.getPets();
-        List<PatientPetModel> pets = ownedPets.stream()
-                .filter(pet -> clinicPetUuids.contains(pet.getUuid()))
-                .sorted(Comparator.comparing(Pet::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
-                .map(pet -> {
-                    PatientModel clinicPatient = clinicPatients.get(pet.getUuid());
-                    return new PatientPetModel(pet.getUuid(), pet.getName(), pet.getType(), pet.getBreed(),
-                            clinicPatient != null ? clinicPatient.lastVisit() : null, true);
-                })
-                .toList();
-        List<HealthEventModel> events = healthEventsFor(clinic.getId(), petUuid);
-        List<VaccineScheduleModel> vaccines = petVaccineScheduleDao.findByPetUuid(petUuid).stream()
-                .map(this::vaccineModel)
-                .toList();
-        return new PatientDetailModel(patient, ownerSummary, pets, events, vaccines);
+        throw new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND);
     }
 
     @Override
@@ -1372,11 +1381,10 @@ public class ClinicServiceImpl implements ClinicService {
     public PatientDetailModel addPatient(String clinicUuid, AddPatientRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
 
         String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(request.ownerEmail());
         String phoneDigits = ClinicOwnerUserLinkService.normalizePhoneDigits(request.ownerPhone());
-        if (phoneDigits == null || !phoneDigits.matches("\\d{10}")) {
+        if (phoneDigits != null && !phoneDigits.matches("\\d{10}")) {
             throw new CustomException("Owner phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
         }
         rejectUnattachedKittypContact(clinic, ownerEmail, phoneDigits);
@@ -1384,6 +1392,7 @@ public class ClinicServiceImpl implements ClinicService {
         ClinicPetOwner owner = clinicPetOwnerRepository
                 .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
                 .orElse(null);
+        boolean newClinicClient = owner == null;
         if (owner != null && (owner.getLinkedUser() != null || activePetCount(owner) > 0)) {
             requirePetConsentVerified(clinic, owner, request.petName());
         }
@@ -1407,7 +1416,9 @@ public class ClinicServiceImpl implements ClinicService {
             if (request.ownerLastName() != null) {
                 owner.setLastName(request.ownerLastName().trim());
             }
-            owner.setPhone(phoneDigits);
+            if (phoneDigits != null) {
+                owner.setPhone(phoneDigits);
+            }
             if (request.ownerAlternatePhone() != null && !request.ownerAlternatePhone().isBlank()) {
                 owner.setAlternatePhone(ClinicOwnerUserLinkService.normalizePhoneDigits(request.ownerAlternatePhone()));
             }
@@ -1427,19 +1438,32 @@ public class ClinicServiceImpl implements ClinicService {
                 blankToNull(request.petBreed()), blankToNull(request.petGender()), request.petDateOfBirth(),
                 blankToNull(request.petWeight()), blankToNull(request.petMicrochipNumber()),
                 blankToNull(request.petPhotoUrl()), null);
+        if (newClinicClient) {
+            String inviteToken = clinicPetParentSignupInviteService.createInvite(ownerEmail);
+            String signupUrl = UriComponentsBuilder
+                    .fromUriString(frontendBaseUrl.replaceAll("/$", "") + "/signup")
+                    .queryParam("role", "USER")
+                    .queryParam("inviteToken", inviteToken)
+                    .build()
+                    .encode()
+                    .toUriString();
+            String ownerName = clinicOwnerName(owner);
+            String petName = pet.getName();
+            String clinicName = clinic.getName();
+            sendAfterCommit(() -> zeptoMailService.sendClinicPetParentInviteEmail(ownerEmail, ownerName, petName,
+                    clinicName, signupUrl));
+        }
         if (owner.getLinkedUser() != null) {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
         }
 
-        return clinicRegisteredPatientDetail(clinic, pet);
+        return clinicRegisteredPatientDetail(clinic, pet, owner);
     }
 
     @Override
     @Transactional
     public List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly) {
         Clinic clinic = access(clinicUuid, email);
-        hideLegacyDoctorImportPets(clinic);
-        User viewer = userDao.userByEmail(email);
         List<ClinicPetOwner> owners;
         if (q == null || q.isBlank()) {
             owners = emailOrIdOnly
@@ -1450,14 +1474,9 @@ public class ClinicServiceImpl implements ClinicService {
         } else {
             owners = clinicPetOwnerRepository.searchByClinic(clinic.getId(), q.trim());
         }
-        Set<String> visitedPets = rosterVisitScoped(clinic, viewer) && !emailOrIdOnly
-                ? visitedPetUuids(clinic)
-                : null;
         return owners.stream()
                 .map(this::toOwnerModel)
                 .filter(o -> o.petCount() > 0)
-                .filter(o -> visitedPets == null
-                        || (o.pets() != null && o.pets().stream().anyMatch(p -> visitedPets.contains(p.petUuid()))))
                 .sorted(Comparator.comparing(ClinicOwnerModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
@@ -1533,7 +1552,6 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
         if (userUuid == null || userUuid.isBlank() || userUuid.length() > 64) {
             throw new CustomException("Invalid user id", HttpStatus.BAD_REQUEST);
         }
@@ -1568,9 +1586,7 @@ public class ClinicServiceImpl implements ClinicService {
         if (owner == null) {
             String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
             if (phone == null || !phone.matches("\\d{10}")) {
-                throw new CustomException(
-                        "This KittyP account has no valid phone on file. Ask them to update their profile, or add the client manually with a phone number.",
-                        HttpStatus.BAD_REQUEST);
+                phone = KeyConstant.PLACEHOLDER_PHONE;
             }
             owner = ClinicPetOwner.builder()
                     .clinic(clinic)
@@ -1599,7 +1615,6 @@ public class ClinicServiceImpl implements ClinicService {
     public void sendClientAttachOtp(String clinicUuid, String userUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
         User platformUser = requireActivePetParent(userUuid);
         if (isAlreadyLinkedClient(clinic, platformUser)) {
             throw new CustomException("This KittyP user is already a client of this clinic", HttpStatus.CONFLICT);
@@ -1624,7 +1639,6 @@ public class ClinicServiceImpl implements ClinicService {
     @Transactional
     public void verifyClientAttachOtp(String clinicUuid, String userUuid, String code, String email) {
         Clinic clinic = access(clinicUuid, email);
-        requireOrgClinicClientWrite(clinic);
         User platformUser = requireActivePetParent(userUuid);
         String otpKey = VerificationCodeService.clinicClientAttachOtpKey(clinic.getUuid(), platformUser.getUuid());
         boolean ok = verificationCodeService.verifyCode(otpKey, code, true);
@@ -1665,36 +1679,18 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     public OwnerEmailLookupModel lookupOwnerByEmail(String clinicUuid, String ownerEmail, String email) {
         Clinic clinic = access(clinicUuid, email);
-        String raw = ownerEmail == null ? "" : ownerEmail.trim();
-        String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(raw);
-        boolean looksLikePhone = !raw.contains("@") && phone != null && phone.matches("\\d{10}");
-        if (looksLikePhone) {
-            return lookupOwnerContact(clinic, null, phone);
-        }
-        String normalized = ClinicOwnerUserLinkService.normalizeEmail(raw);
-        if (normalized == null || normalized.isBlank()) {
+        String normalizedEmail = ClinicOwnerUserLinkService.normalizeEmail(ownerEmail);
+        if (normalizedEmail == null || normalizedEmail.isBlank() || !normalizedEmail.contains("@")) {
             return new OwnerEmailLookupModel(false, null, null, null);
         }
-        return lookupOwnerContact(clinic, normalized, null);
+        return lookupOwnerContact(clinic, normalizedEmail);
     }
 
-    private OwnerEmailLookupModel lookupOwnerContact(Clinic clinic, String normalizedEmail, String phoneDigits) {
-        ClinicPetOwner clinicOwner = null;
-        User platformUser = null;
-        if (normalizedEmail != null) {
-            clinicOwner = clinicPetOwnerRepository
-                    .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), normalizedEmail)
-                    .orElse(null);
-            platformUser = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
-        } else if (phoneDigits != null) {
-            List<ClinicPetOwner> owners = clinicPetOwnerRepository
-                    .findByClinic_IdAndIsActiveTrueAndPhone(clinic.getId(), phoneDigits);
-            clinicOwner = owners.isEmpty() ? null : owners.get(0);
-            List<User> byPhone = userRepository.findByPhoneDigits(phoneDigits);
-            if (byPhone.size() == 1) {
-                platformUser = byPhone.get(0);
-            }
-        }
+    private OwnerEmailLookupModel lookupOwnerContact(Clinic clinic, String normalizedEmail) {
+        ClinicPetOwner clinicOwner = clinicPetOwnerRepository
+                .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), normalizedEmail)
+                .orElse(null);
+        User platformUser = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
         if (platformUser != null && (Boolean.FALSE.equals(platformUser.getIsActive()) || !platformUser.isEnabled())) {
             platformUser = null;
         }
@@ -1812,7 +1808,6 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
 
         String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
         String phoneDigits = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
@@ -1866,7 +1861,6 @@ public class ClinicServiceImpl implements ClinicService {
             String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
 
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
@@ -1882,32 +1876,65 @@ public class ClinicServiceImpl implements ClinicService {
         if (owner.getLinkedUser() != null) {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
         }
-        return toPetListModel(pet);
+        return toPetListModel(pet, owner);
     }
 
     @Override
     @Transactional
     public List<ClinicPetListModel> listPets(String clinicUuid, String q, String email, boolean emailOrIdOnly) {
         Clinic clinic = access(clinicUuid, email);
-        hideLegacyDoctorImportPets(clinic);
-        User viewer = userDao.userByEmail(email);
-        Set<String> visitedPets = rosterVisitScoped(clinic, viewer) && !emailOrIdOnly
-                ? visitedPetUuids(clinic)
-                : null;
-        List<Pet> pets;
+        List<ClinicPetEnrollment> enrollments = clinicPetEnrollmentRepository
+                .findByClinic_IdAndIsActiveTrue(clinic.getId());
+        Map<String, ClinicPetOwner> ownersByPetUuid = new HashMap<>();
+        List<Pet> pets = new ArrayList<>();
+        for (ClinicPetEnrollment enrollment : enrollments) {
+            Pet pet = enrollment.getPet();
+            if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || isLegacyDoctorImport(pet)) {
+                continue;
+            }
+            ownersByPetUuid.put(pet.getUuid(), enrollment.getClinicOwner());
+            pets.add(pet);
+        }
         if (q == null || q.isBlank()) {
-            pets = emailOrIdOnly ? List.of() : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
+            if (emailOrIdOnly) {
+                return List.of();
+            }
         } else if (emailOrIdOnly) {
-            pets = petsMatchingEmailOrId(clinic, q.trim(), viewer);
+            List<Pet> matches = petsMatchingEmailOrId(clinic, q.trim());
+            return matches.stream()
+                    .filter(p -> !isLegacyDoctorImport(p))
+                    .map(p -> toPetListModel(p, ownersByPetUuid.getOrDefault(p.getUuid(),
+                            clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(
+                                    clinic.getId(), p.getUuid()).map(ClinicPetEnrollment::getClinicOwner).orElse(null))))
+                    .sorted(Comparator.comparing(ClinicPetListModel::lastVisit,
+                            Comparator.nullsLast(Comparator.reverseOrder())))
+                    .toList();
         } else {
-            pets = petsRepository.searchByClinic(clinic.getId(), q.trim());
+            String query = q.trim().toLowerCase(Locale.ROOT);
+            pets = pets.stream().filter(p -> petMatchesClinicSearch(
+                    p, ownersByPetUuid.get(p.getUuid()), query)).toList();
         }
         return pets.stream()
-                .filter(p -> !isLegacyDoctorImport(p))
-                .filter(p -> visitedPets == null || visitedPets.contains(p.getUuid()))
-                .map(p -> toAppointmentPetModel(clinic, p))
+                .map(p -> toPetListModel(p, ownersByPetUuid.get(p.getUuid())))
                 .sorted(Comparator.comparing(ClinicPetListModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
+    }
+
+    private static boolean petMatchesClinicSearch(Pet pet, ClinicPetOwner owner, String query) {
+        return containsIgnoreCase(pet.getName(), query)
+                || containsIgnoreCase(pet.getBreed(), query)
+                || containsIgnoreCase(pet.getType(), query)
+                || containsIgnoreCase(pet.getMicrochipNumber(), query)
+                || containsIgnoreCase(pet.getUuid(), query)
+                || (owner != null && (containsIgnoreCase(owner.getEmail(), query)
+                        || containsIgnoreCase(owner.getFirstName(), query)
+                        || containsIgnoreCase(owner.getLastName(), query)
+                        || containsIgnoreCase(owner.getPhone(), query)
+                        || containsIgnoreCase(owner.getAlternatePhone(), query)));
+    }
+
+    private static boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
     }
 
     @Override
@@ -1917,50 +1944,9 @@ public class ClinicServiceImpl implements ClinicService {
         return PaginationSupport.slice(listPets(clinicUuid, q, email, emailOrIdOnly), pageNumber, pageSize);
     }
 
-    /**
-     * Soft-hide pets that were bulk-copied from a doctor's other clinics / personal roster.
-     * Clinic CRM must only show clients registered or walked-in at THIS clinic.
-     */
-    private void hideLegacyDoctorImportPets(Clinic clinic) {
-        for (Pet pet : petsRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
-            if (!isLegacyDoctorImport(pet)) {
-                continue;
-            }
-            pet.setIsActive(false);
-            petsRepository.save(pet);
-        }
-    }
-
     private static boolean isLegacyDoctorImport(Pet pet) {
         String pn = pet.getPatientNumber();
         return pn != null && pn.startsWith("doc:");
-    }
-
-    private boolean rosterVisitScoped(Clinic clinic, User viewer) {
-        if (viewer == null) {
-            return true;
-        }
-        DoctorProfile viewerDoctor = doctorProfileDao.findByUserId(viewer.getId());
-        if (viewerDoctor != null && ParentBookingEnrollmentService.isPersonalPractice(clinic, viewerDoctor)) {
-            return true;
-        }
-        boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(viewer.getId());
-        boolean staff = clinicStaffDao.isActiveMember(clinic.getId(), viewer.getId());
-        boolean affiliatedDoctor = clinicDoctorRepository
-                .existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), viewer.getId());
-        return !owner && !staff && !affiliatedDoctor;
-    }
-
-    private Set<String> visitedPetUuids(Clinic clinic) {
-        Set<VisitStatus> seen = EnumSet.of(
-                VisitStatus.IN_PROGRESS, VisitStatus.CHECKING_OUT, VisitStatus.COMPLETED);
-        Set<String> uuids = new HashSet<>();
-        for (Visit visit : visitDao.findByClinicAndStatuses(clinic.getId(), seen)) {
-            if (visit.getPet() != null) {
-                uuids.add(visit.getPet().getUuid());
-            }
-        }
-        return uuids;
     }
 
     /**
@@ -1968,7 +1954,7 @@ public class ClinicServiceImpl implements ClinicService {
      * Includes pets whose home clinic is elsewhere but who are enrolled here or on the
      * doctor's personal roster.
      */
-    private List<Pet> petsMatchingEmailOrId(Clinic clinic, String q, User viewer) {
+    private List<Pet> petsMatchingEmailOrId(Clinic clinic, String q) {
         String query = q.replace("%", "").replace("_", "").trim();
         if (query.length() < 3) {
             return List.of();
@@ -1977,27 +1963,19 @@ public class ClinicServiceImpl implements ClinicService {
         LinkedHashMap<String, Pet> found = new LinkedHashMap<>();
 
         petsRepository.findByUuidIgnoreCase(query).ifPresent(pet -> {
-            if (petVisibleForAppointmentSearch(clinic, pet, viewer)) {
+            if (petVisibleForAppointmentSearch(clinic, pet)) {
                 found.put(pet.getUuid(), pet);
             }
         });
         for (Pet pet : petsRepository.searchByClinicEmailOrId(clinic.getId(), query)) {
-            found.putIfAbsent(pet.getUuid(), pet);
+            if (petAtClinic(clinic, pet)) {
+                found.putIfAbsent(pet.getUuid(), pet);
+            }
         }
         for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
             Pet pet = enrollment.getPet();
             if (pet != null && appointmentIdMatches(needle, pet, enrollment.getClinicOwner())) {
                 found.putIfAbsent(pet.getUuid(), pet);
-            }
-        }
-        DoctorProfile doctor = viewer == null ? null : doctorProfileDao.findByUserId(viewer.getId());
-        if (doctor != null && ParentBookingEnrollmentService.isPersonalPractice(clinic, doctor)) {
-            for (DoctorPatientEnrollment enrollment : doctorPatientEnrollmentRepository
-                    .findByDoctor_IdAndIsActiveTrue(doctor.getId())) {
-                Pet pet = enrollment.getPet();
-                if (pet != null && appointmentIdMatches(needle, pet, pet.getClinicOwner())) {
-                    found.putIfAbsent(pet.getUuid(), pet);
-                }
             }
         }
         for (User platformUser : userRepository.searchActiveUsersByEmailOrUuid(query, PageRequest.of(0, 20))) {
@@ -2006,7 +1984,7 @@ public class ClinicServiceImpl implements ClinicService {
                 continue;
             }
             for (Pet pet : platformPetsOf(platformUser)) {
-                if (platformPetSelectableForAppointment(pet)) {
+                if (platformPetSelectableForAppointment(pet) && petAtClinic(clinic, pet)) {
                     found.putIfAbsent(pet.getUuid(), pet);
                 }
             }
@@ -2040,21 +2018,11 @@ public class ClinicServiceImpl implements ClinicService {
                 && !Boolean.TRUE.equals(pet.getHiddenFromParent());
     }
 
-    private boolean petVisibleForAppointmentSearch(Clinic clinic, Pet pet, User viewer) {
+    private boolean petVisibleForAppointmentSearch(Clinic clinic, Pet pet) {
         if (pet == null || !Boolean.TRUE.equals(pet.getIsActive())) {
             return false;
         }
-        if (pet.getClinic() != null && pet.getClinic().getId().equals(clinic.getId())) {
-            return true;
-        }
-        if (clinicPetEnrollmentRepository.existsByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())) {
-            return true;
-        }
-        DoctorProfile doctor = viewer == null ? null : doctorProfileDao.findByUserId(viewer.getId());
-        return doctor != null
-                && ParentBookingEnrollmentService.isPersonalPractice(clinic, doctor)
-                && doctorPatientEnrollmentRepository.existsByDoctor_IdAndPet_UuidAndIsActiveTrue(
-                        doctor.getId(), pet.getUuid());
+        return petAtClinic(clinic, pet);
     }
 
     private static boolean appointmentIdMatches(String needle, Pet pet, ClinicPetOwner owner) {
@@ -2069,31 +2037,13 @@ public class ClinicServiceImpl implements ClinicService {
         return containsIgnoreCase(owner.getUuid(), needle) || containsIgnoreCase(owner.getEmail(), needle);
     }
 
-    private static boolean containsIgnoreCase(String value, String needle) {
-        return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
-    }
-
     private ClinicPetListModel toAppointmentPetModel(Clinic clinic, Pet pet) {
-        if (pet.getClinicOwner() != null && pet.getClinic() != null
-                && pet.getClinic().getId().equals(clinic.getId())) {
-            return toPetListModel(pet, pet.getClinicOwner());
-        }
         Optional<ClinicPetEnrollment> enrollment = clinicPetEnrollmentRepository
                 .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid());
         if (enrollment.isPresent() && enrollment.get().getClinicOwner() != null) {
             return toPetListModel(pet, enrollment.get().getClinicOwner());
         }
-        if (pet.getClinicOwner() != null) {
-            return toPetListModel(pet, pet.getClinicOwner());
-        }
-        return userDao.findOptionalByPetUuid(pet.getUuid())
-                .map(owner -> toPetListModel(pet, owner))
-                .orElseGet(() -> new ClinicPetListModel(
-                        pet.getUuid(), pet.resolveGlobalPetId(), pet.getName(), pet.getType(), pet.getBreed(),
-                        pet.getGender(), pet.getDateOfBirth(), pet.getWeight(), pet.getMicrochipNumber(),
-                        pet.getProfilePicture(), pet.getPatientNumber(), "", pet.getName() == null ? "" : pet.getName(),
-                        null, null, false,
-                        pet.getRegisteredAt() == null ? null : pet.getRegisteredAt().atStartOfDay()));
+        throw new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND);
     }
 
     /** Strip internal import tags from notes shown to clinic staff. */
@@ -2110,10 +2060,6 @@ public class ClinicServiceImpl implements ClinicService {
                 .collect(Collectors.joining("\n"))
                 .trim();
         return cleaned.isEmpty() ? null : cleaned;
-    }
-
-    private void ensureAffiliatedDoctorPatientsImported(Clinic clinic) {
-        // Intentionally no-op: doctor personal / other-clinic patients must not mix into this clinic.
     }
 
     @Override
@@ -2203,14 +2149,6 @@ public class ClinicServiceImpl implements ClinicService {
         AccessiblePet access = resolveAccessiblePet(clinic, petUuid, email);
         Pet pet = access.pet();
 
-        // Home-clinic pet: soft-hide the row. Multi-clinic / personal: only drop local membership.
-        boolean homeHere = pet.getClinic() != null && pet.getClinic().getId().equals(clinic.getId());
-        if (homeHere) {
-            pet.setIsActive(false);
-            petsRepository.save(pet);
-            log.info("Soft-hid clinic pet {} at clinic {} (visits retained)", pet.getUuid(), clinicUuid);
-            return;
-        }
         clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
                 .ifPresent(enr -> {
                     enr.setIsActive(false);
@@ -2225,7 +2163,7 @@ public class ClinicServiceImpl implements ClinicService {
                         doctorPatientEnrollmentRepository.save(enr);
                     });
         }
-        log.info("Removed pet {} membership at clinic {} (home clinic unchanged)", petUuid, clinicUuid);
+        log.info("Removed pet {} membership at clinic {} (other clinic relationships unchanged)", petUuid, clinicUuid);
     }
 
     @Override
@@ -2237,11 +2175,14 @@ public class ClinicServiceImpl implements ClinicService {
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
         owner.setIsActive(false);
         clinicPetOwnerRepository.save(owner);
-        for (Pet pet : petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId())) {
-            pet.setIsActive(false);
-            petsRepository.save(pet);
+        for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository
+                .findByClinic_IdAndIsActiveTrue(clinic.getId())) {
+            if (enrollment.getClinicOwner().getId().equals(owner.getId())) {
+                enrollment.setIsActive(false);
+                clinicPetEnrollmentRepository.save(enrollment);
+            }
         }
-        log.info("Soft-hid clinic owner {} (+pets) at clinic {} (data retained)", ownerUuid, clinicUuid);
+        log.info("Soft-hid clinic owner {} and their clinic relationships at {}", ownerUuid, clinicUuid);
     }
 
     private InvoiceSummaryModel invoiceSummary(ConsultationInvoice inv) {
@@ -2295,8 +2236,6 @@ public class ClinicServiceImpl implements ClinicService {
     private Pet saveClinicPet(Clinic clinic, ClinicPetOwner owner, String name, String species, String breed,
             String gender, LocalDate dob, String weight, String microchip, String photoUrl, String patientNumber) {
         Pet pet = Pet.builder()
-                .clinic(clinic)
-                .clinicOwner(owner)
                 .name(name)
                 .type(species)
                 .breed(breed)
@@ -2309,14 +2248,29 @@ public class ClinicServiceImpl implements ClinicService {
                 .registeredAt(LocalDate.now())
                 .isNeutered(false)
                 .build();
-        return petsRepository.save(pet);
+        pet = petsRepository.save(pet);
+        ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder()
+                .clinic(clinic)
+                .pet(pet)
+                .clinicOwner(owner)
+                .build();
+        enrollment.setIsActive(true);
+        clinicPetEnrollmentRepository.save(enrollment);
+        return pet;
     }
 
     private ClinicOwnerModel toOwnerModel(ClinicPetOwner owner) {
-        List<Pet> pets = new ArrayList<>(petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId()).stream()
-                .filter(p -> !isLegacyDoctorImport(p))
-                .toList());
-        Set<String> seenPetUuids = pets.stream().map(Pet::getUuid).collect(Collectors.toSet());
+        List<Pet> pets = new ArrayList<>();
+        Set<String> seenPetUuids = new HashSet<>();
+        for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository
+                .findByClinic_IdAndIsActiveTrue(owner.getClinic().getId())) {
+            Pet pet = enrollment.getPet();
+            if (enrollment.getClinicOwner() != null && enrollment.getClinicOwner().getId().equals(owner.getId())
+                    && pet != null && Boolean.TRUE.equals(pet.getIsActive())
+                    && seenPetUuids.add(pet.getUuid())) {
+                pets.add(pet);
+            }
+        }
         if (owner.getLinkedUser() != null) {
             for (Pet pet : platformPetsOf(owner.getLinkedUser())) {
                 if (!seenPetUuids.contains(pet.getUuid()) && platformPetSelectableForAppointment(pet)) {
@@ -2369,7 +2323,6 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel admitOwnerPets(String clinicUuid, String ownerUuid, List<String> petUuids, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
         if (owner.getLinkedUser() == null) {
@@ -2415,8 +2368,12 @@ public class ClinicServiceImpl implements ClinicService {
 
     private int clinicPatientCount(Clinic clinic, ClinicPetOwner owner) {
         Set<String> ids = new HashSet<>();
-        for (Pet pet : petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId())) {
-            if (!isLegacyDoctorImport(pet) && petAtClinic(clinic, pet) && pet.getUuid() != null) {
+        for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
+            ClinicPetOwner enrolledOwner = enrollment.getClinicOwner();
+            Pet pet = enrollment.getPet();
+            if (enrolledOwner != null && enrolledOwner.getId().equals(owner.getId())
+                    && pet != null && Boolean.TRUE.equals(pet.getIsActive())
+                    && !isLegacyDoctorImport(pet) && pet.getUuid() != null) {
                 ids.add(pet.getUuid());
             }
         }
@@ -2433,9 +2390,6 @@ public class ClinicServiceImpl implements ClinicService {
     private boolean petAtClinic(Clinic clinic, Pet pet) {
         if (clinic == null || pet == null || pet.getUuid() == null || !Boolean.TRUE.equals(pet.getIsActive())) {
             return false;
-        }
-        if (pet.getClinic() != null && clinic.getId().equals(pet.getClinic().getId())) {
-            return true;
         }
         return clinicPetEnrollmentRepository.existsByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid());
     }
@@ -2458,10 +2412,6 @@ public class ClinicServiceImpl implements ClinicService {
         return clinicPetOwnerRepository
                 .findByClinic_IdAndLinkedUser_IdAndIsActiveTrue(clinic.getId(), user.getId())
                 .orElse(null);
-    }
-
-    private ClinicPetListModel toPetListModel(Pet pet) {
-        return toPetListModel(pet, pet.getClinicOwner());
     }
 
     private ClinicPetListModel toPetListModel(Pet pet, ClinicPetOwner owner) {
@@ -2511,67 +2461,35 @@ public class ClinicServiceImpl implements ClinicService {
                 formatPhone(owner), primaryAddress(owner), pet.getType(), pet.getBreed());
     }
 
-    /**
-     * Pet is accessible at this clinic if home-registered, multi-clinic enrolled, or
-     * (personal practice) on the viewing doctor's patient roster — without moving clinic_id.
-     * {@code petUuid} may be the public 6-character id or a clinic patient number.
-     */
+    /** Resolve a pet through this clinic's active relationship; keys may be UUIDs or patient numbers. */
     private AccessiblePet resolveAccessiblePet(Clinic clinic, String petUuid, String email) {
         String key = petUuid == null ? "" : petUuid.trim();
-        Pet resolved = petsRepository.findByUuidIgnoreCase(key).orElse(null);
-        if (resolved == null) {
-            resolved = petsRepository.findFirstByClinic_IdAndPatientNumberIgnoreCase(clinic.getId(), key).orElse(null);
-        }
-        String id = resolved != null ? resolved.getUuid() : key;
-
-        Optional<Pet> home = petsRepository.findByUuidAndClinic_Id(id, clinic.getId());
-        if (home.isPresent()) {
-            Pet pet = home.get();
-            if (pet.getClinicOwner() != null) {
-                return new AccessiblePet(pet, pet.getClinicOwner(),
-                        pet.getClinicOwner().getLinkedUser() != null ? pet.getClinicOwner().getLinkedUser() : null);
-            }
-        }
-
         Optional<ClinicPetEnrollment> enrollment = clinicPetEnrollmentRepository
-                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), id);
-        if (enrollment.isPresent()) {
-            ClinicPetEnrollment enr = enrollment.get();
-            User linked = enr.getClinicOwner() != null ? enr.getClinicOwner().getLinkedUser() : null;
-            return new AccessiblePet(enr.getPet(), enr.getClinicOwner(), linked);
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), key);
+        if (enrollment.isEmpty()) {
+            enrollment = clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
+                    .filter(candidate -> candidate.getPet() != null
+                            && candidate.getPet().getPatientNumber() != null
+                            && candidate.getPet().getPatientNumber().equalsIgnoreCase(key))
+                    .findFirst();
         }
-
-        User viewer = userDao.userByEmail(email);
-        if (clinic.getOwner() != null && clinic.getOwner().getId().equals(viewer.getId())) {
-            DoctorProfile doctor = doctorProfileDao.findByUserId(viewer.getId());
-            if (doctor != null) {
-                Optional<DoctorPatientEnrollment> docEnr = doctorPatientEnrollmentRepository
-                        .findByDoctor_IdAndPet_UuidAndIsActiveTrue(doctor.getId(), id);
-                if (docEnr.isPresent()) {
-                    DoctorPatientEnrollment enr = docEnr.get();
-                    return new AccessiblePet(enr.getPet(), null, enr.getOwnerUser());
-                }
-            }
-        }
-
-        if (patientMap(clinic).containsKey(id)) {
-            Pet pet = requirePet(id);
-            User owner = userDao.userByPetUuid(id);
-            if (pet.getClinicOwner() != null && pet.getClinic() != null
-                    && pet.getClinic().getId().equals(clinic.getId())) {
-                return new AccessiblePet(pet, pet.getClinicOwner(), owner);
-            }
-            return new AccessiblePet(pet, null, owner);
-        }
-
-        throw new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND);
+        ClinicPetEnrollment clinicEnrollment = enrollment.orElseThrow(
+                () -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+        User linked = clinicEnrollment.getClinicOwner() == null
+                ? null
+                : clinicEnrollment.getClinicOwner().getLinkedUser();
+        return new AccessiblePet(clinicEnrollment.getPet(), clinicEnrollment.getClinicOwner(), linked);
     }
 
     private record AccessiblePet(Pet pet, ClinicPetOwner clinicOwner, User platformOwner) {
     }
 
     private PatientDetailModel clinicRegisteredPatientDetail(Clinic clinic, Pet selected) {
-        return clinicRegisteredPatientDetail(clinic, selected, selected.getClinicOwner());
+        ClinicPetOwner owner = clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), selected.getUuid())
+                .map(ClinicPetEnrollment::getClinicOwner)
+                .orElseThrow(() -> new CustomException("Pet is not a patient of this clinic.", HttpStatus.NOT_FOUND));
+        return clinicRegisteredPatientDetail(clinic, selected, owner);
     }
 
     private PatientDetailModel clinicRegisteredPatientDetail(Clinic clinic, Pet selected, ClinicPetOwner owner) {
@@ -2579,18 +2497,6 @@ public class ClinicServiceImpl implements ClinicService {
         OwnerSummaryModel ownerSummary = ownerSummary(owner);
 
         Map<String, PatientPetModel> petsByUuid = new HashMap<>();
-        for (Pet p : petsRepository.findByClinicOwner_UuidAndIsActiveTrue(owner.getUuid())) {
-            boolean atClinic = (p.getClinic() != null && p.getClinic().getId().equals(clinic.getId()))
-                    || clinicPetEnrollmentRepository.existsByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(),
-                            p.getUuid());
-            if (!atClinic) {
-                continue;
-            }
-            petsByUuid.put(p.getUuid(), new PatientPetModel(p.getUuid(), p.getName(), p.getType(), p.getBreed(),
-                    p.getRegisteredAt() == null ? null : p.getRegisteredAt().atStartOfDay(), true,
-                    p.resolveGlobalPetId(), p.getMicrochipNumber()));
-        }
-        // Include enrolled pets for this owner even when clinic_owner_id on pet points elsewhere.
         for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId())) {
             if (enrollment.getClinicOwner() == null || !enrollment.getClinicOwner().getId().equals(owner.getId())) {
                 continue;
@@ -2661,51 +2567,6 @@ public class ClinicServiceImpl implements ClinicService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    /**
-     * One-time move of legacy {@code clinic_patient_pets} rows into shared {@code pets}.
-     */
-    private void migrateLegacyClinicPets(Clinic clinic) {
-        List<ClinicPatientPet> legacy = clinicPatientPetRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
-        for (ClinicPatientPet row : legacy) {
-            String globalId = row.resolveGlobalPetId();
-            Pet existing = petsRepository.findByUuid(globalId);
-            if (existing == null) {
-                existing = petsRepository.findByUuid(row.getUuid());
-            }
-            if (existing != null) {
-                if (existing.getClinicOwner() == null) {
-                    existing.setClinicOwner(row.getOwner());
-                    existing.setClinic(clinic);
-                    if (existing.getRegisteredAt() == null) {
-                        existing.setRegisteredAt(row.getRegisteredAt());
-                    }
-                    if (existing.getMicrochipNumber() == null) {
-                        existing.setMicrochipNumber(row.getMicrochipNumber());
-                    }
-                    petsRepository.save(existing);
-                }
-                continue;
-            }
-            Pet pet = Pet.builder()
-                    .uuid(globalId)
-                    .clinic(clinic)
-                    .clinicOwner(row.getOwner())
-                    .name(row.getName())
-                    .type(row.getSpecies())
-                    .breed(row.getBreed())
-                    .gender(row.getGender())
-                    .dateOfBirth(row.getDateOfBirth())
-                    .weight(row.getWeight())
-                    .microchipNumber(row.getMicrochipNumber())
-                    .profilePicture(row.getPhotoUrl())
-                    .patientNumber(row.getPatientNumber())
-                    .registeredAt(row.getRegisteredAt() != null ? row.getRegisteredAt() : LocalDate.now())
-                    .isNeutered(false)
-                    .build();
-            petsRepository.save(pet);
-        }
     }
 
     @Override
@@ -2804,7 +2665,7 @@ public class ClinicServiceImpl implements ClinicService {
         Map<String, PatientModel> result = new HashMap<>();
         for (String uuid : petUuids) {
             Pet pet = requirePet(uuid);
-            result.put(uuid, patientModelForPet(pet, lastVisits.get(uuid)));
+            result.put(uuid, patientModelForPet(clinic, pet, lastVisits.get(uuid)));
         }
         return result;
     }
@@ -2991,12 +2852,10 @@ public class ClinicServiceImpl implements ClinicService {
 
     private void requireActivated(Clinic clinic) {
         requireOperational(clinic);
-        if (isOwnerAffiliatedDoctor(clinic)) {
+        if (clinic.getStatus() != null && clinic.getStatus().isActivated()) {
             return;
         }
-        if (clinic.getStatus() == null || !clinic.getStatus().isActivated()) {
-            throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
-        }
+        throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
     }
 
     private void requirePracticeReady(DoctorProfile doctor) {
@@ -3039,23 +2898,6 @@ public class ClinicServiceImpl implements ClinicService {
         }
         throw new CustomException("You do not have permission to manage this clinic",
                 HttpStatus.FORBIDDEN);
-    }
-
-    private void requireOrgClinicClientWrite(Clinic clinic) {
-        if (isPersonalPracticeClinic(clinic)) {
-            throw new CustomException("Add client is only available at a clinic, not on personal practice",
-                    HttpStatus.BAD_REQUEST);
-        }
-    }
-
-    /** Personal practice: the owner has an active owner affiliation on this clinic. */
-    private boolean isPersonalPracticeClinic(Clinic clinic) {
-        Long ownerUserId = resolveOwnerUserId(clinic);
-        if (ownerUserId == null || clinic.getId() == null) {
-            return false;
-        }
-        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
-                clinic.getId(), ownerUserId, "owner");
     }
 
     private void requireClientAttachVerified(Clinic clinic, String userUuid) {
@@ -3143,8 +2985,14 @@ public class ClinicServiceImpl implements ClinicService {
         if (owner == null || owner.getId() == null) {
             return 0;
         }
-        List<Pet> pets = petsRepository.findByClinicOwner_IdAndIsActiveTrue(owner.getId());
-        return pets == null ? 0 : pets.size();
+        return (int) clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(owner.getClinic().getId()).stream()
+                .filter(enrollment -> enrollment.getClinicOwner() != null
+                        && enrollment.getClinicOwner().getId().equals(owner.getId()))
+                .map(ClinicPetEnrollment::getPet)
+                .filter(pet -> pet != null && Boolean.TRUE.equals(pet.getIsActive()))
+                .map(Pet::getId)
+                .distinct()
+                .count();
     }
 
     private Map<String, PatientModel> patientMap(Clinic clinic) {
@@ -3166,17 +3014,27 @@ public class ClinicServiceImpl implements ClinicService {
         Map<String, PatientModel> result = new HashMap<>();
         for (String uuid : petUuids) {
             Pet pet = requirePet(uuid);
-            result.put(uuid, patientModelForPet(pet, lastVisits.get(uuid)));
+            result.put(uuid, patientModelForPet(clinic, pet, lastVisits.get(uuid)));
         }
         return result;
     }
 
     /** Platform parent pets or clinic-registered pets (no KittyP user required). */
-    private PatientModel patientModelForPet(Pet pet, LocalDateTime lastVisit) {
-        if (pet.getClinicOwner() != null) {
-            return withLastVisit(toClinicPatientModel(pet), lastVisit);
+    private PatientModel patientModelForPet(Clinic clinic, Pet pet, LocalDateTime lastVisit) {
+        Optional<ClinicPetOwner> enrolledOwner = clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
+                .map(ClinicPetEnrollment::getClinicOwner);
+        if (enrolledOwner.isPresent()) {
+            return withLastVisit(toClinicPatientModel(pet, enrolledOwner.get()), lastVisit);
+        }
+        if (pet.getClinicOwner() != null && pet.getClinicOwner().getClinic() != null
+                && pet.getClinicOwner().getClinic().getId().equals(clinic.getId())) {
+            return withLastVisit(toClinicPatientModel(pet, pet.getClinicOwner()), lastVisit);
         }
         User owner = userDao.userByPetUuid(pet.getUuid());
+        if (owner == null) {
+            throw new CustomException("Pet owner not found for clinic patient.", HttpStatus.NOT_FOUND);
+        }
         return new PatientModel(pet.getUuid(), pet.getName(), fullName(owner), owner.getEmail(), lastVisit,
                 owner.getUuid(), formatPhone(owner), primaryAddress(owner), pet.getType(), pet.getBreed());
     }
@@ -3241,17 +3099,7 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicModel clinicModel(Clinic clinic) {
-        return clinicModel(clinic, null);
-    }
-
-    private ClinicModel clinicModel(Clinic clinic, User viewer) {
-        boolean personal = viewer != null
-                ? isViewerPersonalPractice(clinic, viewer)
-                : isOwnerAffiliatedDoctor(clinic);
-        return clinicModel(clinic, personal);
-    }
-
-    private ClinicModel clinicModel(Clinic clinic, boolean personal) {
+        boolean personal = clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE;
         boolean waConfigured = WhatsAppSettingsSupport.isConfigured(
                 clinic.getWhatsappPhoneNumberId(),
                 clinic.getWhatsappBusinessAccountId(),
@@ -3261,7 +3109,7 @@ public class ClinicServiceImpl implements ClinicService {
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
                 status, personal, waConfigured,
                 clinic.getCity(), clinic.getLatitude(), clinic.getLongitude(), clinic.getProfileImageUrl(),
-                clinic.getRejectionReason());
+                clinic.getRejectionReason(), clinic.getPracticeModel() == null ? null : clinic.getPracticeModel().name());
     }
 
     private static String whatsappTokenOrNull(Clinic clinic) {
@@ -3278,8 +3126,17 @@ public class ClinicServiceImpl implements ClinicService {
             return null;
         }
         for (Clinic owned : clinicDao.findAllByOwnerUserId(user.getId())) {
-            if (owned.getId() != null && clinicDoctorRepository
-                    .existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(), user.getId(), "owner")) {
+            if (owned.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE) {
+                if (owned.getId() != null && !clinicDoctorRepository
+                        .existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(), user.getId(), "owner")) {
+                    clinicDoctorRepository.save(ClinicDoctor.builder()
+                            .clinic(owned)
+                            .doctor(profile)
+                            .role("owner")
+                            .isActive(true)
+                            .joinedAt(LocalDate.now())
+                            .build());
+                }
                 if (profile.getClinic() == null) {
                     profile.setClinic(owned);
                     doctorProfileDao.save(profile);
@@ -3296,7 +3153,8 @@ public class ClinicServiceImpl implements ClinicService {
                 .email(user.getEmail())
                 .phone(profile.getPhoneNumber() != null ? profile.getPhoneNumber() : user.getPhoneNumber())
                 .owner(user)
-                .status(ClinicStatus.VERIFIED)
+                .practiceModel(PracticeModel.PERSONAL_PRACTICE)
+                .status(ClinicStatus.NOT_REQUIRED)
                 .build());
         clinicDoctorRepository.save(ClinicDoctor.builder()
                 .clinic(personal)
@@ -3321,44 +3179,6 @@ public class ClinicServiceImpl implements ClinicService {
                 .filter(Objects::nonNull)
                 .map(Role::getName)
                 .anyMatch(role -> role == ERole.ROLE_CLINIC_ADMIN);
-    }
-
-    /** Viewer-owned solo practice. Invited doctors on someone else's clinic are not personal. */
-    private boolean isViewerPersonalPractice(Clinic clinic, User viewer) {
-        if (clinic == null || viewer == null || viewer.getId() == null) {
-            return false;
-        }
-        if (clinic.getOwner() == null || clinic.getOwner().getId() == null) {
-            return false;
-        }
-        if (!clinic.getOwner().getId().equals(viewer.getId())) {
-            return false;
-        }
-        return isOwnerAffiliatedDoctor(clinic);
-    }
-
-    /** A personal practice requires an active owner affiliation at this clinic. */
-    private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
-        Long ownerUserId = resolveOwnerUserId(clinic);
-        if (ownerUserId == null) {
-            return false;
-        }
-        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
-                clinic.getId(), ownerUserId, "owner");
-    }
-
-    private Long resolveOwnerUserId(Clinic clinic) {
-        if (clinic == null || clinic.getId() == null) {
-            return null;
-        }
-        try {
-            if (clinic.getOwner() != null && clinic.getOwner().getId() != null) {
-                return clinic.getOwner().getId();
-            }
-        } catch (RuntimeException ex) {
-            log.warn("Could not read clinic owner for {}: {}", clinic.getUuid(), ex.getMessage());
-        }
-        return clinicDao.findOwnerUserId(clinic.getId());
     }
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {
@@ -3415,7 +3235,8 @@ public class ClinicServiceImpl implements ClinicService {
                         : booking.getDoctor().getSpecialization().name(),
                 booking.getDoctor() == null ? null : booking.getDoctor().getPhotoUrl(),
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.getUrgency());
     }
 
     private static String doctorDisplayName(com.kittyp.doctor.entity.DoctorProfile doctor) {
