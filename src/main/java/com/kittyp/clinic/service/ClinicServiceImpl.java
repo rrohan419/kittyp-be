@@ -91,11 +91,13 @@ import com.kittyp.clinic.entity.ClinicStaffInvite;
 import com.kittyp.clinic.enums.ClinicDoctorInviteStatus;
 import com.kittyp.clinic.enums.ClinicStaffInviteStatus;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicDoctorInviteRepository;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.repository.ClinicStaffInviteRepository;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.MessageResponse;
@@ -200,7 +202,7 @@ public class ClinicServiceImpl implements ClinicService {
         return clinics.values().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
-                .map(clinic -> clinicModel(clinic, user))
+                .map(this::clinicModel)
                 .toList();
     }
 
@@ -210,7 +212,7 @@ public class ClinicServiceImpl implements ClinicService {
         return clinicDao.findAllOrganizationFetchOwner().stream()
                 .sorted(Comparator.comparing(clinic -> clinic.getName() == null ? "" : clinic.getName(),
                         String.CASE_INSENSITIVE_ORDER))
-                .map(clinic -> clinicModel(clinic, false))
+                .map(this::clinicModel)
                 .toList();
     }
 
@@ -223,7 +225,8 @@ public class ClinicServiceImpl implements ClinicService {
         }
         Clinic clinic = Clinic.builder().name(request.name())
                 .licenseNumber(request.licenseNumber()).address(request.address()).phone(request.phone()).email(request.email())
-                .timezone(request.timezone()).operatingHours(request.operatingHours()).owner(owner).status(ClinicStatus.PENDING)
+                .timezone(request.timezone()).operatingHours(request.operatingHours()).owner(owner)
+                .practiceModel(PracticeModel.ORGANIZATION).status(ClinicStatus.PENDING)
                 .city(blankToNull(request.city())).latitude(request.latitude()).longitude(request.longitude())
                 .profileImageUrl(blankToNull(request.profileImageUrl()))
                 .build();
@@ -245,7 +248,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public ClinicModel get(String clinicUuid, String email) {
-        return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
+        return clinicModel(access(clinicUuid, email));
     }
 
     @Override
@@ -271,6 +274,10 @@ public class ClinicServiceImpl implements ClinicService {
         if (clinic == null) {
             throw new ResourceNotFoundException("clinic", "uuid", clinicUuid);
         }
+        if (clinic.getPracticeModel() != PracticeModel.ORGANIZATION) {
+            throw new CustomException("Personal practices do not require clinic verification",
+                    HttpStatus.BAD_REQUEST);
+        }
         if (clinic.getStatus() == ClinicStatus.SHUTDOWN) {
             throw new CustomException("Reopen the clinic before changing verification status", HttpStatus.BAD_REQUEST);
         }
@@ -291,6 +298,10 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicModel reapplyForVerification(String clinicUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireClinicManager(clinic, userDao.userByEmail(email));
+        if (clinic.getPracticeModel() != PracticeModel.ORGANIZATION) {
+            throw new CustomException("Personal practices do not require clinic verification",
+                    HttpStatus.BAD_REQUEST);
+        }
         if (clinic.getStatus() != ClinicStatus.REJECTED) {
             throw new CustomException("Only rejected clinics can be resubmitted", HttpStatus.BAD_REQUEST);
         }
@@ -505,7 +516,7 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     public ClinicModel switchClinic(String clinicUuid, String email) {
-        return clinicModel(access(clinicUuid, email), userDao.userByEmail(email));
+        return clinicModel(access(clinicUuid, email));
     }
 
     @Override
@@ -528,7 +539,9 @@ public class ClinicServiceImpl implements ClinicService {
         if (clinic.getStatus() != ClinicStatus.SHUTDOWN) {
             return clinicModel(clinic);
         }
-        clinic.setStatus(ClinicStatus.VERIFIED);
+        clinic.setStatus(clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE
+                ? ClinicStatus.NOT_REQUIRED
+                : ClinicStatus.VERIFIED);
         return clinicModel(clinicDao.saveClinic(clinic));
     }
 
@@ -1368,7 +1381,6 @@ public class ClinicServiceImpl implements ClinicService {
     public PatientDetailModel addPatient(String clinicUuid, AddPatientRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
 
         String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(request.ownerEmail());
         String phoneDigits = ClinicOwnerUserLinkService.normalizePhoneDigits(request.ownerPhone());
@@ -1540,7 +1552,6 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
         if (userUuid == null || userUuid.isBlank() || userUuid.length() > 64) {
             throw new CustomException("Invalid user id", HttpStatus.BAD_REQUEST);
         }
@@ -1575,9 +1586,7 @@ public class ClinicServiceImpl implements ClinicService {
         if (owner == null) {
             String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
             if (phone == null || !phone.matches("\\d{10}")) {
-                throw new CustomException(
-                        "This KittyP account has no valid phone on file. Ask them to update their profile, or add the client manually with a phone number.",
-                        HttpStatus.BAD_REQUEST);
+                phone = KeyConstant.PLACEHOLDER_PHONE;
             }
             owner = ClinicPetOwner.builder()
                     .clinic(clinic)
@@ -1606,7 +1615,6 @@ public class ClinicServiceImpl implements ClinicService {
     public void sendClientAttachOtp(String clinicUuid, String userUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
         User platformUser = requireActivePetParent(userUuid);
         if (isAlreadyLinkedClient(clinic, platformUser)) {
             throw new CustomException("This KittyP user is already a client of this clinic", HttpStatus.CONFLICT);
@@ -1631,7 +1639,6 @@ public class ClinicServiceImpl implements ClinicService {
     @Transactional
     public void verifyClientAttachOtp(String clinicUuid, String userUuid, String code, String email) {
         Clinic clinic = access(clinicUuid, email);
-        requireOrgClinicClientWrite(clinic);
         User platformUser = requireActivePetParent(userUuid);
         String otpKey = VerificationCodeService.clinicClientAttachOtpKey(clinic.getUuid(), platformUser.getUuid());
         boolean ok = verificationCodeService.verifyCode(otpKey, code, true);
@@ -1801,7 +1808,6 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
 
         String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
         String phoneDigits = ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
@@ -1855,7 +1861,6 @@ public class ClinicServiceImpl implements ClinicService {
             String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
 
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
@@ -2318,7 +2323,6 @@ public class ClinicServiceImpl implements ClinicService {
     public ClinicOwnerModel admitOwnerPets(String clinicUuid, String ownerUuid, List<String> petUuids, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireOperational(clinic);
-        requireOrgClinicClientWrite(clinic);
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
         if (owner.getLinkedUser() == null) {
@@ -2848,12 +2852,10 @@ public class ClinicServiceImpl implements ClinicService {
 
     private void requireActivated(Clinic clinic) {
         requireOperational(clinic);
-        if (isOwnerAffiliatedDoctor(clinic)) {
+        if (clinic.getStatus() != null && clinic.getStatus().isActivated()) {
             return;
         }
-        if (clinic.getStatus() == null || !clinic.getStatus().isActivated()) {
-            throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
-        }
+        throw new CustomException(ClinicStatus.NOT_ACTIVATED_MESSAGE, HttpStatus.BAD_REQUEST);
     }
 
     private void requirePracticeReady(DoctorProfile doctor) {
@@ -2896,23 +2898,6 @@ public class ClinicServiceImpl implements ClinicService {
         }
         throw new CustomException("You do not have permission to manage this clinic",
                 HttpStatus.FORBIDDEN);
-    }
-
-    private void requireOrgClinicClientWrite(Clinic clinic) {
-        if (isPersonalPracticeClinic(clinic)) {
-            throw new CustomException("Add client is only available at a clinic, not on personal practice",
-                    HttpStatus.BAD_REQUEST);
-        }
-    }
-
-    /** Personal practice: the owner has an active owner affiliation on this clinic. */
-    private boolean isPersonalPracticeClinic(Clinic clinic) {
-        Long ownerUserId = resolveOwnerUserId(clinic);
-        if (ownerUserId == null || clinic.getId() == null) {
-            return false;
-        }
-        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
-                clinic.getId(), ownerUserId, "owner");
     }
 
     private void requireClientAttachVerified(Clinic clinic, String userUuid) {
@@ -3114,17 +3099,7 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicModel clinicModel(Clinic clinic) {
-        return clinicModel(clinic, null);
-    }
-
-    private ClinicModel clinicModel(Clinic clinic, User viewer) {
-        boolean personal = viewer != null
-                ? isViewerPersonalPractice(clinic, viewer)
-                : isOwnerAffiliatedDoctor(clinic);
-        return clinicModel(clinic, personal);
-    }
-
-    private ClinicModel clinicModel(Clinic clinic, boolean personal) {
+        boolean personal = clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE;
         boolean waConfigured = WhatsAppSettingsSupport.isConfigured(
                 clinic.getWhatsappPhoneNumberId(),
                 clinic.getWhatsappBusinessAccountId(),
@@ -3134,7 +3109,7 @@ public class ClinicServiceImpl implements ClinicService {
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
                 status, personal, waConfigured,
                 clinic.getCity(), clinic.getLatitude(), clinic.getLongitude(), clinic.getProfileImageUrl(),
-                clinic.getRejectionReason());
+                clinic.getRejectionReason(), clinic.getPracticeModel() == null ? null : clinic.getPracticeModel().name());
     }
 
     private static String whatsappTokenOrNull(Clinic clinic) {
@@ -3151,8 +3126,17 @@ public class ClinicServiceImpl implements ClinicService {
             return null;
         }
         for (Clinic owned : clinicDao.findAllByOwnerUserId(user.getId())) {
-            if (owned.getId() != null && clinicDoctorRepository
-                    .existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(), user.getId(), "owner")) {
+            if (owned.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE) {
+                if (owned.getId() != null && !clinicDoctorRepository
+                        .existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(owned.getId(), user.getId(), "owner")) {
+                    clinicDoctorRepository.save(ClinicDoctor.builder()
+                            .clinic(owned)
+                            .doctor(profile)
+                            .role("owner")
+                            .isActive(true)
+                            .joinedAt(LocalDate.now())
+                            .build());
+                }
                 if (profile.getClinic() == null) {
                     profile.setClinic(owned);
                     doctorProfileDao.save(profile);
@@ -3169,7 +3153,8 @@ public class ClinicServiceImpl implements ClinicService {
                 .email(user.getEmail())
                 .phone(profile.getPhoneNumber() != null ? profile.getPhoneNumber() : user.getPhoneNumber())
                 .owner(user)
-                .status(ClinicStatus.VERIFIED)
+                .practiceModel(PracticeModel.PERSONAL_PRACTICE)
+                .status(ClinicStatus.NOT_REQUIRED)
                 .build());
         clinicDoctorRepository.save(ClinicDoctor.builder()
                 .clinic(personal)
@@ -3194,44 +3179,6 @@ public class ClinicServiceImpl implements ClinicService {
                 .filter(Objects::nonNull)
                 .map(Role::getName)
                 .anyMatch(role -> role == ERole.ROLE_CLINIC_ADMIN);
-    }
-
-    /** Viewer-owned solo practice. Invited doctors on someone else's clinic are not personal. */
-    private boolean isViewerPersonalPractice(Clinic clinic, User viewer) {
-        if (clinic == null || viewer == null || viewer.getId() == null) {
-            return false;
-        }
-        if (clinic.getOwner() == null || clinic.getOwner().getId() == null) {
-            return false;
-        }
-        if (!clinic.getOwner().getId().equals(viewer.getId())) {
-            return false;
-        }
-        return isOwnerAffiliatedDoctor(clinic);
-    }
-
-    /** A personal practice requires an active owner affiliation at this clinic. */
-    private boolean isOwnerAffiliatedDoctor(Clinic clinic) {
-        Long ownerUserId = resolveOwnerUserId(clinic);
-        if (ownerUserId == null) {
-            return false;
-        }
-        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(
-                clinic.getId(), ownerUserId, "owner");
-    }
-
-    private Long resolveOwnerUserId(Clinic clinic) {
-        if (clinic == null || clinic.getId() == null) {
-            return null;
-        }
-        try {
-            if (clinic.getOwner() != null && clinic.getOwner().getId() != null) {
-                return clinic.getOwner().getId();
-            }
-        } catch (RuntimeException ex) {
-            log.warn("Could not read clinic owner for {}: {}", clinic.getUuid(), ex.getMessage());
-        }
-        return clinicDao.findOwnerUserId(clinic.getId());
     }
 
     private DoctorModel doctorModel(ClinicDoctor affiliation) {
@@ -3288,7 +3235,8 @@ public class ClinicServiceImpl implements ClinicService {
                         : booking.getDoctor().getSpecialization().name(),
                 booking.getDoctor() == null ? null : booking.getDoctor().getPhotoUrl(),
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.getUrgency());
     }
 
     private static String doctorDisplayName(com.kittyp.doctor.entity.DoctorProfile doctor) {

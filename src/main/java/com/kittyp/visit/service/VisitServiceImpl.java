@@ -225,6 +225,7 @@ public class VisitServiceImpl implements VisitService {
         User ownerUser = resolvePlatformOwner(pet);
 
         BookingMode mode = request.mode() == null ? BookingMode.IN_PERSON : request.mode();
+        VisitUrgency urgency = request.urgency() == null ? VisitUrgency.ROUTINE : request.urgency();
         String notes = blankToNull(request.notes());
 
         Booking booking = Booking.builder()
@@ -237,6 +238,7 @@ public class VisitServiceImpl implements VisitService {
                 .timezone(clinic.getTimezone())
                 .mode(mode)
                 .status(BookingStatus.CONFIRMED)
+                .urgency(urgency)
                 .notes(notes)
                 .build();
         booking.setIsActive(true);
@@ -306,7 +308,8 @@ public class VisitServiceImpl implements VisitService {
         boolean hasNotes = request.notes() != null;
         boolean hasStatus = request.status() != null;
         boolean hasMode = request.mode() != null;
-        if (!hasDoctor && !hasSlot && !hasNotes && !hasStatus && !hasMode) {
+        boolean hasUrgency = request.urgency() != null;
+        if (!hasDoctor && !hasSlot && !hasNotes && !hasStatus && !hasMode && !hasUrgency) {
             throw new CustomException("No changes provided", HttpStatus.BAD_REQUEST);
         }
 
@@ -376,6 +379,9 @@ public class VisitServiceImpl implements VisitService {
         }
         if (hasMode) {
             booking.setMode(request.mode());
+        }
+        if (hasUrgency) {
+            booking.setUrgency(request.urgency());
         }
         jitsiMeetService.ensureVideoRoom(booking);
         return toBookingModel(bookingRepository.save(booking));
@@ -616,6 +622,12 @@ public class VisitServiceImpl implements VisitService {
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.NO_SHOW) {
             throw new CustomException("Cannot start treatment for a cancelled booking", HttpStatus.BAD_REQUEST);
         }
+        if (booking.getSlotStart() != null
+                && booking.getSlotStart().toLocalDate().isBefore(LocalDate.now())) {
+            throw new CustomException(
+                    "This appointment is in the past. Cancel it or mark it as no-show before closing it.",
+                    HttpStatus.BAD_REQUEST);
+        }
         if (booking.getClinic() == null || booking.getPet() == null) {
             throw new CustomException("Booking is missing clinic or pet", HttpStatus.BAD_REQUEST);
         }
@@ -664,7 +676,7 @@ public class VisitServiceImpl implements VisitService {
                 .source(VisitSource.SCHEDULED)
                 .channel(booking.getMode() == null ? BookingMode.IN_PERSON : booking.getMode())
                 .status(VisitStatus.IN_PROGRESS)
-                .urgency(VisitUrgency.ROUTINE)
+                .urgency(booking.getUrgency() == null ? VisitUrgency.ROUTINE : booking.getUrgency())
                 .reasonForVisit(blankToNull(booking.getNotes()))
                 .checkedInAt(now)
                 .startedAt(now)
@@ -824,6 +836,13 @@ public class VisitServiceImpl implements VisitService {
         requirePracticeReady(requireDoctorProfile(email));
         if (!STARTABLE.contains(visit.getStatus()) && visit.getStatus() != VisitStatus.IN_PROGRESS) {
             throw new CustomException("Cannot start visit from status " + visit.getStatus(), HttpStatus.BAD_REQUEST);
+        }
+        if (visit.getCreatedAt() != null
+                && visit.getCreatedAt().toLocalDate().isBefore(LocalDate.now())
+                && visit.getStatus() != VisitStatus.IN_PROGRESS) {
+            throw new CustomException(
+                    "This visit is in the past. Cancel it or mark it as no-show before attending.",
+                    HttpStatus.BAD_REQUEST);
         }
         if (visit.getDoctor() == null) {
             visit.setDoctor(requireDoctorProfile(email));
@@ -1629,7 +1648,8 @@ public class VisitServiceImpl implements VisitService {
                 doctorSpecialization,
                 doctorPhotoUrl,
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.getUrgency() == null ? VisitUrgency.ROUTINE : booking.getUrgency());
     }
 
     private Visit requireDoctorOwnedVisit(String visitUuid, String email) {
@@ -1795,7 +1815,7 @@ public class VisitServiceImpl implements VisitService {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
             return;
         }
-        // Already linked to a different platform user — do not claim via email/phone.
+        // Already linked to a different platform user — do not claim via email.
         if (owner != null && owner.getLinkedUser() != null
                 && !owner.getLinkedUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("You do not have access to this pet");
@@ -1804,14 +1824,6 @@ public class VisitServiceImpl implements VisitService {
             String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(owner.getEmail());
             String userEmail = ClinicOwnerUserLinkService.normalizeEmail(user.getEmail());
             if (ownerEmail != null && ownerEmail.equals(userEmail)) {
-                clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
-                return;
-            }
-            // Phone claim only when the digits uniquely match this user (same rule as link service).
-            String ownerPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(owner.getPhone());
-            String userPhone = ClinicOwnerUserLinkService.normalizePhoneDigits(user.getPhoneNumber());
-            if (ownerPhone != null && ownerPhone.equals(userPhone) && ownerPhone.matches("\\d{10}")
-                    && clinicOwnerUserLinkService.isUniquePhoneMatch(user, ownerPhone)) {
                 clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
                 return;
             }

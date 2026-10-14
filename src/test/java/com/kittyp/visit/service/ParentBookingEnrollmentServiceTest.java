@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
@@ -64,7 +65,10 @@ class ParentBookingEnrollmentServiceTest {
         parent = User.builder().uuid("parent-user").email("parent@example.test").build();
         parent.setId(2L);
 
-        clinic = Clinic.builder().owner(practiceOwner).build();
+        clinic = Clinic.builder()
+                .owner(practiceOwner)
+                .practiceModel(PracticeModel.PERSONAL_PRACTICE)
+                .build();
         clinic.setId(3L);
         doctor = DoctorProfile.builder().user(practiceOwner).build();
         doctor.setId(4L);

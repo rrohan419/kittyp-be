@@ -15,6 +15,11 @@ class ClinicStatusTest {
 		assertTrue(ClinicStatus.VERIFIED.isActivated());
 	}
 
+	@Test
+	void verificationNotRequiredIsActivatedWithoutClaimingAdminVerification() {
+		assertTrue(ClinicStatus.NOT_REQUIRED.isActivated());
+	}
+
 	@ParameterizedTest
 	@EnumSource(value = ClinicStatus.class, names = { "PENDING", "REJECTED", "SHUTDOWN" })
 	void unverifiedNotActivated(ClinicStatus status) {

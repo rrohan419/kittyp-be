@@ -1,12 +1,9 @@
 package com.kittyp.clinic.service;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,16 +82,7 @@ public class ClinicOwnerUserLinkService {
 			return owner;
 		}
 
-		String phone = normalizePhoneDigits(owner.getPhone());
-		String altPhone = normalizePhoneDigits(owner.getAlternatePhone());
-
 		User matched = emailMatch;
-		if (matched == null) {
-			matched = matchUniqueByPhone(phone);
-		}
-		if (matched == null) {
-			matched = matchUniqueByPhone(altPhone);
-		}
 		if (matched != null) {
 			owner.setLinkedUser(matched);
 			owner = clinicPetOwnerRepository.save(owner);
@@ -108,7 +96,7 @@ public class ClinicOwnerUserLinkService {
 
 	/**
 	 * Called on parent signup / profile update / visit history load. Finds clinic
-	 * owners by email (even if wrongly linked) or unmatched phone, links them, and
+	 * owners by email only (even if wrongly linked), links them, and
 	 * attaches pets.
 	 */
 	@Transactional
@@ -117,55 +105,12 @@ public class ClinicOwnerUserLinkService {
 			return 0;
 		}
 		String email = normalizeEmail(user.getEmail());
-		String phone = normalizePhoneDigits(user.getPhoneNumber());
 
 		// Include wrongly-linked owners with this email so visits become visible.
 		List<ClinicPetOwner> byEmail = email == null
 				? List.of()
 				: clinicPetOwnerRepository.findByIsActiveTrueAndEmailIgnoreCase(email);
-		List<ClinicPetOwner> byPhone = phone == null || !phone.matches("\\d{10}")
-				? List.of()
-				: clinicPetOwnerRepository.findByLinkedUserIsNullAndIsActiveTrueAndPhone(phone);
-		List<ClinicPetOwner> byAltPhone = phone == null || !phone.matches("\\d{10}")
-				? List.of()
-				: clinicPetOwnerRepository.findByLinkedUserIsNullAndIsActiveTrueAndAlternatePhone(phone);
-
-		Set<Long> emailIds = byEmail.stream().map(ClinicPetOwner::getId).collect(Collectors.toSet());
-		Set<Long> phoneIds = Stream.concat(byPhone.stream(), byAltPhone.stream())
-				.map(ClinicPetOwner::getId)
-				.collect(Collectors.toSet());
-
-		Set<String> emails = Stream.of(byEmail, byPhone, byAltPhone)
-				.flatMap(List::stream)
-				.map(o -> normalizeEmail(o.getEmail()))
-				.filter(Objects::nonNull)
-				.collect(Collectors.toSet());
-		Set<String> phones = Stream.of(byEmail, byPhone, byAltPhone)
-				.flatMap(List::stream)
-				.map(o -> normalizePhoneDigits(o.getPhone()))
-				.filter(Objects::nonNull)
-				.collect(Collectors.toSet());
-
-		int linked = 0;
-		if (!emailIds.isEmpty() && !phoneIds.isEmpty()) {
-			Set<Long> intersection = new HashSet<>(emailIds);
-			intersection.retainAll(phoneIds);
-			if (intersection.isEmpty() && emails.size() > 1 && phones.size() > 1) {
-				log.warn("Ambiguous clinic-owner match for user {} (email vs phone conflict) — linking email matches only",
-						user.getUuid());
-				linked += linkOrReclaimOwners(user, byEmail);
-			} else {
-				linked += linkOrReclaimOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
-						.flatMap(List::stream)
-						.collect(Collectors.toMap(ClinicPetOwner::getId, o -> o, (a, b) -> a))
-						.values());
-			}
-		} else {
-			linked += linkOrReclaimOwners(user, Stream.of(byEmail, byPhone, byAltPhone)
-					.flatMap(List::stream)
-					.collect(Collectors.toMap(ClinicPetOwner::getId, o -> o, (a, b) -> a))
-					.values());
-		}
+		int linked = linkOrReclaimOwners(user, byEmail);
 
 		linked += ensurePetsForAlreadyLinkedOwners(user);
 		syncAllLinkedOwnerPhones(user);
@@ -257,31 +202,6 @@ public class ClinicOwnerUserLinkService {
 	private int userPetCount(User user) {
 		User managed = userDao.userByUuid(user.getUuid());
 		return managed.getPets() == null ? 0 : managed.getPets().size();
-	}
-
-	private User matchUniqueByPhone(String phone) {
-		if (phone == null || !phone.matches("\\d{10}")) {
-			return null;
-		}
-		List<User> byPhone = userRepository.findByPhoneDigits(phone);
-		if (byPhone.size() == 1) {
-			return byPhone.get(0);
-		}
-		if (byPhone.size() > 1) {
-			log.warn("Ambiguous phone match {} — skipping link", phone);
-		}
-		return null;
-	}
-
-	/**
-	 * True when {@code phone} uniquely matches {@code user} (no other accounts share those digits).
-	 */
-	public boolean isUniquePhoneMatch(User user, String phone) {
-		if (user == null || phone == null || !phone.matches("\\d{10}")) {
-			return false;
-		}
-		User matched = matchUniqueByPhone(phone);
-		return matched != null && matched.getId().equals(user.getId());
 	}
 
 	/** Attach clinic-registered pets (already in {@code pets}) to the platform user. */

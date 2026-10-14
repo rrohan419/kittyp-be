@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.kittyp.clinic.dto.DiscoverDtos.DiscoverClinicCard;
 import com.kittyp.clinic.dto.DiscoverDtos.DiscoverDoctorCard;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.entity.ClinicDoctor;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
@@ -42,10 +43,10 @@ public class DiscoverServiceImpl implements DiscoverService {
 
         List<DiscoverClinicCard> cards = new ArrayList<>();
         for (Clinic clinic : clinicRepository.findDiscoverable()) {
-            List<ClinicDoctor> affiliations = clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
-            if (findPersonalAffiliation(clinic, affiliations) != null) {
+            if (clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE) {
                 continue;
             }
+            List<ClinicDoctor> affiliations = clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
             Double distance = distanceKm(clinic, lat, lng, hasGps);
             List<DiscoverDoctorCard> doctorCards = affiliations.stream()
                     .filter(aff -> {
@@ -95,6 +96,9 @@ public class DiscoverServiceImpl implements DiscoverService {
 
         List<DiscoverDoctorCard> cards = new ArrayList<>();
         for (Clinic clinic : clinicRepository.findDiscoverable()) {
+            if (clinic.getPracticeModel() != PracticeModel.PERSONAL_PRACTICE) {
+                continue;
+            }
             List<ClinicDoctor> affiliations = clinicDoctorRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
             ClinicDoctor personalAff = findPersonalAffiliation(clinic, affiliations);
             if (personalAff == null) {
@@ -221,7 +225,7 @@ public class DiscoverServiceImpl implements DiscoverService {
             weight += d.getReviewsCount();
         }
         Double clinicRating = weight == 0 ? null : Math.round((weightedSum / weight) * 10.0) / 10.0;
-        boolean personal = findPersonalAffiliation(clinic, affiliations) != null;
+        boolean personal = clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE;
         return new DiscoverClinicCard(
                 clinic.getUuid(),
                 clinic.getName(),
@@ -241,7 +245,8 @@ public class DiscoverServiceImpl implements DiscoverService {
     }
 
     private static ClinicDoctor findPersonalAffiliation(Clinic clinic, List<ClinicDoctor> affiliations) {
-        if (clinic == null || clinic.getOwner() == null || affiliations == null) {
+        if (clinic == null || clinic.getPracticeModel() != PracticeModel.PERSONAL_PRACTICE
+                || clinic.getOwner() == null || affiliations == null) {
             return null;
         }
         Long ownerUserId = clinic.getOwner().getId();

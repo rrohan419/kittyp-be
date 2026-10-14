@@ -22,6 +22,7 @@ import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.clinic.dto.ClinicDtos.ClinicModel;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.enums.ClinicStatus;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.common.exception.CustomException;
@@ -113,6 +114,23 @@ class ClinicServiceImplListAllTest {
 	void updateStatusForAdmin_rejectedRequiresReason() {
 		assertThrows(CustomException.class,
 				() -> clinicService.updateStatusForAdmin("c1", ClinicStatus.REJECTED, "  "));
+	}
+
+	@Test
+	void updateStatusForAdmin_rejectsPersonalPracticeVerification() {
+		Clinic clinic = Clinic.builder()
+				.uuid("personal")
+				.name("Personal Practice")
+				.practiceModel(PracticeModel.PERSONAL_PRACTICE)
+				.status(ClinicStatus.NOT_REQUIRED)
+				.build();
+		clinic.setId(4L);
+		when(clinicDao.findByUuid("personal")).thenReturn(clinic);
+
+		assertThrows(CustomException.class,
+				() -> clinicService.updateStatusForAdmin("personal", ClinicStatus.VERIFIED, null));
+
+		verify(clinicDao, never()).saveClinic(clinic);
 	}
 
 	@Test

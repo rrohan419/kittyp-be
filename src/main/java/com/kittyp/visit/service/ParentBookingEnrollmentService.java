@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
@@ -34,9 +35,10 @@ public class ParentBookingEnrollmentService {
 	private final UserRepository userRepository;
 	private final DoctorProfileRepository doctorProfileRepository;
 
-	/** Personal practice when the booked clinic is owned by the booked doctor. */
+	/** A booking is a personal-practice booking only for that practice's owner-doctor. */
 	public static boolean isPersonalPractice(Clinic clinic, DoctorProfile doctor) {
-		return clinic != null && doctor != null && clinic.getOwner() != null && doctor.getUser() != null
+		return clinic != null && clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE
+				&& doctor != null && clinic.getOwner() != null && doctor.getUser() != null
 				&& clinic.getOwner().getId().equals(doctor.getUser().getId());
 	}
 

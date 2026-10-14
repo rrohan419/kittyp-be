@@ -155,7 +155,8 @@ public class DoctorBookingController {
                 doctorSpecialization,
                 doctorPhotoUrl,
                 booking.getPet() == null ? null : booking.getPet().getType(),
-                booking.getVideoJoinUrl());
+                booking.getVideoJoinUrl(),
+                booking.getUrgency());
     }
 
     private DoctorProfile currentDoctor() {

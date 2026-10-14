@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.KeyConstant;
@@ -206,19 +207,8 @@ public class AdminDoctorController {
         return value != null && !value.isBlank();
     }
 
-    /**
-     * True when the doctor's linked clinic is a solo personal practice (owner = doctor user
-     * and that user is an active affiliated doctor). Org clinics are not personal.
-     */
     private boolean isPersonalPracticeClinic(Clinic clinic, DoctorProfile p) {
-        if (clinic == null || clinic.getOwner() == null || p.getUser() == null) {
-            return false;
-        }
-        if (!java.util.Objects.equals(clinic.getOwner().getId(), p.getUser().getId())) {
-            return false;
-        }
-        return clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(
-                clinic.getId(), p.getUser().getId());
+        return clinic != null && clinic.getPracticeModel() == PracticeModel.PERSONAL_PRACTICE;
     }
 
     private DoctorVerificationModel toModel(DoctorProfile p, Set<Long> orgAffiliatedIds) {

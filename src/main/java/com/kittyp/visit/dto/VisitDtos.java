@@ -61,7 +61,21 @@ public final class VisitDtos {
             LocalDateTime slotEnd,
             Integer durationMinutes,
             String notes,
-            BookingMode mode) {
+            BookingMode mode,
+            VisitUrgency urgency) {
+        public ScheduleBookingCreateRequest(
+                String petUuid,
+                WalkInOwnerRequest owner,
+                WalkInPetRequest newPet,
+                String doctorUuid,
+                LocalDateTime slotStart,
+                LocalDateTime slotEnd,
+                Integer durationMinutes,
+                String notes,
+                BookingMode mode) {
+            this(petUuid, owner, newPet, doctorUuid, slotStart, slotEnd, durationMinutes, notes, mode,
+                    VisitUrgency.ROUTINE);
+        }
     }
 
     /** Clinic front-desk reschedule / cancel. Null fields stay unchanged. */
@@ -70,7 +84,16 @@ public final class VisitDtos {
             LocalDateTime slotStart,
             String notes,
             BookingStatus status,
-            BookingMode mode) {
+            BookingMode mode,
+            VisitUrgency urgency) {
+        public ScheduleBookingPatchRequest(
+                String doctorUuid,
+                LocalDateTime slotStart,
+                String notes,
+                BookingStatus status,
+                BookingMode mode) {
+            this(doctorUuid, slotStart, notes, status, mode, null);
+        }
     }
 
     /** Parent self-book: owned pet + clinic doctor + slot. */
