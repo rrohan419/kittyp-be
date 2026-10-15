@@ -1,0 +1,39 @@
+---
+description: Controllers stay thin. Business logic lives only in the service implementation. A DAO sits between the service and the repository. Services never call repositories.
+alwaysApply: true
+---
+
+# Layered architecture
+
+Every feature uses this call chain:
+
+`Controller` → `XxxService` (interface) → `XxxServiceImpl` → `XxxDao` (interface) → `XxxDaoImpl` → `XxxRepository`
+
+## Controller
+- HTTP only: map the request, read the authenticated user, validate input, call one service method, build the response.
+- No business rules, calculations, domain decisions, or data access.
+- Inject the service interface (`PetService`). Never inject `*ServiceImpl`, a DAO, or a repository.
+
+## Service interface
+- `XxxService` is an interface. It declares operations and contains no logic.
+- Controllers and other callers depend on `XxxService`, never on `XxxServiceImpl`.
+
+## Service implementation
+- `XxxServiceImpl implements XxxService` and owns all business logic.
+- `XxxServiceImpl` depends on DAO interfaces only (`PetDao`, `UserDao`).
+- A class in a `service` package must never import, inject, or call a class in a `repository` package.
+
+## DAO
+- `XxxDao` is an interface between the service and the repository.
+- `XxxDaoImpl implements XxxDao` (`@Repository`) and is the only layer allowed to call a Spring Data repository.
+- DAO methods load and persist data. Business rules stay in `XxxServiceImpl`.
+
+## Forbidden
+- Domain `if`/`else`, calculations, or persistence calls inside a controller.
+- `XxxServiceImpl` (or any service class) calling `XxxRepository` and skipping the DAO.
+- Business rules inside `XxxDaoImpl`.
+
+## Reference
+- `PetController` injects `PetService`
+- `PetServiceImpl implements PetService` and calls `PetDao`
+- `PetDaoImpl implements PetDao` and calls `PetsRepository`
