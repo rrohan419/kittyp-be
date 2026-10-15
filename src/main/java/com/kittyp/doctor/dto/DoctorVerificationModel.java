@@ -38,5 +38,7 @@ public record DoctorVerificationModel(
         LocalDateTime submittedAt,
         LocalDateTime reviewedAt,
         String reviewNotes,
-        String rejectionReason) {
+        String rejectionReason,
+        String city,
+        LocalDateTime createdAt) {
 }

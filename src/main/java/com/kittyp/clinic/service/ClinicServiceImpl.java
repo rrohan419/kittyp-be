@@ -263,8 +263,9 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     @Transactional
     public ClinicModel updateStatusForAdmin(String clinicUuid, ClinicStatus status, String rejectionReason) {
-        if (status != ClinicStatus.VERIFIED && status != ClinicStatus.REJECTED) {
-            throw new CustomException("Admin can only set VERIFIED or REJECTED", HttpStatus.BAD_REQUEST);
+        if (status != ClinicStatus.VERIFIED && status != ClinicStatus.REJECTED
+                && status != ClinicStatus.UNDER_REVIEW) {
+            throw new CustomException("Admin can only set VERIFIED, REJECTED, or UNDER_REVIEW", HttpStatus.BAD_REQUEST);
         }
         String normalizedReason = rejectionReason == null ? null : rejectionReason.trim();
         if (status == ClinicStatus.REJECTED && (normalizedReason == null || normalizedReason.isBlank())) {
@@ -3109,7 +3110,9 @@ public class ClinicServiceImpl implements ClinicService {
                 clinic.getPhone(), clinic.getEmail(), clinic.getTimezone(), clinic.getOperatingHours(),
                 status, personal, waConfigured,
                 clinic.getCity(), clinic.getLatitude(), clinic.getLongitude(), clinic.getProfileImageUrl(),
-                clinic.getRejectionReason(), clinic.getPracticeModel() == null ? null : clinic.getPracticeModel().name());
+                clinic.getRejectionReason(),
+                clinic.getPracticeModel() == null ? null : clinic.getPracticeModel().name(),
+                clinic.getCreatedAt());
     }
 
     private static String whatsappTokenOrNull(Clinic clinic) {

@@ -26,6 +26,8 @@ public class UserDetailsModel {
     private Set<String> roles;
     private String uuid;
     private LocalDateTime createdAt;
+    /** Default address city, otherwise the first saved address city. */
+    private String city;
     private String phoneNumber;
     private String phoneCountryCode;
     private Integer age;

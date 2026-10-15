@@ -34,31 +34,31 @@ public final class ClinicDtos {
     public record ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
             String timezone, String operatingHours, String status, Boolean personal, Boolean whatsappConfigured,
             String city, Double latitude, Double longitude, String profileImageUrl, String rejectionReason,
-            String practiceModel) {
+            String practiceModel, LocalDateTime createdAt) {
         /** Backward-compatible ctor without personal / whatsapp / geo flags. */
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status) {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, false, false,
-                    null, null, null, null, null, null);
+                    null, null, null, null, null, null, null);
         }
 
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status, Boolean personal) {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal, false,
-                    null, null, null, null, null, null);
+                    null, null, null, null, null, null, null);
         }
 
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status, Boolean personal, Boolean whatsappConfigured) {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal,
-                    whatsappConfigured, null, null, null, null, null, null);
+                    whatsappConfigured, null, null, null, null, null, null, null);
         }
 
         public ClinicModel(String uuid, String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours, String status, Boolean personal, Boolean whatsappConfigured,
                 String city, Double latitude, Double longitude, String profileImageUrl, String rejectionReason) {
             this(uuid, name, licenseNumber, address, phone, email, timezone, operatingHours, status, personal,
-                    whatsappConfigured, city, latitude, longitude, profileImageUrl, rejectionReason, null);
+                    whatsappConfigured, city, latitude, longitude, profileImageUrl, rejectionReason, null, null);
         }
     }
 

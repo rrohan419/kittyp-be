@@ -35,6 +35,7 @@ import com.kittyp.user.dto.ProfileOtpSendRequest;
 import com.kittyp.user.dto.ProfileOtpVerifyRequest;
 import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.dto.UserDetailDto;
+import com.kittyp.user.entity.Address;
 import com.kittyp.user.entity.User;
 import com.kittyp.user.entity.UserFcmToken;
 import com.kittyp.user.entity.UserRole;
@@ -221,6 +222,7 @@ public class UserServiceImpl implements UserService {
 				.roles(roles)
 				.uuid(user.getUuid())
 				.createdAt(user.getCreatedAt())
+				.city(cityOf(user))
 				.phoneNumber(user.getPhoneNumber())
 				.phoneCountryCode(phoneCountryCode)
 				.age(user.getAge())
@@ -228,6 +230,25 @@ public class UserServiceImpl implements UserService {
 				.profilePictureUrl(user.getProfilePictureUrl())
 				.ownerPets(petModels)
 				.build();
+	}
+
+	private String cityOf(User user) {
+		if (user.getAddresses() == null || user.getAddresses().isEmpty()) {
+			return null;
+		}
+		String fallback = null;
+		for (Address address : user.getAddresses()) {
+			if (address == null || address.getCity() == null || address.getCity().isBlank()) {
+				continue;
+			}
+			if (Boolean.TRUE.equals(address.getIsDefault())) {
+				return address.getCity();
+			}
+			if (fallback == null) {
+				fallback = address.getCity();
+			}
+		}
+		return fallback;
 	}
 
 	@Override

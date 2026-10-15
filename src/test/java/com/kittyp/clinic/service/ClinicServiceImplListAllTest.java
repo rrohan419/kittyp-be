@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -108,6 +109,22 @@ class ClinicServiceImplListAllTest {
 		assertEquals("Missing license", clinic.getRejectionReason());
 		verify(zeptoMailService).sendClinicProfileRejected(
 				"owner@example.com", "Casey", "Alpha", "Missing license");
+	}
+
+	@Test
+	void updateStatusForAdmin_underReviewClearsRejectionReason() {
+		Clinic clinic = Clinic.builder().uuid("c1").name("Alpha").status(ClinicStatus.VERIFIED)
+				.rejectionReason("old").owner(null).build();
+		clinic.setId(1L);
+		when(clinicDao.findByUuid("c1")).thenReturn(clinic);
+		when(clinicDao.saveClinic(clinic)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		ClinicModel model = clinicService.updateStatusForAdmin("c1", ClinicStatus.UNDER_REVIEW, null);
+
+		assertEquals("UNDER_REVIEW", model.status());
+		assertEquals(ClinicStatus.UNDER_REVIEW, clinic.getStatus());
+		assertNull(clinic.getRejectionReason());
+		verifyNoInteractions(zeptoMailService);
 	}
 
 	@Test

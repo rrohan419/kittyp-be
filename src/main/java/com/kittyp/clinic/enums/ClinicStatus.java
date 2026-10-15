@@ -2,6 +2,7 @@ package com.kittyp.clinic.enums;
 
 public enum ClinicStatus {
     PENDING,
+    UNDER_REVIEW,
     VERIFIED,
     REJECTED,
     NOT_REQUIRED,

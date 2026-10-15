@@ -93,7 +93,7 @@ public class AdminDoctorController {
         }
         if (request.getCheckClinicPhotos() != null) profile.setCheckClinicPhotos(request.getCheckClinicPhotos());
 
-        if (profile.getStatus() == DoctorStatus.DOCUMENTS_SUBMITTED && anyChecked(profile)) {
+        if (checklistChanged(request)) {
             profile.setStatus(DoctorStatus.UNDER_REVIEW);
         }
         Set<Long> clinicLinkedIds = clinicDoctorRepository.findActiveOrgAffiliatedDoctorIds();
@@ -113,6 +113,9 @@ public class AdminDoctorController {
                 : request.getRejectionReason().trim();
         if (next == DoctorStatus.REJECTED && (rejectionReason == null || rejectionReason.isBlank())) {
             throw new CustomException("A rejection reason is required", HttpStatus.BAD_REQUEST);
+        }
+        if (next == DoctorStatus.PUBLISHED && previous != DoctorStatus.VERIFIED) {
+            throw new CustomException("Doctor must be verified before publish", HttpStatus.BAD_REQUEST);
         }
 
         if (next == DoctorStatus.VERIFIED || next == DoctorStatus.PUBLISHED) {
@@ -179,10 +182,14 @@ public class AdminDoctorController {
         }
     }
 
-    private boolean anyChecked(DoctorProfile p) {
-        return p.isCheckGovernmentId() || p.isCheckDegree()
-                || p.isCheckRegistrationCertificate() || p.isCheckClinicAddress()
-                || p.isCheckRegistrationNumber() || p.isCheckGoogleMapsMatch() || p.isCheckClinicPhotos();
+    private boolean checklistChanged(DoctorChecklistUpdateRequest request) {
+        return request.getCheckGovernmentId() != null
+                || request.getCheckDegree() != null
+                || request.getCheckRegistrationCertificate() != null
+                || request.getCheckClinicAddress() != null
+                || request.getCheckRegistrationNumber() != null
+                || request.getCheckGoogleMapsMatch() != null
+                || request.getCheckClinicPhotos() != null;
     }
 
     /**
@@ -254,6 +261,8 @@ public class AdminDoctorController {
                 p.getSubmittedAt(),
                 p.getReviewedAt(),
                 p.getReviewNotes(),
-                p.getRejectionReason());
+                p.getRejectionReason(),
+                p.getClinic() != null ? p.getClinic().getCity() : null,
+                p.getCreatedAt());
     }
 }

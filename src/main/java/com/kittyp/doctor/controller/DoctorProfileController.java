@@ -105,7 +105,9 @@ public class DoctorProfileController {
                 profile.getSubmittedAt(),
                 profile.getReviewedAt(),
                 profile.getReviewNotes(),
-                profile.getRejectionReason());
+                profile.getRejectionReason(),
+                hasClinic ? profile.getClinic().getCity() : null,
+                profile.getCreatedAt());
         return responseBuilder.buildSuccessResponse(model, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
