@@ -1239,7 +1239,59 @@ public class ClinicServiceImpl implements ClinicService {
 
         invite.setStatus(ClinicStaffInviteStatus.ACCEPTED);
         clinicStaffInviteRepository.save(invite);
+        notifyClinicOfStaffInviteResponse(invite, true);
         return staffMemberModel(membership);
+    }
+
+    @Override
+    @Transactional
+    public void declineStaffInvite(String token) {
+        ClinicStaffInvite invite = requireStaffInviteByToken(token);
+        if (invite.getStatus() != ClinicStaffInviteStatus.PENDING) {
+            throw new CustomException("This invite is no longer valid", HttpStatus.BAD_REQUEST);
+        }
+        if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+            invite.setStatus(ClinicStaffInviteStatus.EXPIRED);
+            clinicStaffInviteRepository.save(invite);
+            throw new CustomException("This invite has expired", HttpStatus.BAD_REQUEST);
+        }
+        invite.setStatus(ClinicStaffInviteStatus.DECLINED);
+        clinicStaffInviteRepository.save(invite);
+        notifyClinicOfStaffInviteResponse(invite, false);
+    }
+
+    private void notifyClinicOfStaffInviteResponse(ClinicStaffInvite invite, boolean accepted) {
+        Clinic clinic = invite.getClinic();
+        String clinicEmail = clinic.getEmail() == null ? null : clinic.getEmail().trim();
+        if ((clinicEmail == null || clinicEmail.isBlank()) && clinic.getOwner() != null
+                && clinic.getOwner().getEmail() != null) {
+            clinicEmail = clinic.getOwner().getEmail().trim();
+        }
+        if (clinicEmail != null && clinicEmail.isBlank()) {
+            clinicEmail = null;
+        }
+        String clinicName = clinic.getName();
+        String staffName = invite.getStaffName();
+        String staffEmail = invite.getEmail();
+        String recipient = clinicEmail;
+        Runnable send = () -> {
+            try {
+                zeptoMailService.sendClinicStaffInviteResponseEmail(recipient, clinicName, staffName, staffEmail,
+                        accepted);
+            } catch (Exception e) {
+                log.warn("Failed to notify clinic of staff invite response: {}", e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
     }
 
     private ClinicStaffInvite requireStaffInviteByToken(String token) {

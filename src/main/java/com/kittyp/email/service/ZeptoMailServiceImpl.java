@@ -311,6 +311,42 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		}
 	}
 
+	@Override
+	public void sendClinicStaffInviteResponseEmail(String recipientEmail, String clinicName, String staffName,
+			String staffEmail, boolean accepted) {
+		String status = accepted ? "accepted" : "declined";
+		log.info("Clinic staff invite {} — notify clinicEmail={} clinic={} staff={} <{}>", status, recipientEmail,
+				clinicName, staffName, staffEmail);
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			return;
+		}
+		String templateProperty = accepted
+				? TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_ACCEPTED_EMAIL_TEMPLATE_ID
+				: TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_DECLINED_EMAIL_TEMPLATE_ID;
+		String templateKey = env.getProperty(templateProperty);
+		if (templateKey == null || templateKey.isBlank()) {
+			log.warn("Skipping clinic staff invite response email: template id is not configured ({})", status);
+			return;
+		}
+		try {
+			ZeptoMailDto mailDto = new ZeptoMailDto();
+			String name = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName;
+			String staff = staffName == null || staffName.isBlank() ? "Staff" : staffName;
+			mailDto.setMergeInfo(Map.of(
+					"staff_name", staff,
+					"staff_email", staffEmail == null ? "" : staffEmail,
+					"clinic_name", name,
+					"status", status));
+			mailDto.setRecipientEmail(recipientEmail);
+			mailDto.setRecipientName(name);
+			mailDto.setTemplateKey(templateKey);
+			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
+			addEmailAuditLog(responseModel, recipientEmail);
+		} catch (Exception e) {
+			log.warn("Failed to send clinic staff invite response email to {}: {}", recipientEmail, e.getMessage());
+		}
+	}
+
 	@Transactional
 	@Override
 	public void sendOrderConfirmationEmail(String recipientEmail, String orderNumber) {

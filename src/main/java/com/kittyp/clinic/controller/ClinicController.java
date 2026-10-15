@@ -260,6 +260,12 @@ public class ClinicController {
         return success(clinicService.completeStaffInvite(token, request));
     }
 
+    @PostMapping(ApiUrl.CLINIC_STAFF_INVITE_DECLINE)
+    public ResponseEntity<SuccessResponse<Void>> declineStaffInvite(@PathVariable String token) {
+        clinicService.declineStaffInvite(token);
+        return success(null);
+    }
+
     @GetMapping(ApiUrl.CLINIC_PATIENTS)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<List<PatientModel>>> patients(@PathVariable String uuid) {

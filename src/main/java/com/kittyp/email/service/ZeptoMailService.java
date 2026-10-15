@@ -50,6 +50,14 @@ public interface ZeptoMailService {
 	void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
 			String doctorEmail, boolean accepted);
 
+	/**
+	 * Notify clinic that a staff invite was accepted or declined.
+	 * Uses a separate Zepto template for each outcome.
+	 * Merge fields: staff_name, staff_email, clinic_name.
+	 */
+	void sendClinicStaffInviteResponseEmail(String recipientEmail, String clinicName, String staffName,
+			String staffEmail, boolean accepted);
+
 	void sendDoctorProfileVerified(String email, String doctorName, String dashboardUrl);
 
 	void sendDoctorProfileRejected(String email, String doctorName, String rejectionReason);

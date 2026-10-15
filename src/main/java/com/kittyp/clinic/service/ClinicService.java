@@ -109,6 +109,8 @@ public interface ClinicService {
 
     StaffMemberModel completeStaffInvite(String token, StaffInviteCompleteRequest request);
 
+    void declineStaffInvite(String token);
+
     List<PatientModel> patients(String clinicUuid, String email);
 
     PatientDetailModel patientDetail(String clinicUuid, String petUuid, String email);

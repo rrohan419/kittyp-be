@@ -1,12 +1,17 @@
 package com.kittyp.email.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.InputStream;
 import java.util.List;
+import java.util.Properties;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.core.env.Environment;
@@ -165,6 +170,114 @@ class ZeptoMailServiceImplTest {
 		assertEquals("Dr Casey", mailCaptor.getValue().getMergeInfo().get("customer_name"));
 		assertEquals("Registration certificate is unreadable.",
 				mailCaptor.getValue().getMergeInfo().get("rejection_reason"));
+	}
+
+	@Test
+	void staffInviteAcceptedUsesAcceptedTemplateAndMergeFields() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_ACCEPTED_EMAIL_TEMPLATE_ID))
+				.thenReturn("staff-accepted-template");
+		when(sender.sendEmail(any())).thenReturn(response());
+		ZeptoMailServiceImpl service = mailService(sender, environment);
+
+		service.sendClinicStaffInviteResponseEmail(
+				"clinic@example.com", "Happy Paws", "Sam Staff", "staff@example.com", true);
+
+		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(mailCaptor.capture());
+		ZeptoMailDto mail = mailCaptor.getValue();
+		assertEquals("staff-accepted-template", mail.getTemplateKey());
+		assertEquals("clinic@example.com", mail.getRecipientEmail());
+		assertEquals("Happy Paws", mail.getRecipientName());
+		assertEquals("Sam Staff", mail.getMergeInfo().get("staff_name"));
+		assertEquals("staff@example.com", mail.getMergeInfo().get("staff_email"));
+		assertEquals("Happy Paws", mail.getMergeInfo().get("clinic_name"));
+		assertEquals("accepted", mail.getMergeInfo().get("status"));
+	}
+
+	@Test
+	void staffInviteDeclinedUsesDeclinedTemplate() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_DECLINED_EMAIL_TEMPLATE_ID))
+				.thenReturn("staff-declined-template");
+		when(sender.sendEmail(any())).thenReturn(response());
+		ZeptoMailServiceImpl service = mailService(sender, environment);
+
+		service.sendClinicStaffInviteResponseEmail(
+				"clinic@example.com", "Happy Paws", "Sam Staff", "staff@example.com", false);
+
+		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(mailCaptor.capture());
+		assertEquals("staff-declined-template", mailCaptor.getValue().getTemplateKey());
+		assertEquals("declined", mailCaptor.getValue().getMergeInfo().get("status"));
+	}
+
+	@Test
+	void staffInviteResponseSkipsBlankRecipientAndMissingTemplate() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		Environment environment = mock(Environment.class);
+		ZeptoMailServiceImpl service = mailService(sender, environment);
+
+		service.sendClinicStaffInviteResponseEmail("  ", "Happy Paws", "Sam Staff", "staff@example.com", true);
+		verify(sender, never()).sendEmail(any());
+
+		when(environment.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_DECLINED_EMAIL_TEMPLATE_ID))
+				.thenReturn("  ");
+		service.sendClinicStaffInviteResponseEmail(
+				"clinic@example.com", "Happy Paws", "Sam Staff", "staff@example.com", false);
+		verify(sender, never()).sendEmail(any());
+	}
+
+	@Test
+	void staffInviteResponseSwallowsSenderFailure() {
+		ZeptoMailSender sender = mock(ZeptoMailSender.class);
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_ACCEPTED_EMAIL_TEMPLATE_ID))
+				.thenReturn("staff-accepted-template");
+		doThrow(new RuntimeException("zepto down")).when(sender).sendEmail(any());
+		ZeptoMailServiceImpl service = mailService(sender, environment);
+
+		service.sendClinicStaffInviteResponseEmail(
+				"clinic@example.com", "Happy Paws", "Sam Staff", "staff@example.com", true);
+
+		verify(sender).sendEmail(any());
+	}
+
+	@Test
+	void liveProfilesDefineDistinctStaffInviteResponseTemplates() throws Exception {
+		Properties local = loadProperties("/application-local.properties");
+		Properties dev = loadProperties("/application-dev.properties");
+		String accepted = "2518b.1c420b141cfc0862.k1.b6937da0-c8ae-11f1-a992-d2cf08f4ca8c.1a140389a7a";
+		String declined = "2518b.1c420b141cfc0862.k1.dcb8f690-c8ae-11f1-b523-62df313bf14d.1a140399479";
+
+		assertEquals(accepted, local.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_ACCEPTED_EMAIL_TEMPLATE_ID));
+		assertEquals(declined, local.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_DECLINED_EMAIL_TEMPLATE_ID));
+		assertEquals(accepted, dev.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_ACCEPTED_EMAIL_TEMPLATE_ID));
+		assertEquals(declined, dev.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_DECLINED_EMAIL_TEMPLATE_ID));
+		assertNull(local.getProperty("zoho.clinic.staff.invite.response.email.template.id"));
+	}
+
+	private static ZeptoMailServiceImpl mailService(ZeptoMailSender sender, Environment environment) {
+		return new ZeptoMailServiceImpl(
+				sender,
+				mock(EmailAuditService.class),
+				mock(UserDao.class),
+				mock(VerificationCodeService.class),
+				mock(OrderDao.class),
+				environment);
+	}
+
+	private static Properties loadProperties(String classpath) throws Exception {
+		Properties properties = new Properties();
+		try (InputStream in = ZeptoMailServiceImplTest.class.getResourceAsStream(classpath)) {
+			if (in == null) {
+				throw new IllegalStateException("Missing " + classpath);
+			}
+			properties.load(in);
+		}
+		return properties;
 	}
 
 	private static ZeptoMailResponseModel response() {
