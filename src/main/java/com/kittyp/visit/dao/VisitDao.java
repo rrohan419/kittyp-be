@@ -14,6 +14,8 @@ public interface VisitDao {
 
     Optional<Visit> findByUuid(String uuid);
 
+    Optional<Visit> findByBookingUuid(String bookingUuid);
+
     Optional<Visit> findByUuidAndClinicId(String uuid, Long clinicId);
 
     List<Visit> findByClinicAndDay(Long clinicId, LocalDateTime from, LocalDateTime to);
