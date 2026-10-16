@@ -249,7 +249,9 @@ public final class ClinicDtos {
     }
 
     public record InvoiceSummaryModel(String uuid, String status, String amount, String currency, String petUuid,
-            LocalDateTime createdAt) {
+            LocalDateTime createdAt, String invoiceNumber, String paymentStatus, String paymentMode,
+            String paidAmount, String balance, String reason, String diagnosis, String doctorName,
+            java.time.LocalDate consultationDate, String visitUuid) {
     }
 
     public record CreateOwnerRequest(

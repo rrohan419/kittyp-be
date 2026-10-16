@@ -15,8 +15,11 @@ import com.kittyp.visit.enums.VisitStatus;
 
 public interface VisitRepository extends JpaRepository<Visit, Long> {
 
-    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic", "booking" })
     Optional<Visit> findByUuid(String uuid);
+
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic", "booking" })
+    Optional<Visit> findByBooking_Uuid(String bookingUuid);
 
     @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
     Optional<Visit> findByUuidAndClinic_Id(String uuid, Long clinicId);
@@ -96,9 +99,10 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to);
 
-    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic" })
+    @EntityGraph(attributePaths = { "pet", "clinicOwner", "doctor", "doctor.user", "clinic", "booking" })
     @Query("""
             SELECT v FROM Visit v
+            LEFT JOIN v.booking b
             WHERE v.doctor.id = :doctorId
               AND v.isActive = true
               AND (
@@ -107,6 +111,7 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
                 OR (v.startedAt BETWEEN :from AND :to)
                 OR (v.checkedInAt BETWEEN :from AND :to)
                 OR (v.createdAt BETWEEN :from AND :to)
+                OR (b.slotStart BETWEEN :from AND :to)
               )
             ORDER BY v.urgency DESC, v.createdAt ASC
             """)

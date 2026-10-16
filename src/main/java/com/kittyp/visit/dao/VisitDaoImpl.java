@@ -30,6 +30,11 @@ public class VisitDaoImpl implements VisitDao {
     }
 
     @Override
+    public Optional<Visit> findByBookingUuid(String bookingUuid) {
+        return visitRepository.findByBooking_Uuid(bookingUuid);
+    }
+
+    @Override
     public Optional<Visit> findByUuidAndClinicId(String uuid, Long clinicId) {
         return visitRepository.findByUuidAndClinic_Id(uuid, clinicId);
     }

@@ -196,7 +196,6 @@ public class VisitServiceImpl implements VisitService {
         requireNotInPast(clinic, slotStart);
         LocalDateTime slotEnd = slotStart.plusMinutes(APPOINTMENT_MINUTES);
         if (doctor != null) {
-            requireWithinDoctorHours(doctor, slotStart);
             if (!selfBook) {
                 List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
                         doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
@@ -364,7 +363,6 @@ public class VisitServiceImpl implements VisitService {
             LocalDateTime slotEnd = booking.getSlotEnd() != null
                     ? booking.getSlotEnd()
                     : slotStart.plusMinutes(APPOINTMENT_MINUTES);
-            requireWithinDoctorHours(doctor, slotStart);
             List<Booking> conflicts = bookingRepository.findOverlappingForDoctor(
                     doctor.getId(), slotStart, slotEnd, ACTIVE_BOOKING_STATUSES);
             boolean clash = conflicts.stream().anyMatch(b -> !Objects.equals(b.getId(), booking.getId()));
@@ -633,18 +631,11 @@ public class VisitServiceImpl implements VisitService {
         }
         requireOperational(booking.getClinic(), email);
 
-        // Idempotent: booking already converted — return today's open visit for this pet if any.
+        // Idempotent: return the visit created from this exact booking.
         if (booking.getStatus() == BookingStatus.COMPLETED) {
-            LocalDateTime from = LocalDate.now().atStartOfDay();
-            LocalDateTime to = LocalDate.now().atTime(LocalTime.MAX);
-            Optional<Visit> open = visitDao.findByDoctorAndDay(profile.getId(), from, to).stream()
-                    .filter(v -> v.getPet() != null && v.getPet().getId().equals(booking.getPet().getId()))
-                    .filter(v -> v.getStatus() == VisitStatus.IN_PROGRESS
-                            || v.getStatus() == VisitStatus.CHECKING_OUT
-                            || v.getStatus() == VisitStatus.CHECKED_IN)
-                    .findFirst();
-            if (open.isPresent()) {
-                return toModel(open.get(), true);
+            Optional<Visit> existing = visitDao.findByBookingUuid(bookingUuid);
+            if (existing.isPresent()) {
+                return toModel(existing.get(), true);
             }
             throw new CustomException("Treatment already started for this booking", HttpStatus.BAD_REQUEST);
         }
@@ -673,6 +664,7 @@ public class VisitServiceImpl implements VisitService {
                 .pet(booking.getPet())
                 .clinicOwner(owner)
                 .doctor(profile)
+                .booking(booking)
                 .source(VisitSource.SCHEDULED)
                 .channel(booking.getMode() == null ? BookingMode.IN_PERSON : booking.getMode())
                 .status(VisitStatus.IN_PROGRESS)
@@ -1904,7 +1896,8 @@ public class VisitServiceImpl implements VisitService {
                 chart,
                 visit.getInvoiceUuid(),
                 visit.getHealthEventUuid(),
-                parentRating);
+                parentRating,
+                visit.getBooking() == null ? null : visit.getBooking().getUuid());
     }
 
     private String buildPublicSummary(Visit visit) {

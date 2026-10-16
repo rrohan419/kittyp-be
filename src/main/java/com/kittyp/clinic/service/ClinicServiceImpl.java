@@ -2186,9 +2186,18 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private InvoiceSummaryModel invoiceSummary(ConsultationInvoice inv) {
+        User doc = inv.getDoctor();
+        String doctorName = doc == null ? null
+                : ((doc.getFirstName() == null ? "" : doc.getFirstName()) + " "
+                        + (doc.getLastName() == null ? "" : doc.getLastName())).trim();
         return new InvoiceSummaryModel(inv.getUuid(), inv.getStatus() == null ? null : inv.getStatus().name(),
                 inv.getAmount() == null ? null : inv.getAmount().toPlainString(), inv.getCurrency(), inv.getPetUuid(),
-                inv.getCreatedAt());
+                inv.getCreatedAt(), inv.getInvoiceNumber(), inv.getPaymentStatus(), inv.getPaymentMode(),
+                inv.getPaidAmount() == null ? null : inv.getPaidAmount().toPlainString(),
+                inv.getBalance() == null ? null : inv.getBalance().toPlainString(),
+                inv.getReason(), inv.getDiagnosis(),
+                doctorName == null || doctorName.isBlank() ? null : doctorName,
+                inv.getConsultationDate(), inv.getVisitUuid());
     }
 
     List<InvoiceSummaryModel> invoicesForMedicalProfile(Long clinicId, String petUuid, Long ownerUserId) {
