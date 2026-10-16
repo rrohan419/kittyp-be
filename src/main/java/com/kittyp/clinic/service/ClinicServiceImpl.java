@@ -1476,7 +1476,7 @@ public class ClinicServiceImpl implements ClinicService {
         }
         return owners.stream()
                 .map(this::toOwnerModel)
-                .filter(o -> o.petCount() > 0)
+                .filter(o -> o.petCount() > 0 || (o.pets() != null && !o.pets().isEmpty()))
                 .sorted(Comparator.comparing(ClinicOwnerModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
