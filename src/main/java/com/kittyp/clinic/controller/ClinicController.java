@@ -56,6 +56,7 @@ import com.kittyp.clinic.dto.ClinicDtos.ClinicStatsModel;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInviteCompleteRequest;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInviteModel;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInvitePreview;
+import com.kittyp.clinic.dto.ClinicDtos.StaffInventoryAccessRequest;
 import com.kittyp.clinic.dto.ClinicDtos.StaffInviteRequest;
 import com.kittyp.clinic.dto.ClinicDtos.StaffMemberModel;
 import com.kittyp.clinic.service.ClinicService;
@@ -247,6 +248,20 @@ public class ClinicController {
             @PathVariable String userUuid) {
         clinicService.disableStaff(uuid, userUuid, email());
         return success(null);
+    }
+
+    @PatchMapping(ApiUrl.CLINIC_STAFF_INVENTORY)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<StaffMemberModel>> updateStaffInventoryAccess(@PathVariable String uuid,
+            @PathVariable String userUuid, @RequestBody @Valid StaffInventoryAccessRequest request) {
+        return success(clinicService.updateStaffInventoryAccess(uuid, userUuid, request.canEditInventory(), email()));
+    }
+
+    @PatchMapping(ApiUrl.CLINIC_DOCTOR_INVENTORY)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    public ResponseEntity<SuccessResponse<DoctorModel>> updateDoctorInventoryAccess(@PathVariable String uuid,
+            @PathVariable String doctorUuid, @RequestBody @Valid StaffInventoryAccessRequest request) {
+        return success(clinicService.updateDoctorInventoryAccess(uuid, doctorUuid, request.canEditInventory(), email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_STAFF_INVITE_BY_TOKEN)

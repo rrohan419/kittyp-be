@@ -148,6 +148,7 @@ public class ApiUrl {
 	public static final String CLINIC_REPORTS = CLINIC_BY_UUID + "/reports";
 	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
 	public static final String CLINIC_DOCTOR_BY_UUID = CLINIC_DOCTORS + "/{doctorUuid}";
+	public static final String CLINIC_DOCTOR_INVENTORY = CLINIC_DOCTOR_BY_UUID + "/inventory";
 	public static final String CLINIC_DOCTOR_INVITE = CLINIC_DOCTORS + "/invite";
 	public static final String CLINIC_DOCTOR_INVITES = CLINIC_DOCTORS + "/invites";
 	public static final String CLINIC_DOCTOR_INVITE_REVOKE = CLINIC_DOCTOR_INVITES + "/{inviteUuid}/revoke";
@@ -161,6 +162,7 @@ public class ApiUrl {
 	public static final String CLINIC_STAFF_INVITE = CLINIC_STAFF + "/invite";
 	public static final String CLINIC_STAFF_INVITES = CLINIC_STAFF + "/invites";
 	public static final String CLINIC_STAFF_DISABLE = CLINIC_STAFF + "/{userUuid}/disable";
+	public static final String CLINIC_STAFF_INVENTORY = CLINIC_STAFF + "/{userUuid}/inventory";
 	public static final String CLINIC_STAFF_INVITE_REVOKE = CLINIC_STAFF_INVITES + "/{inviteUuid}/revoke";
 	public static final String CLINIC_STAFF_INVITE_BY_TOKEN = CLINIC_BASE_URL + "/staff-invite/{token}";
 	public static final String CLINIC_STAFF_INVITE_COMPLETE = CLINIC_STAFF_INVITE_BY_TOKEN + "/complete";
@@ -201,6 +203,7 @@ public class ApiUrl {
 	public static final String CLINIC_REAPPLY = CLINIC_BY_UUID + "/reapply";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
 	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
+	public static final String CLINIC_INVENTORY_EDIT_ACCESS = CLINIC_INVENTORY + "/edit-access";
 	public static final String CLINIC_INVENTORY_OPTIONS = CLINIC_INVENTORY + "/options";
 	public static final String CLINIC_INVENTORY_MOVEMENTS = CLINIC_INVENTORY + "/movements";
 	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";

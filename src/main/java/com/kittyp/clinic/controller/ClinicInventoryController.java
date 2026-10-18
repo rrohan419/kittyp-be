@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryEditAccess;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemModel;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemRequest;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryMovementModel;
@@ -37,6 +38,9 @@ import lombok.RequiredArgsConstructor;
 public class ClinicInventoryController {
 
     private static final String CLINIC_ACCESS = KeyConstant.IS_ROLE_CLINIC_ADMIN + " or "
+            + KeyConstant.IS_ROLE_CLINIC_STAFF + " or " + KeyConstant.IS_ROLE_DOCTOR;
+
+    private static final String INVENTORY_EDITORS = KeyConstant.IS_ROLE_CLINIC_ADMIN + " or "
             + KeyConstant.IS_ROLE_CLINIC_STAFF + " or " + KeyConstant.IS_ROLE_DOCTOR;
 
     private final ClinicInventoryService inventoryService;
@@ -67,22 +71,28 @@ public class ClinicInventoryController {
         return success(inventoryService.movements(uuid, pageNumber, pageSize, email()));
     }
 
+    @GetMapping(ApiUrl.CLINIC_INVENTORY_EDIT_ACCESS)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<InventoryEditAccess>> editAccess(@PathVariable String uuid) {
+        return success(inventoryService.editAccess(uuid, email()));
+    }
+
     @PostMapping(ApiUrl.CLINIC_INVENTORY)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    @PreAuthorize(INVENTORY_EDITORS)
     public ResponseEntity<SuccessResponse<InventoryItemModel>> create(@PathVariable String uuid,
             @Valid @RequestBody InventoryItemRequest request) {
         return success(inventoryService.create(uuid, request, email()));
     }
 
     @PatchMapping(ApiUrl.CLINIC_INVENTORY_ITEM)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    @PreAuthorize(INVENTORY_EDITORS)
     public ResponseEntity<SuccessResponse<InventoryItemModel>> update(@PathVariable String uuid,
             @PathVariable String itemUuid, @Valid @RequestBody InventoryItemRequest request) {
         return success(inventoryService.update(uuid, itemUuid, request, email()));
     }
 
     @PostMapping(ApiUrl.CLINIC_INVENTORY_STOCK)
-    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN)
+    @PreAuthorize(INVENTORY_EDITORS)
     public ResponseEntity<SuccessResponse<InventoryItemModel>> adjustStock(@PathVariable String uuid,
             @PathVariable String itemUuid, @Valid @RequestBody StockAdjustmentRequest request) {
         return success(inventoryService.adjustStock(uuid, itemUuid, request, email()));

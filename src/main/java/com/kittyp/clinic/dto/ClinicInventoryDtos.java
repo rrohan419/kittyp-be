@@ -21,6 +21,9 @@ public final class ClinicInventoryDtos {
         REMOVE
     }
 
+    public record InventoryEditAccess(boolean canEditInventory) {
+    }
+
     public record StockAdjustmentRequest(
             @NotNull StockDirection direction,
             @NotNull @Min(1) Integer quantity,

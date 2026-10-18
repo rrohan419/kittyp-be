@@ -13,13 +13,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.clinic.dao.ClinicDao;
+import com.kittyp.clinic.dao.ClinicStaffDao;
+import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryEditAccess;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemModel;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemRequest;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryMovementModel;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.StockAdjustmentRequest;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.StockDirection;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicDoctor;
 import com.kittyp.clinic.entity.ClinicInventoryItem;
+import com.kittyp.clinic.entity.ClinicStaff;
+import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.entity.ClinicInventoryMovement;
 import com.kittyp.clinic.enums.InventoryMovementAction;
 import com.kittyp.clinic.enums.InventoryMovementSource;
@@ -46,6 +51,8 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
     private final ClinicInventoryMovementRepository movementRepository;
     private final ClinicInventoryReservationRepository reservationRepository;
     private final UserRepository userRepository;
+    private final ClinicStaffDao clinicStaffDao;
+    private final ClinicDoctorRepository clinicDoctorRepository;
     private final ClinicService clinicService;
 
     @Override
@@ -93,7 +100,7 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
     @Override
     @Transactional
     public InventoryItemModel create(String clinicUuid, InventoryItemRequest request, String email) {
-        Clinic clinic = managerAccess(clinicUuid, email);
+        Clinic clinic = editorAccess(clinicUuid, email);
         ClinicInventoryItem item = new ClinicInventoryItem();
         item.setClinic(clinic);
         apply(item, request, true);
@@ -106,7 +113,7 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
     @Override
     @Transactional
     public InventoryItemModel update(String clinicUuid, String itemUuid, InventoryItemRequest request, String email) {
-        Clinic clinic = managerAccess(clinicUuid, email);
+        Clinic clinic = editorAccess(clinicUuid, email);
         ClinicInventoryItem item = item(itemUuid, clinic);
         apply(item, request, false);
         return toModel(inventoryRepository.save(item));
@@ -116,7 +123,7 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
     @Transactional
     public InventoryItemModel adjustStock(String clinicUuid, String itemUuid, StockAdjustmentRequest request,
             String email) {
-        Clinic clinic = managerAccess(clinicUuid, email);
+        Clinic clinic = editorAccess(clinicUuid, email);
         ClinicInventoryItem item = item(itemUuid, clinic);
         int onHand = item.getQuantity() == null ? 0 : item.getQuantity();
         int units = request.quantity();
@@ -160,10 +167,48 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
         return clinic;
     }
 
+    @Override
+    public InventoryEditAccess editAccess(String clinicUuid, String email) {
+        Clinic clinic = clinicAccess(clinicUuid, email);
+        if (clinicService.isClinicManager(clinicUuid, email) || mayEditItems(clinic, email)) {
+            return new InventoryEditAccess(true);
+        }
+        return new InventoryEditAccess(false);
+    }
+
     private Clinic managerAccess(String clinicUuid, String email) {
         Clinic clinic = clinicAccess(clinicUuid, email);
         clinicService.requireClinicManager(clinicUuid, email);
         return clinic;
+    }
+
+    /** Clinic admin/owner, or staff/doctor with canEditInventory (items and stock). */
+    private Clinic editorAccess(String clinicUuid, String email) {
+        Clinic clinic = clinicAccess(clinicUuid, email);
+        if (clinicService.isClinicManager(clinicUuid, email) || mayEditItems(clinic, email)) {
+            return clinic;
+        }
+        throw new CustomException("You do not have permission to edit inventory items", HttpStatus.FORBIDDEN);
+    }
+
+    private boolean mayEditItems(Clinic clinic, String email) {
+        User user = actor(email);
+        if (user == null || user.getId() == null) {
+            return false;
+        }
+        if (clinic.getOwner() != null && clinic.getOwner().getId().equals(user.getId())) {
+            return true;
+        }
+        boolean staffAllowed = clinicStaffDao.findLatestByClinicAndUser(clinic.getId(), user.getId())
+                .filter(row -> Boolean.TRUE.equals(row.getIsActive()))
+                .map(ClinicStaff::isCanEditInventory)
+                .orElse(false);
+        if (staffAllowed) {
+            return true;
+        }
+        return clinicDoctorRepository.findFirstByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), user.getId())
+                .map(ClinicDoctor::isCanEditInventory)
+                .orElse(false);
     }
 
     private ClinicInventoryItem item(String itemUuid, Clinic clinic) {

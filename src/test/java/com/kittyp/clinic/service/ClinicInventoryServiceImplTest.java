@@ -21,6 +21,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import com.kittyp.clinic.dao.ClinicDao;
+import com.kittyp.clinic.dao.ClinicStaffDao;
+import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemRequest;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.StockAdjustmentRequest;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.StockDirection;
@@ -56,6 +58,10 @@ class ClinicInventoryServiceImplTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private ClinicStaffDao clinicStaffDao;
+    @Mock
+    private ClinicDoctorRepository clinicDoctorRepository;
+    @Mock
     private ClinicService clinicService;
 
     @InjectMocks
@@ -65,6 +71,7 @@ class ClinicInventoryServiceImplTest {
     void createUsesClinicFromPathAndDelegatesManagerAuthorization() {
         Clinic clinic = clinic();
         when(clinicDao.findByUuid(CLINIC_UUID)).thenReturn(clinic);
+        when(clinicService.isClinicManager(CLINIC_UUID, EMAIL)).thenReturn(true);
         when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.empty());
         when(inventoryRepository.save(any(ClinicInventoryItem.class))).thenAnswer(invocation -> {
             ClinicInventoryItem item = invocation.getArgument(0);
@@ -77,7 +84,7 @@ class ClinicInventoryServiceImplTest {
                 EMAIL);
 
         verify(clinicService).get(CLINIC_UUID, EMAIL);
-        verify(clinicService).requireClinicManager(CLINIC_UUID, EMAIL);
+        verify(clinicService).isClinicManager(CLINIC_UUID, EMAIL);
         assertEquals(ITEM_UUID, model.uuid());
         assertEquals("Syringes", model.name());
         assertEquals(clinic.getUuid(), model.clinicUuid());
@@ -98,6 +105,7 @@ class ClinicInventoryServiceImplTest {
         ClinicInventoryItem item = ClinicInventoryItem.builder().uuid(ITEM_UUID).clinic(clinic).name("Gloves")
                 .quantity(4).reorderLevel(2).unitPrice(BigDecimal.ONE).build();
         when(clinicDao.findByUuid(CLINIC_UUID)).thenReturn(clinic);
+        when(clinicService.isClinicManager(CLINIC_UUID, EMAIL)).thenReturn(true);
         when(inventoryRepository.findByUuidAndClinic_IdAndIsActiveTrue(ITEM_UUID, clinic.getId()))
                 .thenReturn(Optional.of(item));
         when(inventoryRepository.save(any(ClinicInventoryItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -115,6 +123,7 @@ class ClinicInventoryServiceImplTest {
         Clinic clinic = clinic();
         ClinicInventoryItem item = stockItem(4);
         when(clinicDao.findByUuid(CLINIC_UUID)).thenReturn(clinic);
+        when(clinicService.isClinicManager(CLINIC_UUID, EMAIL)).thenReturn(true);
         when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.empty());
         when(inventoryRepository.findByUuidAndClinic_IdAndIsActiveTrue(ITEM_UUID, clinic.getId()))
                 .thenReturn(Optional.of(item));
@@ -137,6 +146,7 @@ class ClinicInventoryServiceImplTest {
         Clinic clinic = clinic();
         ClinicInventoryItem item = stockItem(4);
         when(clinicDao.findByUuid(CLINIC_UUID)).thenReturn(clinic);
+        when(clinicService.isClinicManager(CLINIC_UUID, EMAIL)).thenReturn(true);
         when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.empty());
         when(inventoryRepository.findByUuidAndClinic_IdAndIsActiveTrue(ITEM_UUID, clinic.getId()))
                 .thenReturn(Optional.of(item));
@@ -158,6 +168,7 @@ class ClinicInventoryServiceImplTest {
         Clinic clinic = clinic();
         ClinicInventoryItem item = stockItem(1);
         when(clinicDao.findByUuid(CLINIC_UUID)).thenReturn(clinic);
+        when(clinicService.isClinicManager(CLINIC_UUID, EMAIL)).thenReturn(true);
         when(inventoryRepository.findByUuidAndClinic_IdAndIsActiveTrue(ITEM_UUID, clinic.getId()))
                 .thenReturn(Optional.of(item));
 

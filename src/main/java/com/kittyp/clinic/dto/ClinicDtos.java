@@ -68,17 +68,18 @@ public final class ClinicDtos {
 
     public record DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
             String role, Boolean isActive, String status, String photoUrl, Double rating, Integer reviewsCount,
-            String ratingLabel, String joinedAt, Double experienceYears, String registrationNumber, String clinicUuid) {
+            String ratingLabel, String joinedAt, Double experienceYears, String registrationNumber, String clinicUuid,
+            boolean canEditInventory, boolean clinicOwner) {
         public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
                 String role, Boolean isActive) {
             this(doctorUuid, userUuid, name, email, specialization, role, isActive, null, null, null, null, null,
-                    null, null, null, null);
+                    null, null, null, null, false, false);
         }
 
         public DoctorModel(String doctorUuid, String userUuid, String name, String email, String specialization,
                 String role, Boolean isActive, String status, String photoUrl) {
             this(doctorUuid, userUuid, name, email, specialization, role, isActive, status, photoUrl, null, null,
-                    null, null, null, null, null);
+                    null, null, null, null, null, false, false);
         }
     }
 
@@ -364,7 +365,10 @@ public final class ClinicDtos {
     }
 
     public record StaffMemberModel(String userUuid, String email, String name, String role, String joinedAt,
-            boolean enabled) {
+            boolean enabled, boolean canEditInventory) {
+    }
+
+    public record StaffInventoryAccessRequest(@NotNull Boolean canEditInventory) {
     }
 
     public record AddPatientRequest(

@@ -240,6 +240,7 @@ public class ClinicServiceImpl implements ClinicService {
                     .doctor(doctor)
                     .role("doctor")
                     .isActive(true)
+                    .canEditInventory(true)
                     .joinedAt(LocalDate.now())
                     .build());
         }
@@ -512,6 +513,12 @@ public class ClinicServiceImpl implements ClinicService {
     public void requireClinicManager(String clinicUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         requireClinicManager(clinic, userDao.userByEmail(email));
+    }
+
+    @Override
+    public boolean isClinicManager(String clinicUuid, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        return isClinicManager(clinic, userDao.userByEmail(email));
     }
 
     @Override
@@ -1162,6 +1169,41 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     @Override
+    @Transactional
+    public StaffMemberModel updateStaffInventoryAccess(String clinicUuid, String userUuid, boolean canEditInventory,
+            String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        User staffUser = userDao.userByUuid(userUuid);
+        ClinicStaff membership = clinicStaffDao.findLatestByClinicAndUser(clinic.getId(), staffUser.getId())
+                .filter(row -> Boolean.TRUE.equals(row.getIsActive()))
+                .orElseThrow(() -> new CustomException("This person is not active staff at this clinic",
+                        HttpStatus.NOT_FOUND));
+        if (!isStaffOnly(staffUser)) {
+            throw new CustomException("Only staff accounts can be given inventory edit access", HttpStatus.BAD_REQUEST);
+        }
+        membership.setCanEditInventory(canEditInventory);
+        return staffMemberModel(clinicStaffDao.save(membership));
+    }
+
+    @Override
+    @Transactional
+    public DoctorModel updateDoctorInventoryAccess(String clinicUuid, String doctorUuid, boolean canEditInventory,
+            String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireClinicManager(clinic, userDao.userByEmail(email));
+        ClinicDoctor affiliation = clinicDoctorRepository.findByClinic_IdAndDoctor_Uuid(clinic.getId(), doctorUuid)
+                .filter(row -> Boolean.TRUE.equals(row.getIsActive()))
+                .orElseThrow(() -> new ResourceNotFoundException("doctor", "uuid", doctorUuid));
+        if (isClinicOwnerDoctor(clinic, affiliation)) {
+            affiliation.setCanEditInventory(true);
+            return doctorModel(clinicDoctorRepository.save(affiliation));
+        }
+        affiliation.setCanEditInventory(canEditInventory);
+        return doctorModel(clinicDoctorRepository.save(affiliation));
+    }
+
+    @Override
     public StaffInvitePreview previewStaffInvite(String token) {
         ClinicStaffInvite invite = requireStaffInviteByToken(token);
         boolean expired = invite.getExpiresAt() != null && invite.getExpiresAt().isBefore(LocalDateTime.now());
@@ -1258,7 +1300,8 @@ public class ClinicServiceImpl implements ClinicService {
         User user = membership.getUser();
         boolean enabled = user.isEnabled() && (user.getIsActive() == null || Boolean.TRUE.equals(user.getIsActive()));
         return new StaffMemberModel(user.getUuid(), user.getEmail(), fullName(user), membership.getRole(),
-                membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(), enabled);
+                membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(), enabled,
+                membership.isCanEditInventory());
     }
 
     private static boolean isStaffOnly(User user) {
@@ -2894,19 +2937,23 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private void requireClinicManager(Clinic clinic, User user) {
+        if (isClinicManager(clinic, user)) {
+            return;
+        }
+        throw new CustomException("You do not have permission to manage this clinic",
+                HttpStatus.FORBIDDEN);
+    }
+
+    private boolean isClinicManager(Clinic clinic, User user) {
         boolean owner = clinic.getOwner() != null && clinic.getOwner().getId().equals(user.getId());
         if (owner) {
-            return;
+            return true;
         }
         boolean clinicAdmin = user.getUserRoles().stream()
                 .anyMatch(userRole -> CLINIC_ADMIN_ROLE.equals(userRole.getRole().getName()));
         boolean doctorHere = clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(),
                 user.getId());
-        if (clinicAdmin && doctorHere) {
-            return;
-        }
-        throw new CustomException("You do not have permission to manage this clinic",
-                HttpStatus.FORBIDDEN);
+        return clinicAdmin && doctorHere;
     }
 
     private void requireClientAttachVerified(Clinic clinic, String userUuid) {
@@ -3143,6 +3190,7 @@ public class ClinicServiceImpl implements ClinicService {
                             .doctor(profile)
                             .role("owner")
                             .isActive(true)
+                            .canEditInventory(true)
                             .joinedAt(LocalDate.now())
                             .build());
                 }
@@ -3170,6 +3218,7 @@ public class ClinicServiceImpl implements ClinicService {
                 .doctor(profile)
                 .role("owner")
                 .isActive(true)
+                .canEditInventory(true)
                 .joinedAt(LocalDate.now())
                 .build());
         if (profile.getClinic() == null) {
@@ -3194,6 +3243,9 @@ public class ClinicServiceImpl implements ClinicService {
         var doctor = affiliation.getDoctor();
         Double rating = doctor.getRating();
         Integer reviews = doctor.getReviewsCount();
+        Clinic clinic = affiliation.getClinic();
+        boolean clinicOwner = isClinicOwnerDoctor(clinic, affiliation);
+        boolean canEditInventory = clinicOwner || affiliation.isCanEditInventory();
         return new DoctorModel(doctor.getUuid(), doctor.getUser().getUuid(), fullName(doctor.getUser()),
                 doctor.getUser().getEmail(), doctor.getSpecialization() == null ? null : doctor.getSpecialization().name(),
                 affiliation.getRole(), affiliation.getIsActive(),
@@ -3202,7 +3254,17 @@ public class ClinicServiceImpl implements ClinicService {
                 affiliation.getJoinedAt() == null ? null : affiliation.getJoinedAt().toString(),
                 doctor.getExperienceYears(),
                 doctor.getRegistrationNumber(),
-                affiliation.getClinic() == null ? null : affiliation.getClinic().getUuid());
+                clinic == null ? null : clinic.getUuid(),
+                canEditInventory,
+                clinicOwner);
+    }
+
+    private static boolean isClinicOwnerDoctor(Clinic clinic, ClinicDoctor affiliation) {
+        if (clinic == null || clinic.getOwner() == null || affiliation == null || affiliation.getDoctor() == null
+                || affiliation.getDoctor().getUser() == null) {
+            return false;
+        }
+        return clinic.getOwner().getId().equals(affiliation.getDoctor().getUser().getId());
     }
 
     private static String ratingLabel(Double rating) {

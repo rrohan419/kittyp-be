@@ -2,6 +2,7 @@ package com.kittyp.clinic.service;
 
 import java.util.List;
 
+import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryEditAccess;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemModel;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemRequest;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryMovementModel;
@@ -25,4 +26,6 @@ public interface ClinicInventoryService {
     InventoryItemModel adjustStock(String clinicUuid, String itemUuid, StockAdjustmentRequest request, String email);
 
     void delete(String clinicUuid, String itemUuid, String email);
+
+    InventoryEditAccess editAccess(String clinicUuid, String email);
 }
