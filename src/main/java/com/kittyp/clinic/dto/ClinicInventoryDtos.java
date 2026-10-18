@@ -48,7 +48,8 @@ public final class ClinicInventoryDtos {
             BigDecimal unitPrice,
             Boolean active,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt) {
+            LocalDateTime updatedAt,
+            Integer reserved) {
     }
 
     public record InventoryMovementModel(

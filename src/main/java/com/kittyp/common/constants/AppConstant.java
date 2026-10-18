@@ -49,4 +49,7 @@ public class AppConstant {
 	public static final String GOOGLE_PLACES_API_URL = "google.places.api.url";
 	public static final String GOOGLE_AUTOCOMPLETE_API_URL = "google.autocomplete.api.url";
 	public static final String GOOGLE_PLACE_DETAIL_API_URL = "google.place.detail.api.url";
+
+	// Inventory
+	public static final String INVENTORY_MOVEMENT_RELEASE_MINUTES = "inventory.movement.release.minutes";
 }

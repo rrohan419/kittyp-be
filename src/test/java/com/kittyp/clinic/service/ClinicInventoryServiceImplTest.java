@@ -33,6 +33,7 @@ import com.kittyp.clinic.enums.InventoryMovementAction;
 import com.kittyp.clinic.enums.InventoryMovementSource;
 import com.kittyp.clinic.repository.ClinicInventoryItemRepository;
 import com.kittyp.clinic.repository.ClinicInventoryMovementRepository;
+import com.kittyp.clinic.repository.ClinicInventoryReservationRepository;
 import com.kittyp.user.repository.UserRepository;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -50,6 +51,8 @@ class ClinicInventoryServiceImplTest {
     private ClinicInventoryItemRepository inventoryRepository;
     @Mock
     private ClinicInventoryMovementRepository movementRepository;
+    @Mock
+    private ClinicInventoryReservationRepository reservationRepository;
     @Mock
     private UserRepository userRepository;
     @Mock

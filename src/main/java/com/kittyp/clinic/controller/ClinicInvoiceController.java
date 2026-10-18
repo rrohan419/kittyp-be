@@ -84,6 +84,22 @@ public class ClinicInvoiceController {
         return responseBuilder.buildSuccessResponse(result, ResponseMessage.SUCCESS, HttpStatus.CREATED);
     }
 
+    @PutMapping(ApiUrl.CLINIC_INVOICE_BY_UUID)
+    @PreAuthorize(CLINIC_BILLING)
+    public ResponseEntity<SuccessResponse<ConsultationInvoice>> updateDraft(
+            @PathVariable String uuid, @PathVariable String invoiceUuid,
+            @Valid @RequestBody CreateConsultationInvoiceDto request) {
+        Clinic clinic = requireAccessibleClinic(uuid);
+        if (request.getClinicUuid() == null || request.getClinicUuid().isBlank()) {
+            request.setClinicUuid(clinic.getUuid());
+        } else if (!clinic.getUuid().equals(request.getClinicUuid())) {
+            throw new CustomException("clinicUuid does not match path", HttpStatus.BAD_REQUEST);
+        }
+        ConsultationInvoice invoice = treatmentInvoiceService.requireClinicInvoice(clinic, invoiceUuid);
+        return responseBuilder.buildSuccessResponse(
+                treatmentInvoiceService.updateDraft(invoice, request), ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
     @PostMapping(ApiUrl.CLINIC_INVOICE_MARK_PAID)
     @PreAuthorize(CLINIC_BILLING)
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> markPaid(

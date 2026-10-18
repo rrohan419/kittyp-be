@@ -34,7 +34,4 @@ public class TreatmentLineItemDto {
 
     /** Clinic inventory item billed by this line. Set for medicine, consumable, and vaccination lines. */
     private String inventoryItemUuid;
-
-    /** User confirmed billing more than the quantity on hand. */
-    private Boolean allowShortStock;
 }

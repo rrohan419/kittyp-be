@@ -1,6 +1,9 @@
 package com.kittyp.clinic.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,8 +23,10 @@ import com.kittyp.clinic.entity.ClinicInventoryItem;
 import com.kittyp.clinic.entity.ClinicInventoryMovement;
 import com.kittyp.clinic.enums.InventoryMovementAction;
 import com.kittyp.clinic.enums.InventoryMovementSource;
+import com.kittyp.clinic.enums.InventoryReservationStatus;
 import com.kittyp.clinic.repository.ClinicInventoryItemRepository;
 import com.kittyp.clinic.repository.ClinicInventoryMovementRepository;
+import com.kittyp.clinic.repository.ClinicInventoryReservationRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
@@ -39,6 +44,7 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
     private final ClinicDao clinicDao;
     private final ClinicInventoryItemRepository inventoryRepository;
     private final ClinicInventoryMovementRepository movementRepository;
+    private final ClinicInventoryReservationRepository reservationRepository;
     private final UserRepository userRepository;
     private final ClinicService clinicService;
 
@@ -54,7 +60,8 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
                 ? inventoryRepository.findByClinic_IdAndIsActiveTrue(clinic.getId(), pageable)
                 : inventoryRepository.findByClinic_IdAndIsActiveTrueAndCategoryIgnoreCase(clinic.getId(), filter,
                         pageable);
-        return PaginationSupport.fromPage(items.map(this::toModel));
+        Map<String, Integer> held = heldByItem(clinic.getId());
+        return PaginationSupport.fromPage(items.map(item -> toModel(item, held.getOrDefault(item.getUuid(), 0))));
     }
 
     @Override
@@ -64,10 +71,11 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
         if (filter == null) {
             throw new CustomException("Inventory category is required", HttpStatus.BAD_REQUEST);
         }
+        Map<String, Integer> held = heldByItem(clinic.getId());
         return inventoryRepository
                 .findByClinic_IdAndIsActiveTrueAndCategoryIgnoreCaseOrderByNameAsc(clinic.getId(), filter)
                 .stream()
-                .map(this::toModel)
+                .map(item -> toModel(item, held.getOrDefault(item.getUuid(), 0)))
                 .toList();
     }
 
@@ -214,10 +222,21 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
         return name.isBlank() ? user.getEmail() : name;
     }
 
+    private Map<String, Integer> heldByItem(Long clinicId) {
+        return reservationRepository
+                .sumActiveByClinic(clinicId, InventoryReservationStatus.ACTIVE, LocalDateTime.now())
+                .stream()
+                .collect(Collectors.toMap(row -> String.valueOf(row[0]), row -> ((Number) row[1]).intValue()));
+    }
+
     private InventoryItemModel toModel(ClinicInventoryItem item) {
+        return toModel(item, 0);
+    }
+
+    private InventoryItemModel toModel(ClinicInventoryItem item, int reserved) {
         return new InventoryItemModel(item.getUuid(), item.getClinic().getUuid(), item.getName(), item.getCategory(),
                 item.getQuantity(), item.getUnit(), item.getReorderLevel(), item.getUnitPrice(), item.getIsActive(),
-                item.getCreatedAt(), item.getUpdatedAt());
+                item.getCreatedAt(), item.getUpdatedAt(), reserved);
     }
 
     private InventoryMovementModel toMovement(ClinicInventoryMovement movement) {

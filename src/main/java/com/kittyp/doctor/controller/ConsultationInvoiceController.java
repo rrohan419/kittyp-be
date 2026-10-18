@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -63,6 +64,14 @@ public class ConsultationInvoiceController {
         return responseBuilder.buildSuccessResponse(
                 treatmentInvoiceService.pageForDoctor(currentUser(), clinicUuid, pageNumber, pageSize),
                 ResponseMessage.SUCCESS, HttpStatus.OK);
+    }
+
+    @PutMapping(ApiUrl.CONSULTATION_INVOICE_BY_UUID)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ConsultationInvoice>> updateDraft(
+            @PathVariable String uuid, @Valid @RequestBody CreateConsultationInvoiceDto request) {
+        ConsultationInvoice invoice = treatmentInvoiceService.updateDraft(requireDoctorOperableInvoice(uuid), request);
+        return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 
     @GetMapping(ApiUrl.CONSULTATION_INVOICE_BY_UUID)
