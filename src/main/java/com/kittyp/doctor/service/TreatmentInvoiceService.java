@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.service.ClinicInventoryConsumptionService;
 import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
@@ -84,6 +85,7 @@ public class TreatmentInvoiceService {
     private final OutboundMessageService outboundMessageService;
     private final AlphanumericIdService alphanumericIdService;
     private final ZeptoMailService zeptoMailService;
+    private final ClinicInventoryConsumptionService inventoryConsumptionService;
 
     @Transactional
     public ConsultationInvoice create(User doctor, CreateConsultationInvoiceDto request) {
@@ -140,6 +142,10 @@ public class TreatmentInvoiceService {
                 throw new CustomException("Pet does not belong to the specified owner at this clinic.",
                         HttpStatus.BAD_REQUEST);
             }
+        }
+
+        if (inventoryConsumptionService != null) {
+            inventoryConsumptionService.prepareLines(clinic, items);
         }
 
         String invoiceNumber = nextInvoiceNumber();
@@ -633,6 +639,7 @@ public class TreatmentInvoiceService {
             completeLinkedVisitAfterPayment(invoice);
             return invoice;
         }
+        consumeStockIfDraft(invoice);
         BigDecimal amount = invoice.getAmount() != null ? invoice.getAmount() : BigDecimal.ZERO;
         invoice.setPaidAmount(amount);
         invoice.setBalance(BigDecimal.ZERO);
@@ -654,6 +661,7 @@ public class TreatmentInvoiceService {
         if (isRazorpayPaid(invoice)) {
             throw new CustomException("Invoice is already paid", HttpStatus.CONFLICT);
         }
+        consumeStockIfDraft(invoice);
         BigDecimal amount = invoice.getAmount() != null ? invoice.getAmount() : BigDecimal.ZERO;
         invoice.setPaidAmount(amount);
         invoice.setBalance(BigDecimal.ZERO);
@@ -828,6 +836,10 @@ public class TreatmentInvoiceService {
             }
         }
 
+        if (inventoryConsumptionService != null) {
+            inventoryConsumptionService.prepareLines(clinic, items);
+        }
+
         String invoiceNumber = nextInvoiceNumber();
         String visitUuid = blankToNull(request.getVisitUuid());
 
@@ -917,6 +929,16 @@ public class TreatmentInvoiceService {
         throw new CustomException("Owner phone is required to send invoice on WhatsApp", HttpStatus.BAD_REQUEST);
     }
 
+    private void consumeStockIfDraft(ConsultationInvoice invoice) {
+        if (inventoryConsumptionService == null || invoice.getClinic() == null) {
+            return;
+        }
+        if (invoice.getStatus() != ConsultationInvoiceStatus.DRAFT) {
+            return;
+        }
+        inventoryConsumptionService.consumeForIssue(invoice);
+    }
+
     private static void rejectNegativeMoney(BigDecimal... amounts) {
         for (BigDecimal amount : amounts) {
             if (amount != null && amount.signum() < 0) {
@@ -935,6 +957,7 @@ public class TreatmentInvoiceService {
 
     @Transactional
     public ConsultationInvoice generateAndAttachPdf(ConsultationInvoice invoice) {
+        consumeStockIfDraft(invoice);
         TreatmentInvoiceData data = toPdfData(invoice);
         byte[] pdf = pdfGenerator.generateTreatmentInvoicePdf(data);
         String key;
@@ -1165,6 +1188,12 @@ public class TreatmentInvoiceService {
                             row.getOrDefault("amount", row.getOrDefault("price", 0)))));
                     dto.setUnit(row.get("unit") != null ? String.valueOf(row.get("unit")) : null);
                     dto.setTotal(toBd(row.get("total")));
+                    if (row.get("inventoryItemUuid") != null) {
+                        dto.setInventoryItemUuid(String.valueOf(row.get("inventoryItemUuid")));
+                    }
+                    if (row.get("allowShortStock") != null) {
+                        dto.setAllowShortStock(Boolean.parseBoolean(String.valueOf(row.get("allowShortStock"))));
+                    }
                     parsed.add(dto);
                 }
                 return parsed;

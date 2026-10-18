@@ -201,7 +201,10 @@ public class ApiUrl {
 	public static final String CLINIC_REAPPLY = CLINIC_BY_UUID + "/reapply";
 	public static final String CLINIC_STATS = CLINIC_BY_UUID + "/stats";
 	public static final String CLINIC_INVENTORY = CLINIC_BY_UUID + "/inventory";
+	public static final String CLINIC_INVENTORY_OPTIONS = CLINIC_INVENTORY + "/options";
+	public static final String CLINIC_INVENTORY_MOVEMENTS = CLINIC_INVENTORY + "/movements";
 	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";
+	public static final String CLINIC_INVENTORY_STOCK = CLINIC_INVENTORY_ITEM + "/stock";
 	public static final String CLINIC_INVOICES = CLINIC_BY_UUID + "/invoices";
 	public static final String CLINIC_INVOICE_BY_UUID = CLINIC_INVOICES + "/{invoiceUuid}";
 	public static final String CLINIC_INVOICE_GENERATE_PDF = CLINIC_INVOICE_BY_UUID + "/generate-pdf";
