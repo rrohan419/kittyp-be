@@ -62,4 +62,6 @@ public class KeyConstant {
 	// Inventory
 	public static final String MEDICATION = "MEDICATION";
     public static final String SUPPLY = "SUPPLY";
+    public static final String EQUIPMENT = "EQUIPMENT";
+    public static final String FOOD = "FOOD";
 }

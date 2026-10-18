@@ -99,7 +99,9 @@ public class ClinicInventoryConsumptionService {
     static boolean isStocked(TreatmentInvoiceItemType itemType) {
         return itemType == TreatmentInvoiceItemType.MEDICINE
                 || itemType == TreatmentInvoiceItemType.CONSUMABLE
-                || itemType == TreatmentInvoiceItemType.VACCINATION;
+                || itemType == TreatmentInvoiceItemType.VACCINATION
+                || itemType == TreatmentInvoiceItemType.FOOD
+                || itemType == TreatmentInvoiceItemType.EQUIPMENT;
     }
 
     static String expectedCategory(TreatmentInvoiceItemType itemType) {
@@ -108,6 +110,12 @@ public class ClinicInventoryConsumptionService {
         }
         if (itemType == TreatmentInvoiceItemType.MEDICINE || itemType == TreatmentInvoiceItemType.VACCINATION) {
             return KeyConstant.MEDICATION;
+        }
+        if (itemType == TreatmentInvoiceItemType.FOOD) {
+            return KeyConstant.FOOD;
+        }
+        if (itemType == TreatmentInvoiceItemType.EQUIPMENT) {
+            return KeyConstant.EQUIPMENT;
         }
         return null;
     }

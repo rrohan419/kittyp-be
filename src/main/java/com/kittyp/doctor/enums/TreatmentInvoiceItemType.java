@@ -9,5 +9,7 @@ public enum TreatmentInvoiceItemType {
     HOSPITALIZATION,
     CONSUMABLE,
     VACCINATION,
+    FOOD,
+    EQUIPMENT,
     OTHER
 }
