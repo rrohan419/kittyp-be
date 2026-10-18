@@ -14,6 +14,8 @@ public interface ClinicDoctorRepository extends JpaRepository<ClinicDoctor, Long
 
     java.util.Optional<ClinicDoctor> findByClinic_IdAndDoctor_Uuid(Long clinicId, String doctorUuid);
 
+    java.util.Optional<ClinicDoctor> findFirstByClinic_IdAndDoctor_User_IdAndIsActiveTrue(Long clinicId, Long userId);
+
     boolean existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(Long clinicId, Long userId);
 
     boolean existsByClinic_IdAndDoctor_User_IdAndRoleAndIsActiveTrue(Long clinicId, Long userId, String role);

@@ -58,4 +58,10 @@ public class KeyConstant {
 	public static final String DETAILS_FIELD_MASK = "displayName,formattedAddress,addressComponents,location";
 	public static final String API_KEY_HEADER = "X-Goog-Api-Key";
 	public static final String FIELD_MASK_HEADER = "X-Goog-FieldMask";
+
+	// Inventory
+	public static final String MEDICATION = "MEDICATION";
+    public static final String SUPPLY = "SUPPLY";
+    public static final String EQUIPMENT = "EQUIPMENT";
+    public static final String FOOD = "FOOD";
 }

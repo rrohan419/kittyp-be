@@ -37,5 +37,10 @@ public class ClinicStaff extends BaseEntity {
     @Column(nullable = false, length = 20)
     private String role;
 
+    /** When true, this staff member can add/edit items and add/remove stock. Delete stays with the clinic admin. */
+    @Column(name = "can_edit_inventory", nullable = false, columnDefinition = "boolean not null default false")
+    @Builder.Default
+    private boolean canEditInventory = false;
+
     private LocalDateTime joinedAt;
 }

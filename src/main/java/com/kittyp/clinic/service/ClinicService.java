@@ -72,6 +72,9 @@ public interface ClinicService {
     /** Owner or staff/admin of this clinic (not affiliated-only doctors). */
     void requireClinicManager(String clinicUuid, String email);
 
+    /** Same rule as {@link #requireClinicManager} without throwing. */
+    boolean isClinicManager(String clinicUuid, String email);
+
     List<DoctorModel> doctors(String clinicUuid, String email);
 
     ClinicDoctorDetailModel doctorDetail(String clinicUuid, String doctorUuid, String email);
@@ -100,6 +103,12 @@ public interface ClinicService {
     List<StaffInviteModel> listStaffInvites(String clinicUuid, String email);
 
     List<StaffMemberModel> listStaff(String clinicUuid, String email);
+
+    StaffMemberModel updateStaffInventoryAccess(String clinicUuid, String userUuid, boolean canEditInventory,
+            String email);
+
+    DoctorModel updateDoctorInventoryAccess(String clinicUuid, String doctorUuid, boolean canEditInventory,
+            String email);
 
     void revokeStaffInvite(String clinicUuid, String inviteUuid, String email);
 

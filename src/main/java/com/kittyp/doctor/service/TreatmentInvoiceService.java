@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.service.ClinicInventoryConsumptionService;
 import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
@@ -84,6 +85,7 @@ public class TreatmentInvoiceService {
     private final OutboundMessageService outboundMessageService;
     private final AlphanumericIdService alphanumericIdService;
     private final ZeptoMailService zeptoMailService;
+    private final ClinicInventoryConsumptionService inventoryConsumptionService;
 
     @Transactional
     public ConsultationInvoice create(User doctor, CreateConsultationInvoiceDto request) {
@@ -142,6 +144,10 @@ public class TreatmentInvoiceService {
             }
         }
 
+        if (inventoryConsumptionService != null) {
+            inventoryConsumptionService.prepareLines(clinic, items);
+        }
+
         String invoiceNumber = nextInvoiceNumber();
         String visitUuid = blankToNull(request.getVisitUuid());
 
@@ -193,6 +199,8 @@ public class TreatmentInvoiceService {
             visit.setInvoiceUuid(invoice.getUuid());
             visitDao.save(visit);
         }
+
+        reserveDraftStock(invoice);
 
         if (Boolean.TRUE.equals(request.getGeneratePdf()) || Boolean.TRUE.equals(request.getSendWhatsApp())) {
             invoice = generateAndAttachPdf(invoice);
@@ -633,6 +641,7 @@ public class TreatmentInvoiceService {
             completeLinkedVisitAfterPayment(invoice);
             return invoice;
         }
+        consumeStockIfDraft(invoice);
         BigDecimal amount = invoice.getAmount() != null ? invoice.getAmount() : BigDecimal.ZERO;
         invoice.setPaidAmount(amount);
         invoice.setBalance(BigDecimal.ZERO);
@@ -654,6 +663,7 @@ public class TreatmentInvoiceService {
         if (isRazorpayPaid(invoice)) {
             throw new CustomException("Invoice is already paid", HttpStatus.CONFLICT);
         }
+        consumeStockIfDraft(invoice);
         BigDecimal amount = invoice.getAmount() != null ? invoice.getAmount() : BigDecimal.ZERO;
         invoice.setPaidAmount(amount);
         invoice.setBalance(BigDecimal.ZERO);
@@ -828,6 +838,10 @@ public class TreatmentInvoiceService {
             }
         }
 
+        if (inventoryConsumptionService != null) {
+            inventoryConsumptionService.prepareLines(clinic, items);
+        }
+
         String invoiceNumber = nextInvoiceNumber();
         String visitUuid = blankToNull(request.getVisitUuid());
 
@@ -876,6 +890,8 @@ public class TreatmentInvoiceService {
             visitDao.save(visit);
         }
 
+        reserveDraftStock(invoice);
+
         if (Boolean.TRUE.equals(request.getGeneratePdf()) || Boolean.TRUE.equals(request.getSendWhatsApp())) {
             invoice = generateAndAttachPdf(invoice);
         }
@@ -917,6 +933,92 @@ public class TreatmentInvoiceService {
         throw new CustomException("Owner phone is required to send invoice on WhatsApp", HttpStatus.BAD_REQUEST);
     }
 
+    private void reserveDraftStock(ConsultationInvoice invoice) {
+        if (inventoryConsumptionService == null || invoice.getClinic() == null) {
+            return;
+        }
+        inventoryConsumptionService.reserveForDraft(invoice);
+    }
+
+    /** Replace a draft's lines and money. Issued and paid invoices stay unchanged. */
+    @Transactional
+    public ConsultationInvoice updateDraft(ConsultationInvoice invoice, CreateConsultationInvoiceDto request) {
+        if (invoice.getStatus() != ConsultationInvoiceStatus.DRAFT) {
+            throw new CustomException("Only draft invoices can be edited", HttpStatus.CONFLICT);
+        }
+        List<TreatmentLineItemDto> items = normalizeItems(request);
+        if (items.isEmpty()) {
+            throw new CustomException("At least one invoice line item is required", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal computed = items.stream().map(this::lineTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discount = nz(request.getDiscount());
+        BigDecimal cgst = nz(request.getCgst());
+        BigDecimal sgst = nz(request.getSgst());
+        BigDecimal igst = nz(request.getIgst());
+        BigDecimal paid = nz(request.getPaidAmount());
+        BigDecimal subtotal = computed;
+        rejectNegativeMoney(discount, cgst, sgst, igst, paid);
+        if (discount.compareTo(subtotal) > 0) {
+            throw new CustomException("Discount cannot exceed subtotal", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal tax = cgst.add(sgst).add(igst);
+        BigDecimal grandTotal = subtotal.subtract(discount).add(tax).max(BigDecimal.ZERO);
+        if (paid.compareTo(grandTotal) > 0) {
+            throw new CustomException("Paid amount cannot exceed grand total", HttpStatus.BAD_REQUEST);
+        }
+        BigDecimal balance = grandTotal.subtract(paid).max(BigDecimal.ZERO);
+        Clinic clinic = invoice.getClinic();
+        if (inventoryConsumptionService != null) {
+            inventoryConsumptionService.prepareLines(clinic, items);
+        }
+        String petUuid = blankToNull(request.getPetUuid());
+        String visitUuid = blankToNull(request.getVisitUuid());
+        invoice.setPetUuid(petUuid != null ? petUuid : invoice.getPetUuid());
+        invoice.setVisitUuid(visitUuid != null ? visitUuid : invoice.getVisitUuid());
+        invoice.setLineItems(writeJson(items));
+        invoice.setPetSnapshot(writeJson(petSnapshot(request)));
+        invoice.setOwnerSnapshot(writeJson(ownerSnapshot(request, invoice.getOwner())));
+        if (request.getConsultationDate() != null) {
+            invoice.setConsultationDate(request.getConsultationDate());
+        }
+        invoice.setReason(request.getReason());
+        invoice.setDiagnosis(request.getDiagnosis());
+        invoice.setAmount(grandTotal);
+        invoice.setSubtotal(subtotal);
+        invoice.setDiscount(discount);
+        invoice.setTax(tax);
+        invoice.setCgst(cgst);
+        invoice.setSgst(sgst);
+        invoice.setIgst(igst);
+        invoice.setPaidAmount(paid);
+        invoice.setBalance(balance);
+        invoice.setPaymentStatus(
+                blankTo(request.getPaymentStatus(), paid.compareTo(BigDecimal.ZERO) > 0 ? "PARTIAL" : "UNPAID"));
+        invoice.setPaymentMode(request.getPaymentMode());
+        invoice.setNotes(request.getNotes());
+        invoice.setDoctorNotes(request.getDoctorNotes());
+        invoice.setNextVisitNotes(request.getNextVisitNotes());
+        invoice = invoiceRepository.save(invoice);
+        if (inventoryConsumptionService != null && invoice.getClinic() != null) {
+            inventoryConsumptionService.releaseActiveHolds(invoice);
+            inventoryConsumptionService.reserveForDraft(invoice);
+        }
+        if (Boolean.TRUE.equals(request.getGeneratePdf()) || Boolean.TRUE.equals(request.getSendWhatsApp())) {
+            invoice = generateAndAttachPdf(invoice);
+        }
+        return invoice;
+    }
+
+    private void consumeStockIfDraft(ConsultationInvoice invoice) {
+        if (inventoryConsumptionService == null || invoice.getClinic() == null) {
+            return;
+        }
+        if (invoice.getStatus() != ConsultationInvoiceStatus.DRAFT) {
+            return;
+        }
+        inventoryConsumptionService.consumeForIssue(invoice);
+    }
+
     private static void rejectNegativeMoney(BigDecimal... amounts) {
         for (BigDecimal amount : amounts) {
             if (amount != null && amount.signum() < 0) {
@@ -935,6 +1037,7 @@ public class TreatmentInvoiceService {
 
     @Transactional
     public ConsultationInvoice generateAndAttachPdf(ConsultationInvoice invoice) {
+        consumeStockIfDraft(invoice);
         TreatmentInvoiceData data = toPdfData(invoice);
         byte[] pdf = pdfGenerator.generateTreatmentInvoicePdf(data);
         String key;
@@ -1165,6 +1268,9 @@ public class TreatmentInvoiceService {
                             row.getOrDefault("amount", row.getOrDefault("price", 0)))));
                     dto.setUnit(row.get("unit") != null ? String.valueOf(row.get("unit")) : null);
                     dto.setTotal(toBd(row.get("total")));
+                    if (row.get("inventoryItemUuid") != null) {
+                        dto.setInventoryItemUuid(String.valueOf(row.get("inventoryItemUuid")));
+                    }
                     parsed.add(dto);
                 }
                 return parsed;

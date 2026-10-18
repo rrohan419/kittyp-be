@@ -31,4 +31,7 @@ public class TreatmentLineItemDto {
     private BigDecimal discount;
     private BigDecimal tax;
     private BigDecimal total;
+
+    /** Clinic inventory item billed by this line. Set for medicine, consumable, and vaccination lines. */
+    private String inventoryItemUuid;
 }

@@ -9,10 +9,25 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public final class ClinicInventoryDtos {
 
     private ClinicInventoryDtos() {
+    }
+
+    public enum StockDirection {
+        ADD,
+        REMOVE
+    }
+
+    public record InventoryEditAccess(boolean canEditInventory) {
+    }
+
+    public record StockAdjustmentRequest(
+            @NotNull StockDirection direction,
+            @NotNull @Min(1) Integer quantity,
+            @Size(max = 200) String note) {
     }
 
     public record InventoryItemRequest(
@@ -36,6 +51,22 @@ public final class ClinicInventoryDtos {
             BigDecimal unitPrice,
             Boolean active,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt) {
+            LocalDateTime updatedAt,
+            Integer reserved) {
+    }
+
+    public record InventoryMovementModel(
+            String uuid,
+            String itemUuid,
+            String itemName,
+            String action,
+            Integer quantityDelta,
+            Integer quantityAfter,
+            String note,
+            String source,
+            String invoiceUuid,
+            String invoiceNumber,
+            String actorName,
+            LocalDateTime createdAt) {
     }
 }
