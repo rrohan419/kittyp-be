@@ -1218,6 +1218,17 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     @Transactional
+    public void rejectStaffInvite(String token) {
+        ClinicStaffInvite invite = requireStaffInviteByToken(token);
+        if (invite.getStatus() != ClinicStaffInviteStatus.PENDING) {
+            throw new CustomException("This invite is no longer valid", HttpStatus.BAD_REQUEST);
+        }
+        invite.setStatus(ClinicStaffInviteStatus.REVOKED);
+        clinicStaffInviteRepository.save(invite);
+    }
+
+    @Override
+    @Transactional
     public StaffMemberModel completeStaffInvite(String token, StaffInviteCompleteRequest request) {
         ClinicStaffInvite invite = requireStaffInviteByToken(token);
         if (invite.getStatus() != ClinicStaffInviteStatus.PENDING) {

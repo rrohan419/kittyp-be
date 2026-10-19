@@ -269,6 +269,12 @@ public class ClinicController {
         return success(clinicService.previewStaffInvite(token));
     }
 
+    @PostMapping(ApiUrl.CLINIC_STAFF_INVITE_REJECT)
+    public ResponseEntity<SuccessResponse<Void>> rejectStaffInvite(@PathVariable String token) {
+        clinicService.rejectStaffInvite(token);
+        return success(null);
+    }
+
     @PostMapping(ApiUrl.CLINIC_STAFF_INVITE_COMPLETE)
     public ResponseEntity<SuccessResponse<StaffMemberModel>> completeStaffInvite(@PathVariable String token,
             @RequestBody @Valid StaffInviteCompleteRequest request) {

@@ -116,6 +116,8 @@ public interface ClinicService {
 
     StaffInvitePreview previewStaffInvite(String token);
 
+    void rejectStaffInvite(String token);
+
     StaffMemberModel completeStaffInvite(String token, StaffInviteCompleteRequest request);
 
     List<PatientModel> patients(String clinicUuid, String email);

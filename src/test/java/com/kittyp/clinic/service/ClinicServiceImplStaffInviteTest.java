@@ -15,10 +15,13 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.kittyp.clinic.dao.ClinicDao;
@@ -34,6 +37,7 @@ import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicStaffInviteRepository;
 import com.kittyp.common.exception.CustomException;
+import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.user.dao.RoleDao;
@@ -137,6 +141,39 @@ class ClinicServiceImplStaffInviteTest {
 	}
 
 	@Test
+	void rejectStaffInvite_pending_becomesRevoked() {
+		ClinicStaffInvite invite = staffInvite("t", ClinicStaffInviteStatus.PENDING);
+		when(clinicStaffInviteRepository.findByToken("t")).thenReturn(Optional.of(invite));
+		when(clinicStaffInviteRepository.save(any(ClinicStaffInvite.class))).thenAnswer(i -> i.getArgument(0));
+
+		clinicService.rejectStaffInvite("t");
+
+		assertEquals(ClinicStaffInviteStatus.REVOKED, invite.getStatus());
+		verify(clinicStaffInviteRepository).save(invite);
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = ClinicStaffInviteStatus.class, names = { "ACCEPTED", "EXPIRED", "REVOKED" })
+	void rejectStaffInvite_nonPending_badRequest(ClinicStaffInviteStatus status) {
+		ClinicStaffInvite invite = staffInvite("t", status);
+		when(clinicStaffInviteRepository.findByToken("t")).thenReturn(Optional.of(invite));
+
+		CustomException ex = assertThrows(CustomException.class, () -> clinicService.rejectStaffInvite("t"));
+
+		assertEquals(HttpStatus.BAD_REQUEST, ex.getHttpStatus());
+		assertEquals(status, invite.getStatus());
+		verify(clinicStaffInviteRepository, never()).save(any());
+	}
+
+	@Test
+	void rejectStaffInvite_unknownToken_notFound() {
+		when(clinicStaffInviteRepository.findByToken("missing")).thenReturn(Optional.empty());
+
+		assertThrows(ResourceNotFoundException.class, () -> clinicService.rejectStaffInvite("missing"));
+		verify(clinicStaffInviteRepository, never()).save(any());
+	}
+
+	@Test
 	void completeStaffInvite_activeStaffElsewhere_rejected() {
 		User admin = userWithRoles(1L, "admin@example.com", ERole.ROLE_CLINIC_ADMIN);
 		User staff = userWithRoles(8L, "staff@example.com", ERole.ROLE_CLINIC_STAFF);
@@ -162,6 +199,15 @@ class ClinicServiceImplStaffInviteTest {
 				() -> clinicService.completeStaffInvite("tok2",
 						new StaffInviteCompleteRequest("Sam", "Staff", "Passw0rd!")));
 		assertTrue(ex.getMessage().contains("already active staff"));
+	}
+
+	private static ClinicStaffInvite staffInvite(String token, ClinicStaffInviteStatus status) {
+		return ClinicStaffInvite.builder()
+				.clinic(clinic(userWithRoles(1L, "a@x.com", ERole.ROLE_CLINIC_ADMIN)))
+				.token(token)
+				.status(status)
+				.expiresAt(LocalDateTime.now().plusDays(1))
+				.build();
 	}
 
 	private static Clinic clinic(User owner) {
