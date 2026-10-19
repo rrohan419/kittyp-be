@@ -1631,14 +1631,12 @@ public class ClinicServiceImpl implements ClinicService {
         if (owner == null) {
             String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
             String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
-            if (phone != null && !phone.matches("\\d{10}")) {
+            if (phone == null || !phone.matches("\\d{10}")) {
                 phone = null;
             }
             String firstName = platformUser.getFirstName() == null ? "" : platformUser.getFirstName().trim();
-            if (firstName.isBlank() || ownerEmail == null) {
-                throw new CustomException(
-                        "Owner name and email are required on the KittyP account.",
-                        HttpStatus.BAD_REQUEST);
+            if (ownerEmail == null || firstName.isBlank()) {
+                throw new CustomException("Owner name and email are required.", HttpStatus.BAD_REQUEST);
             }
             owner = ClinicPetOwner.builder()
                     .clinic(clinic)
