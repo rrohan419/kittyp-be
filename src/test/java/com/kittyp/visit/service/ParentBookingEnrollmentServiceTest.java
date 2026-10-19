@@ -1,7 +1,9 @@
 package com.kittyp.visit.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -13,6 +15,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,6 +27,8 @@ import com.kittyp.clinic.enums.PracticeModel;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
+import com.kittyp.common.constants.KeyConstant;
+import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
@@ -138,5 +143,73 @@ class ParentBookingEnrollmentServiceTest {
         verify(clinicPetEnrollmentRepository).save(any(ClinicPetEnrollment.class));
         verify(doctorPatientEnrollmentRepository, never()).save(any(DoctorPatientEnrollment.class));
         assertFalse(ParentBookingEnrollmentService.isPersonalPractice(organizationClinic, doctor));
+    }
+
+    @Test
+    void staffCareReusesExistingEnrollmentOwner() {
+        ClinicPetOwner enrolledOwner = ClinicPetOwner.builder()
+                .clinic(clinic)
+                .firstName("Ada")
+                .email("ada@example.test")
+                .phone("9876543210")
+                .build();
+        enrolledOwner.setId(9L);
+        Pet orphanPet = Pet.builder().uuid("orphan-pet").build();
+        orphanPet.setId(10L);
+        ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder()
+                .clinic(clinic)
+                .pet(orphanPet)
+                .clinicOwner(enrolledOwner)
+                .build();
+        when(userRepository.findByPets_Uuid("orphan-pet")).thenReturn(Optional.empty());
+        when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_Id(3L, 10L))
+                .thenReturn(Optional.of(enrollment));
+
+        service.enrollAfterStaffCare(clinic, null, orphanPet);
+
+        ArgumentCaptor<ClinicPetEnrollment> captor = ArgumentCaptor.forClass(ClinicPetEnrollment.class);
+        verify(clinicPetEnrollmentRepository).save(captor.capture());
+        assertEquals(enrolledOwner, captor.getValue().getClinicOwner());
+        verify(clinicPetOwnerRepository, never()).save(any(ClinicPetOwner.class));
+    }
+
+    @Test
+    void staffCareRejectsPetWithNoOwner() {
+        Pet orphanPet = Pet.builder().uuid("orphan-pet").build();
+        orphanPet.setId(10L);
+        when(userRepository.findByPets_Uuid("orphan-pet")).thenReturn(Optional.empty());
+        when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_Id(3L, 10L))
+                .thenReturn(Optional.empty());
+
+        assertThrows(CustomException.class, () -> service.enrollAfterStaffCare(clinic, null, orphanPet));
+        verify(clinicPetOwnerRepository, never()).save(any(ClinicPetOwner.class));
+    }
+
+    @Test
+    void staffCareCopiesOwnerWithoutPlaceholderPhone() {
+        Clinic otherClinic = Clinic.builder().build();
+        otherClinic.setId(20L);
+        ClinicPetOwner sourceOwner = ClinicPetOwner.builder()
+                .clinic(otherClinic)
+                .firstName("Grace")
+                .email("grace@example.test")
+                .phone("")
+                .build();
+        Pet visitingPet = Pet.builder().uuid("visit-pet").clinicOwner(sourceOwner).build();
+        visitingPet.setId(22L);
+        when(userRepository.findByPets_Uuid("visit-pet")).thenReturn(Optional.empty());
+        when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_Id(3L, 22L))
+                .thenReturn(Optional.empty());
+        when(clinicPetOwnerRepository.findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(3L, "grace@example.test"))
+                .thenReturn(Optional.empty());
+        when(clinicPetOwnerRepository.save(any(ClinicPetOwner.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.enrollAfterStaffCare(clinic, null, visitingPet);
+
+        ArgumentCaptor<ClinicPetOwner> ownerCaptor = ArgumentCaptor.forClass(ClinicPetOwner.class);
+        verify(clinicPetOwnerRepository).save(ownerCaptor.capture());
+        assertEquals("Grace", ownerCaptor.getValue().getFirstName());
+        assertNull(ownerCaptor.getValue().getPhone());
+        assertFalse(KeyConstant.PLACEHOLDER_PHONE.equals(ownerCaptor.getValue().getPhone()));
     }
 }

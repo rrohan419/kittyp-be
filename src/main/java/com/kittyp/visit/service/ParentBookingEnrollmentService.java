@@ -1,7 +1,6 @@
 package com.kittyp.visit.service;
 
-import java.util.UUID;
-
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +12,7 @@ import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.constants.KeyConstant;
+import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.entity.DoctorPatientEnrollment;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
@@ -90,25 +90,52 @@ public class ParentBookingEnrollmentService {
 	}
 
 	private void ensureClinicEnrollmentWithPetOwner(Clinic clinic, Pet pet) {
+		// Prefer the owner already linked on this clinic's enrollment.
+		ClinicPetEnrollment existing = clinicPetEnrollmentRepository
+				.findByClinic_IdAndPet_Id(clinic.getId(), pet.getId())
+				.orElse(null);
+		if (existing != null && existing.getClinicOwner() != null) {
+			saveClinicEnrollment(clinic, pet, existing.getClinicOwner());
+			return;
+		}
+
 		ClinicPetOwner sourceOwner = pet.getClinicOwner();
+		if (sourceOwner == null) {
+			throw new CustomException(
+					"Pet has no linked owner. Provide owner name and phone or email.",
+					HttpStatus.BAD_REQUEST);
+		}
+
 		ClinicPetOwner clinicOwner;
-		if (sourceOwner != null && sourceOwner.getClinic() != null
-				&& sourceOwner.getClinic().getId().equals(clinic.getId())) {
+		if (sourceOwner.getClinic() != null && sourceOwner.getClinic().getId().equals(clinic.getId())) {
 			clinicOwner = sourceOwner;
-		} else if (sourceOwner != null) {
+		} else {
 			String email = ClinicOwnerUserLinkService.normalizeEmail(sourceOwner.getEmail());
-			clinicOwner = email == null ? null : clinicPetOwnerRepository
+			if (email == null) {
+				throw new CustomException(
+						"Pet has no linked owner. Provide owner name and phone or email.",
+						HttpStatus.BAD_REQUEST);
+			}
+			clinicOwner = clinicPetOwnerRepository
 					.findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), email)
 					.orElse(null);
 			if (clinicOwner == null) {
+				String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(sourceOwner.getPhone());
+				if (phone != null && (!phone.matches("\\d{10}") || KeyConstant.PLACEHOLDER_PHONE.equals(phone))) {
+					phone = null;
+				}
+				String firstName = sourceOwner.getFirstName() == null ? "" : sourceOwner.getFirstName().trim();
+				if (firstName.isBlank()) {
+					throw new CustomException(
+							"Pet has no linked owner. Provide owner name and phone or email.",
+							HttpStatus.BAD_REQUEST);
+				}
 				clinicOwner = ClinicPetOwner.builder()
 						.clinic(clinic)
-						.firstName(sourceOwner.getFirstName())
+						.firstName(firstName)
 						.lastName(sourceOwner.getLastName())
-						.email(email == null ? "owner+" + UUID.randomUUID() + "@kittyp.in" : email)
-						.phone(sourceOwner.getPhone() == null || sourceOwner.getPhone().isBlank()
-								? KeyConstant.PLACEHOLDER_PHONE
-								: sourceOwner.getPhone())
+						.email(email)
+						.phone(phone)
 						.alternatePhone(sourceOwner.getAlternatePhone())
 						.address(sourceOwner.getAddress())
 						.notes(sourceOwner.getNotes())
@@ -117,16 +144,6 @@ public class ParentBookingEnrollmentService {
 				clinicOwner.setIsActive(true);
 				clinicOwner = clinicPetOwnerRepository.save(clinicOwner);
 			}
-		} else {
-			clinicOwner = ClinicPetOwner.builder()
-					.clinic(clinic)
-					.firstName("Client")
-					.lastName("")
-					.email("owner+" + UUID.randomUUID() + "@kittyp.local")
-					.phone(KeyConstant.PLACEHOLDER_PHONE)
-					.build();
-			clinicOwner.setIsActive(true);
-			clinicOwner = clinicPetOwnerRepository.save(clinicOwner);
 		}
 		saveClinicEnrollment(clinic, pet, clinicOwner);
 	}
@@ -194,19 +211,20 @@ public class ParentBookingEnrollmentService {
 			}
 		}
 		if (owner == null) {
-			String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
-			if (phone == null || !phone.matches("\\d{10}")) {
-				phone = KeyConstant.PLACEHOLDER_PHONE;
-			}
 			String email = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
-			if (email == null || email.isBlank()) {
-				email = "parent+" + platformUser.getUuid() + "@kittyp.local";
+			String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
+			if (phone != null && (!phone.matches("\\d{10}") || KeyConstant.PLACEHOLDER_PHONE.equals(phone))) {
+				phone = null;
+			}
+			String firstName = platformUser.getFirstName() == null ? "" : platformUser.getFirstName().trim();
+			if (firstName.isBlank() || email == null) {
+				throw new CustomException(
+						"Pet has no linked owner. Provide owner name and phone or email.",
+						HttpStatus.BAD_REQUEST);
 			}
 			owner = ClinicPetOwner.builder()
 					.clinic(clinic)
-					.firstName(platformUser.getFirstName() == null || platformUser.getFirstName().isBlank()
-							? "Client"
-							: platformUser.getFirstName().trim())
+					.firstName(firstName)
 					.lastName(platformUser.getLastName() == null ? "" : platformUser.getLastName().trim())
 					.email(email)
 					.phone(phone)

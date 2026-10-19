@@ -1518,6 +1518,8 @@ public class ClinicServiceImpl implements ClinicService {
             owners = clinicPetOwnerRepository.searchByClinic(clinic.getId(), q.trim());
         }
         return owners.stream()
+                .filter(o -> !KeyConstant.PLACEHOLDER_PHONE.equals(
+                        ClinicOwnerUserLinkService.normalizePhoneDigits(o.getPhone())))
                 .map(this::toOwnerModel)
                 .filter(o -> o.petCount() > 0)
                 .sorted(Comparator.comparing(ClinicOwnerModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
@@ -1627,17 +1629,22 @@ public class ClinicServiceImpl implements ClinicService {
             requireClientAttachVerified(clinic, platformUser.getUuid());
         }
         if (owner == null) {
+            String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
             String phone = ClinicOwnerUserLinkService.normalizePhoneDigits(platformUser.getPhoneNumber());
-            if (phone == null || !phone.matches("\\d{10}")) {
-                phone = KeyConstant.PLACEHOLDER_PHONE;
+            if (phone != null && !phone.matches("\\d{10}")) {
+                phone = null;
+            }
+            String firstName = platformUser.getFirstName() == null ? "" : platformUser.getFirstName().trim();
+            if (firstName.isBlank() || ownerEmail == null) {
+                throw new CustomException(
+                        "Owner name and email are required on the KittyP account.",
+                        HttpStatus.BAD_REQUEST);
             }
             owner = ClinicPetOwner.builder()
                     .clinic(clinic)
-                    .firstName(platformUser.getFirstName() == null || platformUser.getFirstName().isBlank()
-                            ? "Client"
-                            : platformUser.getFirstName().trim())
+                    .firstName(firstName)
                     .lastName(platformUser.getLastName() == null ? "" : platformUser.getLastName().trim())
-                    .email(ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail()))
+                    .email(ownerEmail)
                     .phone(phone)
                     .linkedUser(platformUser)
                     .build();
