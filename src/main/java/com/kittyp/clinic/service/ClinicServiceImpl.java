@@ -997,9 +997,14 @@ public class ClinicServiceImpl implements ClinicService {
         return doctorModel(affiliation);
     }
 
+    /**
+     * Decline a doctor invite without authentication. The invite token in the email link is the
+     * capability secret — same product rule as staff-invite reject. Accept still requires a
+     * session as the invited email. Expired / non-PENDING invites cannot be rejected.
+     */
     @Override
     @Transactional
-    public void rejectInvite(String token, String email) {
+    public void rejectInvite(String token) {
         ClinicDoctorInvite invite = requireInviteByToken(token);
         if (invite.getStatus() != ClinicDoctorInviteStatus.PENDING) {
             throw new CustomException("This invite is no longer valid", HttpStatus.BAD_REQUEST);
@@ -1008,12 +1013,6 @@ public class ClinicServiceImpl implements ClinicService {
             invite.setStatus(ClinicDoctorInviteStatus.EXPIRED);
             clinicDoctorInviteRepository.save(invite);
             throw new CustomException("This invite has expired", HttpStatus.BAD_REQUEST);
-        }
-
-        User user = userDao.userByEmail(email);
-        if (user == null || !invite.getEmail().equalsIgnoreCase(user.getEmail())) {
-            throw new CustomException("Sign in with the invited email (" + invite.getEmail() + ") to respond",
-                    HttpStatus.FORBIDDEN);
         }
 
         invite.setStatus(ClinicDoctorInviteStatus.REJECTED);

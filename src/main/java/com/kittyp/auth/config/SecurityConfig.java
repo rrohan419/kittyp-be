@@ -68,6 +68,8 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.GET, "/api/v1/blogs/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/blogs/all").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/clinic/invites/**").permitAll()
+						// BUG-05: possession of invite token authorizes decline (email one-click); accept stays authenticated
+						.requestMatchers(HttpMethod.POST, "/api/v1/clinic/invites/*/reject").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/clinic/staff-invite/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/clinic/staff-invite/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/upload/signup-documents").permitAll()

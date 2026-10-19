@@ -96,7 +96,8 @@ public interface ClinicService {
 
     DoctorModel acceptInvite(String token, String email);
 
-    void rejectInvite(String token, String email);
+    /** Decline by invite token (no login). Possession of the unguessable token is authorization. */
+    void rejectInvite(String token);
 
     StaffInviteModel inviteStaff(String clinicUuid, StaffInviteRequest request, String email);
 

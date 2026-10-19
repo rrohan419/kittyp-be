@@ -209,9 +209,8 @@ public class ClinicController {
     }
 
     @PostMapping(ApiUrl.CLINIC_INVITE_REJECT)
-    @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
     public ResponseEntity<SuccessResponse<Void>> rejectInvite(@PathVariable String token) {
-        clinicService.rejectInvite(token, email());
+        clinicService.rejectInvite(token);
         return success(null);
     }
 
