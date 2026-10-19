@@ -272,6 +272,33 @@ public class TreatmentInvoiceService {
         return sendInvoiceToOwner(invoice, null, clinicSender(clinic));
     }
 
+    /** Empty DRAFT invoice linked to visit (sets visit.invoiceUuid). */
+    @Transactional
+    public void ensureDraftInvoiceForVisit(Visit visit) {
+        if (visit.getInvoiceUuid() != null && !visit.getInvoiceUuid().isBlank()) {
+            return;
+        }
+        User doctor = visit.getDoctor() != null ? visit.getDoctor().getUser() : null;
+        if (doctor == null) {
+            throw new CustomException("Assign a doctor before finishing treatment", HttpStatus.BAD_REQUEST);
+        }
+        ConsultationInvoice invoice = ConsultationInvoice.builder()
+                .uuid(alphanumericIdService.allocateUnique(ConsultationInvoice.class))
+                .invoiceNumber(nextInvoiceNumber())
+                .doctor(doctor)
+                .clinic(visit.getClinic())
+                .petUuid(visit.getPet() != null ? visit.getPet().getUuid() : null)
+                .visitUuid(visit.getUuid())
+                .lineItems("[]")
+                .amount(BigDecimal.ZERO)
+                .paymentStatus("UNPAID")
+                .currency("INR")
+                .status(ConsultationInvoiceStatus.DRAFT)
+                .build();
+        invoice.setIsActive(true);
+        visit.setInvoiceUuid(invoiceRepository.save(invoice).getUuid());
+    }
+
     private ConsultationInvoice resolveOrCreateClinicInvoice(
             Clinic clinic, User actor, CreateConsultationInvoiceDto request, boolean sendWa) {
         String visitUuid = blankToNull(request.getVisitUuid());

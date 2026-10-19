@@ -3,6 +3,8 @@ package com.kittyp.visit.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
@@ -19,6 +21,7 @@ import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.repository.DoctorReviewRepository;
+import com.kittyp.doctor.service.TreatmentInvoiceService;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
@@ -46,6 +49,9 @@ class VisitServiceImplCompleteVisitTest {
 
 	@Mock
 	private DoctorReviewRepository doctorReviewRepository;
+
+	@Mock
+	private TreatmentInvoiceService treatmentInvoiceService;
 
 	@InjectMocks
 	private VisitServiceImpl visitService;
@@ -82,11 +88,19 @@ class VisitServiceImplCompleteVisitTest {
 		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(10L, 8L)).thenReturn(true);
 		when(visitDao.save(any(Visit.class))).thenAnswer(inv -> inv.getArgument(0));
 		when(doctorReviewRepository.findByVisit_Uuid("visit-1")).thenReturn(Optional.empty());
+		doAnswer(inv -> {
+			Visit v = inv.getArgument(0);
+			v.setInvoiceUuid("inv-draft-1");
+			return null;
+		}).when(treatmentInvoiceService).ensureDraftInvoiceForVisit(any(Visit.class));
 
 		VisitModel model = visitService.completeVisit("visit-1", "doc@example.com");
 
 		assertEquals(VisitStatus.CHECKING_OUT, visit.getStatus());
 		assertNotNull(visit.getCheckingOutAt());
 		assertEquals(VisitStatus.CHECKING_OUT, model.status());
+		assertEquals("inv-draft-1", visit.getInvoiceUuid());
+		assertEquals("inv-draft-1", model.invoiceUuid());
+		verify(treatmentInvoiceService).ensureDraftInvoiceForVisit(visit);
 	}
 }

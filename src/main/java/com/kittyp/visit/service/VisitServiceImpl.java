@@ -55,6 +55,7 @@ import com.kittyp.doctor.entity.DoctorReview;
 import com.kittyp.doctor.repository.DoctorPatientEnrollmentRepository;
 import com.kittyp.doctor.repository.DoctorReviewRepository;
 import com.kittyp.doctor.enums.DoctorStatus;
+import com.kittyp.doctor.service.TreatmentInvoiceService;
 import com.kittyp.health.dao.HealthEventDao;
 import com.kittyp.health.entity.HealthEvent;
 import com.kittyp.health.enums.HealthEventStatus;
@@ -132,6 +133,7 @@ public class VisitServiceImpl implements VisitService {
     private final JitsiMeetService jitsiMeetService;
     private final VerificationCodeService verificationCodeService;
     private final UserRepository userRepository;
+    private final TreatmentInvoiceService treatmentInvoiceService;
 
     @Override
     @Transactional
@@ -918,6 +920,7 @@ public class VisitServiceImpl implements VisitService {
         // Hand off to reception Checkout for billing — do not skip straight to COMPLETED.
         applyStatusTransition(visit, VisitStatus.CHECKING_OUT);
         ensureHealthEvent(visit);
+        treatmentInvoiceService.ensureDraftInvoiceForVisit(visit);
         if (visit.getClinicOwner() != null) {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(visit.getClinicOwner());
         }
