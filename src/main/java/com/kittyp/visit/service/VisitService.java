@@ -35,6 +35,9 @@ public interface VisitService {
     /** Free half-hour slots for a clinic doctor on a given date (availability minus busy). */
     List<LocalDateTime> listParentDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date, String email);
 
+    /** Same slots for public browse (no caller identity). Date is the clinic-local calendar day. */
+    List<LocalDateTime> listDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date);
+
     /** Busy intervals for a clinic doctor across all clinics (active bookings overlapping the range). */
     List<BookingModel> listDoctorBusySlots(String clinicUuid, String doctorUuid, LocalDateTime from,
             LocalDateTime to, String email);

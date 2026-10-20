@@ -59,6 +59,9 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/api/v1/auth/**").permitAll()
 						.requestMatchers("/api/v1/public/**").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/clinics/*/doctors/*/slots").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/clinic/*/doctors/*/slots").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/doctors/*/slots").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/product/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/product/all").permitAll()
 						// Authenticated doctor/admin author profile — must run before public article GETs

@@ -1,6 +1,7 @@
 package com.kittyp.booking.controller;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
@@ -70,9 +71,33 @@ public class ParentBookingController {
             @PathVariable String doctorUuid,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        List<String> slots = visitService.listParentDoctorSlots(clinicUuid, doctorUuid, date, email).stream()
-                .map(Object::toString)
-                .toList();
-        return responseBuilder.buildSuccessResponse(slots, ResponseMessage.SUCCESS, HttpStatus.OK);
+        return ok(visitService.listParentDoctorSlots(clinicUuid, doctorUuid, date, email));
+    }
+
+    /**
+     * Canonical: {@code /public/clinics/.../slots}. Other patterns are compat aliases.
+     * Date is the clinic-local calendar day; results are local slot starts (no offset).
+     */
+    @GetMapping({ ApiUrl.PUBLIC_CLINIC_DOCTOR_SLOTS, ApiUrl.PUBLIC_CLINIC_DOCTOR_SLOTS_COMPAT,
+            ApiUrl.CLINICS_DOCTOR_SLOTS_COMPAT, ApiUrl.CLINIC_DOCTOR_SLOTS_COMPAT })
+    public ResponseEntity<SuccessResponse<List<String>>> publicSlots(
+            @PathVariable String clinicUuid,
+            @PathVariable String doctorUuid,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ok(visitService.listDoctorSlots(clinicUuid, doctorUuid, date));
+    }
+
+    /** Compat alias. {@code clinicUuid} and {@code date} are required (missing → 400). */
+    @GetMapping(ApiUrl.DOCTOR_SLOTS_COMPAT)
+    public ResponseEntity<SuccessResponse<List<String>>> doctorSlots(
+            @PathVariable String doctorUuid,
+            @RequestParam String clinicUuid,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ok(visitService.listDoctorSlots(clinicUuid, doctorUuid, date));
+    }
+
+    private ResponseEntity<SuccessResponse<List<String>>> ok(List<LocalDateTime> slots) {
+        return responseBuilder.buildSuccessResponse(
+                slots.stream().map(Object::toString).toList(), ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 }

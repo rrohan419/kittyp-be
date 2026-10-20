@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.ErrorResponse;
@@ -251,6 +253,18 @@ public class GlobalExceptionHandler {
 		
 		return responseBuilder.buildErrorResponse(ex.getMessage(), ex.getLocalizedMessage(),
 				ex.getHttpStatus(), null);
+	}
+
+	@ExceptionHandler(NoResourceFoundException.class)
+	public ResponseEntity<ApiError> handleNoResourceFound(Exception ex, WebRequest request) {
+		return new ResponseEntity<>(new ApiError(404, "Resource Not Found", "Resource not found", extractPath(request)),
+				HttpStatus.NOT_FOUND);
+	}
+
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex, WebRequest request) {
+		return new ResponseEntity<>(new ApiError(400, "Bad Request",
+				"Invalid value for parameter '" + ex.getName() + "'", extractPath(request)), HttpStatus.BAD_REQUEST);
 	}
 
 	/**

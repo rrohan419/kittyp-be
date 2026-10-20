@@ -448,12 +448,22 @@ public class VisitServiceImpl implements VisitService {
             String email) {
         // Authenticated caller only — no clinic staff check for discovery slots.
         userDao.userByEmail(email);
+        return listDoctorSlots(clinicUuid, doctorUuid, date);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LocalDateTime> listDoctorSlots(String clinicUuid, String doctorUuid, LocalDate date) {
         Clinic clinic = clinicDao.findByUuid(clinicUuid);
         if (clinic == null || Boolean.FALSE.equals(clinic.getIsActive())) {
             throw new ResourceNotFoundException("clinic", "uuid", clinicUuid);
         }
-        requireOperational(clinic, email);
-        DoctorProfile doctor = requireClinicDoctor(clinic, doctorUuid);
+        requireOperational(clinic, null);
+        // Slots-only 404: booking/walk-in paths keep requireClinicDoctor's 400.
+        DoctorProfile doctor = clinicDoctorRepository.findByClinic_IdAndDoctor_Uuid(clinic.getId(), doctorUuid)
+                .filter(a -> Boolean.TRUE.equals(a.getIsActive()))
+                .map(a -> a.getDoctor())
+                .orElseThrow(() -> new ResourceNotFoundException("doctor", "uuid", doctorUuid));
         LocalDateTime nowClinic = DoctorHours.nowLocal(clinic.getTimezone());
         LocalDate day = date == null ? nowClinic.toLocalDate() : date;
 

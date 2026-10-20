@@ -250,6 +250,12 @@ public class ApiUrl {
 	public static final String USER_BOOKINGS = "/user/bookings";
 	public static final String USER_BOOKING_VIDEO = USER_BOOKINGS + "/{bookingUuid}/video";
 	public static final String USER_DOCTOR_SLOTS = "/user/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
+	/** Canonical public slots route. Compat aliases below kept for prod/deep-link clients. */
+	public static final String PUBLIC_CLINIC_DOCTOR_SLOTS = "/public/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
+	public static final String PUBLIC_CLINIC_DOCTOR_SLOTS_COMPAT = "/public/clinic/{clinicUuid}/doctors/{doctorUuid}/slots";
+	public static final String CLINICS_DOCTOR_SLOTS_COMPAT = "/clinics/{clinicUuid}/doctors/{doctorUuid}/slots";
+	public static final String CLINIC_DOCTOR_SLOTS_COMPAT = "/clinic/{clinicUuid}/doctors/{doctorUuid}/slots";
+	public static final String DOCTOR_SLOTS_COMPAT = "/doctors/{doctorUuid}/slots";
 	public static final String USER_REMINDERS = "/user/reminders";
 	public static final String USER_REMINDER_BY_UUID = USER_REMINDERS + "/{reminderUuid}";
 
