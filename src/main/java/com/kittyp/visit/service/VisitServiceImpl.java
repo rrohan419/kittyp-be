@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -43,6 +44,8 @@ import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.clinic.repository.ClinicPetOwnerRepository;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
+import com.kittyp.clinic.service.ClinicPetParentSignupInviteService;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.common.model.PaginationModel;
@@ -66,7 +69,9 @@ import com.kittyp.notification.service.OutboundMessageService;
 import com.kittyp.notification.service.WhatsAppSenderCredentials;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
+import com.kittyp.user.entity.PetWeightLog;
 import com.kittyp.user.entity.User;
+import com.kittyp.user.repository.PetWeightLogRepository;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 import com.kittyp.user.service.PetAccessGuard;
@@ -74,6 +79,7 @@ import com.kittyp.user.service.UserService;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
+import com.kittyp.visit.dto.VisitDtos.PrescriptionFirstRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartModel;
@@ -132,6 +138,12 @@ public class VisitServiceImpl implements VisitService {
     private final JitsiMeetService jitsiMeetService;
     private final VerificationCodeService verificationCodeService;
     private final UserRepository userRepository;
+    private final ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
+    private final ZeptoMailService zeptoMailService;
+    private final PetWeightLogRepository petWeightLogRepository;
+
+    @Value("${app.frontend.base-url:https://kittyp.in}")
+    private String frontendBaseUrl;
 
     @Override
     @Transactional
@@ -146,6 +158,16 @@ public class VisitServiceImpl implements VisitService {
         }
 
         Pet pet = resolvePetForWalkIn(clinic, request);
+        Visit visit = createWalkInVisit(clinic, doctor, pet, request.reasonForVisit(), request.urgency());
+        if (doctor != null) {
+            notifyDoctorOfPatient(visit, "assigned");
+        }
+        return toModel(visit, true);
+    }
+
+    /** Enroll pet, resolve clinic owner, persist a WAITLIST walk-in visit (no Booking/slot). */
+    private Visit createWalkInVisit(Clinic clinic, DoctorProfile doctor, Pet pet, String reasonForVisit,
+            VisitUrgency urgency) {
         parentBookingEnrollmentService.enrollAfterStaffCare(clinic, doctor, pet);
         ClinicPetOwner owner = clinicPetEnrollmentRepository
                 .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), pet.getUuid())
@@ -162,15 +184,65 @@ public class VisitServiceImpl implements VisitService {
                 .source(VisitSource.WALK_IN)
                 .channel(BookingMode.IN_PERSON)
                 .status(VisitStatus.WAITLIST)
-                .urgency(request.urgency() == null ? VisitUrgency.ROUTINE : request.urgency())
-                .reasonForVisit(blankToNull(request.reasonForVisit()))
+                .urgency(urgency == null ? VisitUrgency.ROUTINE : urgency)
+                .reasonForVisit(blankToNull(reasonForVisit))
                 .build();
         visit.setIsActive(true);
-        visit = visitDao.save(visit);
-        if (doctor != null) {
-            notifyDoctorOfPatient(visit, "assigned");
+        return visitDao.save(visit);
+    }
+
+    @Override
+    @Transactional
+    public VisitModel createPrescriptionFirst(PrescriptionFirstRequest request, String email) {
+        if (request.chart() == null || request.chart().plan() == null || request.chart().plan().isBlank()) {
+            throw new CustomException("Add a prescription before saving", HttpStatus.BAD_REQUEST);
         }
-        return toModel(visit, true);
+        Clinic clinic = access(request.clinicUuid(), email);
+        requireOperational(clinic, email);
+        DoctorProfile doctor = requireDoctorProfile(email);
+        requireClinicDoctor(clinic, doctor.getUuid());
+        requirePracticeReady(doctor);
+
+        Pet pet = resolvePetForWalkIn(clinic, new WalkInCreateRequest(request.petUuid(), request.owner(),
+                request.newPet(), request.reasonForVisit(), request.urgency(), doctor.getUuid()));
+
+        // Same pet + open visit today may be a different consultation — never attach silently.
+        if (!request.confirmNewConsultation()) {
+            LocalDateTime dayStart = LocalDate.now().atStartOfDay();
+            List<Visit> openToday = visitDao.findByPetAndClinic(pet.getUuid(), clinic.getId()).stream()
+                    .filter(v -> Boolean.TRUE.equals(v.getIsActive()))
+                    .filter(v -> v.getCreatedAt() != null && !v.getCreatedAt().isBefore(dayStart))
+                    .filter(v -> v.getStatus() == VisitStatus.WAITLIST
+                            || v.getStatus() == VisitStatus.CHECKED_IN
+                            || v.getStatus() == VisitStatus.IN_PROGRESS)
+                    .toList();
+            if (!openToday.isEmpty()) {
+                throw new CustomException(
+                        "An open visit for this pet already exists today. Open that visit to add the prescription, "
+                                + "or confirm a separate consultation.",
+                        HttpStatus.CONFLICT);
+            }
+        }
+
+        // Doctor creates this visit themselves — no self-notification (unlike reception walk-in).
+        Visit visit = createWalkInVisit(clinic, doctor, pet, request.reasonForVisit(), request.urgency());
+        // Reuse existing chart rules: WAITLIST -> IN_PROGRESS, lock/status guards.
+        VisitModel result = saveChart(visit.getUuid(), request.chart(), email);
+
+        ClinicPetOwner owner = visit.getClinicOwner();
+        if (owner != null && owner.getLinkedUser() == null) {
+            // Same invite email as ClinicServiceImpl.addPatient: parent not on KittyP yet.
+            try {
+                String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(owner.getEmail());
+                String token = clinicPetParentSignupInviteService.createInvite(ownerEmail);
+                String url = frontendBaseUrl.replaceAll("/$", "") + "/signup?role=USER&inviteToken=" + token;
+                zeptoMailService.sendClinicPetParentInviteEmail(ownerEmail, owner.getFirstName(),
+                        pet.getName(), clinic.getName(), url);
+            } catch (Exception e) {
+                log.warn("Failed to send parent invite email: {}", e.getMessage());
+            }
+        }
+        return result;
     }
 
     @Override
@@ -878,7 +950,35 @@ public class VisitServiceImpl implements VisitService {
         if (request.vitals() != null) {
             visit.setVitalsJson(writeJson(request.vitals()));
         }
-        return toModel(visitDao.save(visit), true);
+        Visit saved = visitDao.save(visit);
+        syncPetWeightFromVitals(saved.getPet(), request.vitals());
+        return toModel(saved, true);
+    }
+
+    /** Keep pet profile weight + parent weight trend in sync with chart vitals (all chart flows). */
+    private void syncPetWeightFromVitals(Pet pet, Map<String, Object> vitals) {
+        if (pet == null || vitals == null || vitals.get("weightKg") == null) {
+            return;
+        }
+        pet.setWeight(vitals.get("weightKg").toString());
+        petsRepository.save(pet);
+        try {
+            double weightKg = Double.parseDouble(vitals.get("weightKg").toString());
+            boolean changed = petWeightLogRepository
+                    .findFirstByPet_UuidOrderByRecordedAtDesc(pet.getUuid())
+                    .map(latest -> latest.getWeight() == null || Double.compare(latest.getWeight(), weightKg) != 0)
+                    .orElse(true);
+            if (weightKg > 0 && changed) {
+                petWeightLogRepository.save(PetWeightLog.builder()
+                        .pet(pet)
+                        .weight(weightKg)
+                        .recordedAt(LocalDateTime.now())
+                        .note("Recorded during visit")
+                        .build());
+            }
+        } catch (NumberFormatException ignored) {
+            // Non-numeric weight stays in vitals only.
+        }
     }
 
     /** CHECKING_OUT / COMPLETED: chart (prescription) stays editable for 1 hour after finish. */

@@ -23,10 +23,12 @@ import com.kittyp.common.dto.ApiResponse;
 import com.kittyp.common.dto.SuccessResponse;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
+import com.kittyp.visit.dto.VisitDtos.PrescriptionFirstRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
 import com.kittyp.visit.service.VisitService;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -71,6 +73,13 @@ public class DoctorVisitController {
     public ResponseEntity<SuccessResponse<VisitModel>> chart(@PathVariable String visitUuid,
             @RequestBody VisitChartRequest request) {
         return success(visitService.saveChart(visitUuid, request, email()));
+    }
+
+    @PostMapping(ApiUrl.DOCTOR_VISIT_PRESCRIPTION_FIRST)
+    @PreAuthorize(KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<VisitModel>> prescriptionFirst(
+            @Valid @RequestBody PrescriptionFirstRequest request) {
+        return success(visitService.createPrescriptionFirst(request, email()));
     }
 
     @PostMapping(ApiUrl.DOCTOR_VISIT_COMPLETE)

@@ -231,6 +231,7 @@ public class ApiUrl {
 	public static final String DOCTOR_VISIT_CHART = DOCTOR_VISIT_BY_UUID + "/chart";
 	public static final String DOCTOR_VISIT_COMPLETE = DOCTOR_VISIT_BY_UUID + "/complete";
 	public static final String DOCTOR_VISIT_RETURN = DOCTOR_VISIT_BY_UUID + "/return-to-reception";
+	public static final String DOCTOR_VISIT_PRESCRIPTION_FIRST = DOCTOR_VISITS + "/prescription-first";
 	public static final String DOCTOR_ATTENDED_PATIENTS = DOCTOR_BASE_URL + "/patients/attended";
 	public static final String DOCTOR_BOOKINGS_MINE = DOCTOR_BASE_URL + "/bookings/mine";
 	public static final String DOCTOR_BOOKING_BY_UUID = DOCTOR_BASE_URL + "/bookings/{bookingUuid}";

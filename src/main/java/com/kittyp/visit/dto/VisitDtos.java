@@ -113,6 +113,18 @@ public final class VisitDtos {
             String reasonForVisit) {
     }
 
+    /** Prescription-first: create a walk-in visit in background and save this chart on it. */
+    public record PrescriptionFirstRequest(
+            @NotBlank String clinicUuid,
+            String petUuid,
+            @Valid WalkInOwnerRequest owner,
+            @Valid WalkInPetRequest newPet,
+            String reasonForVisit,
+            VisitUrgency urgency,
+            boolean confirmNewConsultation,
+            @NotNull @Valid VisitChartRequest chart) {
+    }
+
     public record VisitChartRequest(
             String examinationNotes,
             String assessment,
