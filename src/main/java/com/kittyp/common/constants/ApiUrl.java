@@ -80,6 +80,7 @@ public class ApiUrl {
 	public static final String AUTHOR_BY_ID = AUTHOR_BASE_URL + "/{id}";
 	public static final String CREATE_AUTHOR = ADMIN + AUTHOR_BASE_URL + "/create";
 	public static final String AUTHOR_ME = ARTICLE_BASE_URL + AUTHOR_BASE_URL + "/me";
+	public static final String AUTHOR_TEAM_KITTYP = ARTICLE_BASE_URL + AUTHOR_BASE_URL + "/team-kittyp";
 
 	/** Alias surface for Loop 2 doctor blogs (delegates to article module). */
 	public static final String BLOGS_BASE_URL = "/blogs";

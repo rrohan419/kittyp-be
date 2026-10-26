@@ -62,6 +62,12 @@ public class AuthorDaoImpl implements AuthorDao {
 		return authorRepository.findByUserUuid(userUuid).orElse(null);
 	}
 
-	
+	@Override
+	public Author findByNameIgnoreCase(String name) {
+		if (name == null || name.isBlank()) {
+			return null;
+		}
+		return authorRepository.findFirstByNameIgnoreCase(name.trim()).orElse(null);
+	}
 
 }

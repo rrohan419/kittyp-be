@@ -87,6 +87,17 @@ public class AuthorServiceImpl implements AuthorService {
         return mapper.convert(authorDao.saveAuthor(created), AuthorModel.class);
     }
 
-    
+    @Override
+    public AuthorModel getOrCreateTeamKittypAuthor() {
+        Author existing = authorDao.findByNameIgnoreCase("Team Kittyp");
+        if (existing != null) {
+            return mapper.convert(existing, AuthorModel.class);
+        }
+        Author created = Author.builder()
+                .name("Team Kittyp")
+                .role("Team")
+                .build();
+        return mapper.convert(authorDao.saveAuthor(created), AuthorModel.class);
+    }
 
 }

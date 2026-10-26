@@ -25,4 +25,7 @@ public interface AuthorService {
 
     /** Get or create an Author row linked to the current publisher (doctor, clinic, or admin). */
     AuthorModel getOrCreateForUser(String userUuid, String displayName, String avatarUrl, String role);
+
+    /** Shared byline for platform admin articles. */
+    AuthorModel getOrCreateTeamKittypAuthor();
 }

@@ -59,6 +59,13 @@ public class AuthorController {
 	}
 
 	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
+	@GetMapping(ApiUrl.AUTHOR_TEAM_KITTYP)
+	public ResponseEntity<SuccessResponse<AuthorModel>> teamKittypAuthor() {
+		return responseBuilder.buildSuccessResponse(authorService.getOrCreateTeamKittypAuthor(), ResponseMessage.SUCCESS,
+				HttpStatus.OK);
+	}
+
+	@PreAuthorize(KeyConstant.IS_ROLE_ADMIN)
 	@PostMapping(ApiUrl.CREATE_AUTHOR)
 	public ResponseEntity<SuccessResponse<AuthorModel>> createAuthor(@RequestBody AuthorDto authorDto) {
 		AuthorModel response = authorService.saveAuthor(authorDto);

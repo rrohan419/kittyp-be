@@ -20,5 +20,7 @@ public interface AuthorDao {
 	Page<Author> getAllAuthors(Pageable pageable);
 
 	Author findByUserUuid(String userUuid);
+
+	Author findByNameIgnoreCase(String name);
 }
 

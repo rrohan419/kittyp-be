@@ -145,10 +145,11 @@ public class ArticleServiceImpl implements ArticleService {
 						&& ur.getRole().getName() == com.kittyp.user.enums.ERole.ROLE_ADMIN);
 
 		Author author;
-		if (admin && articleDto.getAuthorId() != null) {
-			author = authorDao.authorById(articleDto.getAuthorId());
+		if (admin) {
+			AuthorModel team = authorService.getOrCreateTeamKittypAuthor();
+			author = authorDao.authorById(team.getId());
 		} else {
-			// Force author from authenticated user — ignore client authorId unless admin.
+			// Force author from authenticated user — ignore client authorId.
 			String displayName = ((user.getFirstName() != null ? user.getFirstName() : "") + " "
 					+ (user.getLastName() != null ? user.getLastName() : "")).trim();
 			AuthorModel authorModel = authorService.getOrCreateForUser(user.getUuid(), displayName,
