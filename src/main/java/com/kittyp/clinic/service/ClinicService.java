@@ -165,6 +165,8 @@ public interface ClinicService {
 
     ClinicOwnerModel createOwner(String clinicUuid, CreateOwnerRequest request, String email);
 
+    ClinicOwnerModel updateOwner(String clinicUuid, String ownerUuid, com.kittyp.clinic.dto.ClinicDtos.UpdateOwnerRequest request, String email);
+
     ClinicOwnerProfileModel ownerProfile(String clinicUuid, String ownerUuid, String email);
 
     ClinicPetListModel addPetToOwner(String clinicUuid, String ownerUuid, AddOwnerPetRequest request, String email);

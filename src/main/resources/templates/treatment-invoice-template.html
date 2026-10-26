@@ -95,7 +95,7 @@
                 </div>
                 <div class="muted">
                     <span th:if="${invoice.petAge}">Age: <span th:text="${invoice.petAge}"></span></span>
-                    <span th:if="${invoice.petWeight}"> · Weight: <span th:text="${invoice.petWeight}"></span></span>
+                    <span th:if="${invoice.petWeight}"> · Weight: <span th:text="${invoice.petWeight}"></span> kg</span>
                 </div>
                 <div class="muted" th:if="${invoice.patientId}">Patient ID: <span th:text="${invoice.patientId}"></span></div>
                 <div class="muted" th:if="${invoice.petMicrochip}">Microchip: <span th:text="${invoice.petMicrochip}"></span></div>

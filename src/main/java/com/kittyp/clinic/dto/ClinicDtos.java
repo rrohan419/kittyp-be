@@ -265,6 +265,16 @@ public final class ClinicDtos {
             String notes) {
     }
 
+    public record UpdateOwnerRequest(
+            @NotBlank String firstName,
+            String lastName,
+            @NotBlank @Email String email,
+            String phone,
+            String alternatePhone,
+            String address,
+            String notes) {
+    }
+
     public record AddOwnerPetRequest(
             @NotBlank String name,
             String species,

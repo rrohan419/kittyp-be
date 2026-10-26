@@ -378,6 +378,14 @@ public class ClinicController {
         return success(clinicService.ownerProfile(uuid, ownerUuid, email()));
     }
 
+    @PatchMapping(ApiUrl.CLINIC_OWNER_DETAIL)
+    @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
+            + KeyConstant.IS_ROLE_DOCTOR)
+    public ResponseEntity<SuccessResponse<ClinicOwnerModel>> updateOwner(@PathVariable String uuid,
+            @PathVariable String ownerUuid, @RequestBody @Valid com.kittyp.clinic.dto.ClinicDtos.UpdateOwnerRequest request) {
+        return success(clinicService.updateOwner(uuid, ownerUuid, request, email()));
+    }
+
     @PostMapping(ApiUrl.CLINIC_OWNER_PETS)
     @PreAuthorize(KeyConstant.IS_ROLE_CLINIC_ADMIN + " or " + KeyConstant.IS_ROLE_CLINIC_STAFF + " or "
             + KeyConstant.IS_ROLE_DOCTOR)

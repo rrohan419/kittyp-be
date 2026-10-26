@@ -39,7 +39,8 @@ public final class VisitDtos {
             String species,
             String breed,
             String gender,
-            String photoUrl) {
+            String photoUrl,
+            LocalDate dateOfBirth) {
     }
 
     public record WalkInCreateRequest(

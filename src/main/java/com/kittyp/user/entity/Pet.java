@@ -90,17 +90,6 @@ public class Pet extends BaseEntity implements HasPublicId {
     @Builder.Default
     private Boolean hiddenFromParent = false;
 
-    /** Legacy clinic hint retained for migration compatibility; memberships live in ClinicPetEnrollment. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clinic_id")
-    @ToString.Exclude
-    private Clinic clinic;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clinic_owner_id")
-    @ToString.Exclude
-    private ClinicPetOwner clinicOwner;
-
     /** Read-only mirror of pets.user_uuid (owned by User.pets JoinColumn). */
     @Column(name = "user_uuid", insertable = false, updatable = false)
     private String parentUserUuid;
