@@ -90,10 +90,6 @@ public class Pet extends BaseEntity implements HasPublicId {
     @Builder.Default
     private Boolean hiddenFromParent = false;
 
-    /** Read-only mirror of pets.user_uuid (owned by User.pets JoinColumn). */
-    @Column(name = "user_uuid", insertable = false, updatable = false)
-    private String parentUserUuid;
-
     /** Legacy clinic hint retained for migration compatibility; memberships live in ClinicPetEnrollment. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "clinic_id")
@@ -104,6 +100,10 @@ public class Pet extends BaseEntity implements HasPublicId {
     @JoinColumn(name = "clinic_owner_id")
     @ToString.Exclude
     private ClinicPetOwner clinicOwner;
+
+    /** Read-only mirror of pets.user_uuid (owned by User.pets JoinColumn). */
+    @Column(name = "user_uuid", insertable = false, updatable = false)
+    private String parentUserUuid;
 
     public int getAgeInMonths() {
         return dateOfBirth == null ? 0 : Period.between(dateOfBirth, LocalDate.now()).getMonths() +
