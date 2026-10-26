@@ -30,7 +30,7 @@ public final class VisitDtos {
             @NotBlank String firstName,
             String lastName,
             @NotBlank @Email String email,
-            @NotBlank String phone,
+            String phone,
             String address) {
     }
 
@@ -39,7 +39,8 @@ public final class VisitDtos {
             String species,
             String breed,
             String gender,
-            String photoUrl) {
+            String photoUrl,
+            LocalDate dateOfBirth) {
     }
 
     public record WalkInCreateRequest(

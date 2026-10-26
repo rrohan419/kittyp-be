@@ -1383,6 +1383,7 @@ public class VisitServiceImpl implements VisitService {
                 .profilePicture(blankToNull(petReq.photoUrl()))
                 .registeredAt(LocalDate.now())
                 .isNeutered(false)
+                .dateOfBirth(petReq.dateOfBirth())
                 .build();
         pet.setIsActive(true);
         pet = petsRepository.save(pet);
@@ -1401,25 +1402,23 @@ public class VisitServiceImpl implements VisitService {
         if (ownerEmail == null || ownerEmail.isBlank()) {
             return;
         }
-        boolean existingClinicOwner = clinicPetOwnerRepository
+        ClinicPetOwner owner = clinicPetOwnerRepository
                 .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
-                .isPresent();
-        boolean existingPlatformUser = userRepository.findByEmailIgnoreCase(ownerEmail).isPresent();
-        if (!existingClinicOwner && !existingPlatformUser) {
+                .orElse(null);
+        boolean isPlatformUser = userRepository.findByEmailIgnoreCase(ownerEmail).isPresent();
+        boolean isLinked = owner != null && owner.getLinkedUser() != null;
+
+        // When the client is clinic-only (not on KittyP platform), no consent is needed
+        if (!isPlatformUser && !isLinked) {
             return;
         }
-        if (existingClinicOwner) {
-            var owner = clinicPetOwnerRepository
-                    .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
-                    .orElse(null);
-            if (owner != null) {
-                boolean hasClinicPets = clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
-                        .filter(enrollment -> enrollment.getClinicOwner() != null
-                                && enrollment.getClinicOwner().getId().equals(owner.getId()))
-                        .anyMatch(enrollment -> enrollment.getPet() != null);
-                if (!hasClinicPets) {
-                    return;
-                }
+        if (owner != null) {
+            boolean hasClinicPets = clinicPetEnrollmentRepository.findByClinic_IdAndIsActiveTrue(clinic.getId()).stream()
+                    .filter(enrollment -> enrollment.getClinicOwner() != null
+                            && enrollment.getClinicOwner().getId().equals(owner.getId()))
+                    .anyMatch(enrollment -> enrollment.getPet() != null);
+            if (!hasClinicPets) {
+                return;
             }
         }
         String petName = petReq.name() == null ? "" : petReq.name().trim();
