@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
+import com.kittyp.auth.dto.RefreshTokenRequest;
 import com.kittyp.auth.dto.SignupOtpSendRequest;
 import com.kittyp.auth.dto.SignupOtpVerifyRequest;
 import com.kittyp.auth.dto.SocialSso;
@@ -130,5 +131,17 @@ public class AuthController {
 		// Always return success to prevent email enumeration
 		userService.sendResetPasswordCode(email);
 		return responseBuilder.buildSuccessResponse(true, ResponseMessage.SUCCESS, HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.REFRESH_CODE)
+	public ResponseEntity<SuccessResponse<JwtResponseModel>> refreshToken(
+			@Valid @RequestBody RefreshTokenRequest request) {
+
+		JwtResponseModel response = authService.refreshAccessToken(request.getRefreshToken());
+
+		return responseBuilder.buildSuccessResponse(
+				response,
+				ResponseMessage.SUCCESS,
+				HttpStatus.OK);
 	}
 }

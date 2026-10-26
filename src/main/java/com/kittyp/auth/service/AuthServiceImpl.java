@@ -126,7 +126,10 @@ public class AuthServiceImpl implements AuthService {
 		return new MessageResponse(ResponseMessage.USER_REGISTERED_SUCCESSFULLY);
 	}
 
-	/** Stores the local 10-digit number. +91 is the country code column, not part of the number. */
+	/**
+	 * Stores the local 10-digit number. +91 is the country code column, not part of
+	 * the number.
+	 */
 	private void applyParentPhone(User user, String phoneNumber) {
 		if (phoneNumber == null || phoneNumber.isBlank()) {
 			return;
@@ -245,7 +248,7 @@ public class AuthServiceImpl implements AuthService {
 			}
 			String email = request.getEmail().trim().toLowerCase();
 			// if (userDao.userPresentByEmail(email)) {
-			// 	throw new ResourceAlreadyExistsException("User", "email", email);
+			// throw new ResourceAlreadyExistsException("User", "email", email);
 			// }
 			String code = verificationCodeService.generateCode(VerificationCodeService.emailOtpKey(email));
 			zeptoMailService.sendSignupOtpEmail(email, code, "EMAIL", null);
@@ -479,9 +482,10 @@ public class AuthServiceImpl implements AuthService {
 					new UsernamePasswordAuthenticationToken(loginRequestDto.getEmail(), loginRequestDto.getPassword()));
 
 			SecurityContextHolder.getContext().setAuthentication(authentication);
-			String jwt = jwtUtils.generateJwtToken(authentication);
+			String accessToken = jwtUtils.generateJwtToken(authentication);
 
 			UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+			String refreshToken = jwtUtils.generateRefreshToken(userDetails.getEmail());
 			List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
 
 			// Late clinic CRM link: parent may have been registered at a clinic months ago.
@@ -495,7 +499,8 @@ public class AuthServiceImpl implements AuthService {
 			}
 
 			loginRateLimiter.clear(clientIp, loginRequestDto.getEmail());
-			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
+			return new JwtResponseModel(accessToken, refreshToken, userDetails.getId(), userDetails.getUuid(),
+					userDetails.getEmail(), roles);
 		} catch (org.springframework.security.core.AuthenticationException ex) {
 			loginRateLimiter.recordFailure(clientIp, loginRequestDto.getEmail());
 			throw ex;
@@ -552,17 +557,61 @@ public class AuthServiceImpl implements AuthService {
 					userDetails, null, userDetails.getAuthorities());
 
 			SecurityContextHolder.getContext().setAuthentication(authentication);
-			String jwt = jwtUtils.generateJwtToken(authentication);
-
+			String accessToken = jwtUtils.generateJwtToken(authentication);
+			String refreshToken = jwtUtils.generateRefreshToken(userDetails.getEmail());
 			List<String> roles = userDetails.getAuthorities().stream()
 					.map(GrantedAuthority::getAuthority)
 					.toList();
 
-			return new JwtResponseModel(jwt, userDetails.getId(), userDetails.getUuid(), userDetails.getEmail(), roles);
+			return new JwtResponseModel(accessToken, refreshToken, userDetails.getId(), userDetails.getUuid(),
+					userDetails.getEmail(), roles);
 
 		} catch (Exception e) {
 			throw new RuntimeException("Google authentication failed: " + e.getMessage(), e);
 		}
+	}
+
+	@Override
+	public JwtResponseModel refreshAccessToken(String refreshToken) {
+
+		if (!jwtUtils.isRefreshToken(refreshToken)) {
+			throw new CustomException(
+					"Invalid or expired refresh token",
+					HttpStatus.UNAUTHORIZED);
+		}
+
+		String email = jwtUtils.getUserNameFromJwtToken(refreshToken);
+
+		User user = userDao.userByEmail(email);
+
+		if (user == null) {
+			throw new CustomException(
+					"User not found",
+					HttpStatus.UNAUTHORIZED);
+		}
+
+		UserDetailsImpl userDetails = (UserDetailsImpl) UserDetailsImpl.build(user);
+
+		// Issue a new access token using the user's current authorities.
+		Authentication authentication = new UsernamePasswordAuthenticationToken(
+				userDetails,
+				null,
+				userDetails.getAuthorities());
+
+		String newAccessToken = jwtUtils.generateJwtToken(authentication);
+
+		List<String> roles = userDetails.getAuthorities()
+				.stream()
+				.map(GrantedAuthority::getAuthority)
+				.toList();
+
+		return new JwtResponseModel(
+				newAccessToken,
+				refreshToken,
+				userDetails.getId(),
+				userDetails.getUuid(),
+				userDetails.getEmail(),
+				roles);
 	}
 
 }
