@@ -30,7 +30,7 @@ public final class VisitDtos {
             @NotBlank String firstName,
             String lastName,
             @NotBlank @Email String email,
-            @NotBlank String phone,
+            String phone,
             String address) {
     }
 

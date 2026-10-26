@@ -94,6 +94,17 @@ public class Pet extends BaseEntity implements HasPublicId {
     @Column(name = "user_uuid", insertable = false, updatable = false)
     private String parentUserUuid;
 
+    /** Legacy clinic hint retained for migration compatibility; memberships live in ClinicPetEnrollment. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clinic_id")
+    @ToString.Exclude
+    private Clinic clinic;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clinic_owner_id")
+    @ToString.Exclude
+    private ClinicPetOwner clinicOwner;
+
     public int getAgeInMonths() {
         return dateOfBirth == null ? 0 : Period.between(dateOfBirth, LocalDate.now()).getMonths() +
                 (Period.between(dateOfBirth, LocalDate.now()).getYears() * 12);
