@@ -18,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import com.kittyp.auth.util.JwtUtils;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
@@ -68,6 +69,9 @@ public class UserServiceImpl implements UserService {
 	private final JwtUtils jwtUtils;
 	private final SmsService smsService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
+
+	@Value("${jwt.expiration}")
+    private int jwtExpirationMs;
 
 	@Transactional
 	@Override
@@ -185,7 +189,7 @@ public class UserServiceImpl implements UserService {
 		UserDetailsModel model = toUserDetailsModel(user);
 		if (emailChanging) {
 			// Keep session alive after email change by issuing a fresh JWT for the new email
-			model.setAccessToken(jwtUtils.generateTokenFromEmail(user.getEmail()));
+			model.setAccessToken(jwtUtils.generateTokenFromEmail(user.getEmail(), jwtExpirationMs));
 		}
 		return model;
 	}
