@@ -599,7 +599,7 @@ public class AuthServiceImpl implements AuthService {
 				userDetails.getAuthorities());
 
 		String newAccessToken = jwtUtils.generateJwtToken(authentication);
-
+		String newRefreshToken = jwtUtils.generateRefreshToken(userDetails.getEmail());
 		List<String> roles = userDetails.getAuthorities()
 				.stream()
 				.map(GrantedAuthority::getAuthority)
@@ -607,7 +607,7 @@ public class AuthServiceImpl implements AuthService {
 
 		return new JwtResponseModel(
 				newAccessToken,
-				refreshToken,
+				newRefreshToken,
 				userDetails.getId(),
 				userDetails.getUuid(),
 				userDetails.getEmail(),
