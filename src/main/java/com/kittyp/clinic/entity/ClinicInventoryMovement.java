@@ -74,4 +74,8 @@ public class ClinicInventoryMovement extends BaseEntity implements HasPublicId {
 
     @Column(name = "invoice_number", length = 64)
     private String invoiceNumber;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id")
+    private ClinicInventoryBatch batch;
 }
