@@ -10,7 +10,9 @@ public class KeyConstant {
 
 	private KeyConstant() {}
 	
-	
+	public static final String TOKEN_TYPE_CLAIM = "tokenType";
+    public static final String ACCESS_TOKEN = "ACCESS";
+    public static final String REFRESH_TOKEN = "REFRESH";
 	public static final String IS_AUTHENTICATED = "isAuthenticated()";
 	public static final String SECRET_KEY = "secret.key";
 	public static final String IS_ROLE_ADMIN = "hasRole('ROLE_ADMIN')";

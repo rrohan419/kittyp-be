@@ -1436,7 +1436,7 @@ public class ClinicServiceImpl implements ClinicService {
                 .findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
                 .orElse(null);
         boolean newClinicClient = owner == null;
-        if (owner != null && (owner.getLinkedUser() != null || activePetCount(owner) > 0)) {
+        if (owner != null && owner.getLinkedUser() != null) {
             requirePetConsentVerified(clinic, owner, request.petName());
         }
 
@@ -1880,6 +1880,51 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     @Transactional
+    public ClinicOwnerModel updateOwner(String clinicUuid, String ownerUuid, com.kittyp.clinic.dto.ClinicDtos.UpdateOwnerRequest request, String email) {
+        Clinic clinic = access(clinicUuid, email);
+        requireOperational(clinic);
+
+        ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
+
+        if (owner.getLinkedUser() != null) {
+            throw new CustomException("Client is on kittyp platform and cannot be edited by the clinic.", HttpStatus.FORBIDDEN);
+        }
+
+        String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(request.email());
+        String phoneDigits = blankToNull(request.phone()) == null ? null
+                : ClinicOwnerUserLinkService.normalizePhoneDigits(request.phone());
+        if (phoneDigits != null && !phoneDigits.matches("\\d{10}")) {
+            throw new CustomException("Owner phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
+        }
+
+        final Long ownerId = owner.getId();
+        if (!ownerEmail.equalsIgnoreCase(owner.getEmail())) {
+            rejectUnattachedKittypContact(clinic, ownerEmail, phoneDigits);
+            if (clinicPetOwnerRepository.findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(clinic.getId(), ownerEmail)
+                    .filter(existing -> !existing.getId().equals(ownerId))
+                    .isPresent()) {
+                throw new CustomException("Another client with this email already exists at this clinic", HttpStatus.CONFLICT);
+            }
+        } else if (!java.util.Objects.equals(phoneDigits, owner.getPhone())) {
+            rejectUnattachedKittypContact(clinic, ownerEmail, phoneDigits);
+        }
+
+        owner.setFirstName(request.firstName().trim());
+        owner.setLastName(request.lastName() == null ? "" : request.lastName().trim());
+        owner.setEmail(ownerEmail);
+        owner.setPhone(phoneDigits);
+        owner.setAlternatePhone(blankToNull(request.alternatePhone()) == null ? null
+                : ClinicOwnerUserLinkService.normalizePhoneDigits(request.alternatePhone()));
+        owner.setAddress(blankToNull(request.address()));
+        owner.setNotes(blankToNull(request.notes()));
+
+        owner = clinicPetOwnerRepository.save(owner);
+        return toOwnerModel(owner);
+    }
+
+    @Override
+    @Transactional
     public ClinicOwnerProfileModel ownerProfile(String clinicUuid, String ownerUuid, String email) {
         Clinic clinic = access(clinicUuid, email);
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
@@ -1908,7 +1953,7 @@ public class ClinicServiceImpl implements ClinicService {
         ClinicPetOwner owner = clinicPetOwnerRepository.findByUuidAndClinic_IdAndIsActiveTrue(ownerUuid, clinic.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("owner", "uuid", ownerUuid));
 
-        if (owner.getLinkedUser() != null || activePetCount(owner) > 0) {
+        if (owner.getLinkedUser() != null) {
             requirePetConsentVerified(clinic, owner, request.name());
         }
 

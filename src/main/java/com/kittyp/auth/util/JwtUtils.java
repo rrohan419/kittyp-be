@@ -2,16 +2,22 @@ package com.kittyp.auth.util;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.Set;
+
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import com.kittyp.auth.config.UserDetailsImpl;
 import com.kittyp.common.constants.ExceptionConstant;
+import com.kittyp.common.constants.KeyConstant;
 import com.kittyp.common.exception.TokenException;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.UnsupportedJwtException;
@@ -30,6 +36,9 @@ public class JwtUtils {
     
     @Value("${jwt.expiration}")
     private int jwtExpirationMs;
+
+    @Value("${jwt.refresh-expiration}")
+    private long refreshTokenExpirationMs;
     
     @Value("${jwt.audience}")
     private String audience;
@@ -44,46 +53,124 @@ public class JwtUtils {
     
 	public String generateJwtToken(Authentication authentication) {
         UserDetailsImpl userPrincipal = (UserDetailsImpl) authentication.getPrincipal();
-        return generateTokenFromEmail(userPrincipal.getEmail());
+        return generateTokenFromEmail(userPrincipal.getEmail(), jwtExpirationMs);
     }
 
-    public String generateTokenFromEmail(String email) {
+    public String generateTokenFromEmail(String email, int expirationMs) {
+        return generateToken(email, expirationMs, KeyConstant.ACCESS_TOKEN);
+    }
+
+    public String generateRefreshToken(String email) {
+        return generateToken(email, refreshTokenExpirationMs, KeyConstant.REFRESH_TOKEN);
+    }
+
+    public String generateToken(String email, long expirationMs, String tokenType) {
+
+        if (!StringUtils.hasText(email)) {
+            throw new IllegalArgumentException("Email must not be empty");
+        }
+
+        if (expirationMs <= 0) {
+            throw new IllegalArgumentException("Token expiration must be positive");
+        }
+
+        Date now = new Date();
         return Jwts.builder()
                 .setSubject(email)
                 .setAudience(audience)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
+                .setExpiration(new Date((new Date()).getTime() + expirationMs))
+                .claim(KeyConstant.TOKEN_TYPE_CLAIM, tokenType)
                 .signWith(key(), SignatureAlgorithm.HS256)
                 .compact();
     }
-    
+
+    public Claims getClaimsFromJwtToken(String token) {
+        if (!StringUtils.hasText(token)) {
+            throw new IllegalArgumentException("JWT token must not be empty");
+        }
+
+        return Jwts.parserBuilder()
+                .setSigningKey(key())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
     public String getUserNameFromJwtToken(String token) {
         try {
-            return Jwts.parserBuilder()
-                    .setSigningKey(key())
-                    .build()
-                    .parseClaimsJws(token)
-                    .getBody()
-                    .getSubject();
+            return getClaimsFromJwtToken(token).getSubject();
         } catch (Exception e) {
-            throw new TokenException(env.getProperty(ExceptionConstant.ERROR_USERNAME_EXTRACTION), e);
+            throw new TokenException(
+                    env.getProperty(ExceptionConstant.ERROR_USERNAME_EXTRACTION), e);
         }
+    }
+
+    public boolean isRefreshToken(String token) {
+        try {
+            Claims claims = getClaimsFromJwtToken(token);
+
+            return KeyConstant.REFRESH_TOKEN.equals(
+                    claims.get(KeyConstant.TOKEN_TYPE_CLAIM, String.class))
+                    && isAudienceValid(claims);
+        } catch (Exception e) {
+            logger.debug("Refresh token validation failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean isAccessToken(String token) {
+        try {
+            Claims claims = getClaimsFromJwtToken(token);
+
+            return KeyConstant.ACCESS_TOKEN.equals(
+                    claims.get(KeyConstant.TOKEN_TYPE_CLAIM, String.class))
+                    && isAudienceValid(claims);
+        } catch (Exception e) {
+            logger.debug("Access token validation failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    public Date getTokenExpiration(String token) {
+        return getClaimsFromJwtToken(token).getExpiration();
+    }
+
+    private boolean isAudienceValid(Claims claims) {
+        if (!StringUtils.hasText(audience)) {
+            return true;
+        }
+
+        Object tokenAudience = claims.getAudience();
+
+        // JJWT versions may expose the audience claim as a string or set.
+        if (tokenAudience instanceof String) {
+            return audience.equals(tokenAudience);
+        }
+
+        if (tokenAudience instanceof Set<?>) {
+            return ((Set<?>) tokenAudience).contains(audience);
+        }
+
+        return false;
     }
     
     public boolean validateJwtToken(String authToken) {
         try {
-            var claims = Jwts.parserBuilder()
-                .setSigningKey(key())
-                .build()
-                .parseClaimsJws(authToken)
-                .getBody();
-            if (audience != null && !audience.isBlank()) {
-                String tokenAudience = claims.getAudience();
-                if (tokenAudience == null || !audience.equals(tokenAudience)) {
-                    logger.error("JWT audience mismatch");
-                    throw new TokenException("Invalid JWT audience");
-                }
+
+            Claims claims = getClaimsFromJwtToken(authToken);
+
+            if (!isAudienceValid(claims)) {
+                logger.warn("JWT audience mismatch");
+                throw new TokenException("Invalid JWT audience");
             }
+
+            if (!KeyConstant.ACCESS_TOKEN.equals(
+                    claims.get(KeyConstant.TOKEN_TYPE_CLAIM, String.class))) {
+                logger.warn("Token is not an access token");
+                throw new TokenException("Invalid token type");
+            }
+
             return true;
         } catch (MalformedJwtException e) {
             logger.error("Invalid JWT token: {}", e.getMessage());

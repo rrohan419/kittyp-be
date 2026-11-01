@@ -26,6 +26,7 @@ public class ApiUrl {
 	public static final String SIGNIN = AUTH_BASE_URL + "/signin";
 	public static final String SOCIAL_SSO = AUTH_BASE_URL + "/social-sso";
 	public static final String SEND_CODE = AUTH_BASE_URL + "/send-code";
+	public static final String REFRESH_CODE = AUTH_BASE_URL + "/refresh";
 	public static final String VERIFY_CODE = AUTH_BASE_URL + "/verify-code";
 	public static final String USER_PASSWORD_RESET = AUTH_BASE_URL + "/password-reset";
 
