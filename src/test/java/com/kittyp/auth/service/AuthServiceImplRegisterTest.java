@@ -86,6 +86,7 @@ class AuthServiceImplRegisterTest {
 				roleDao,
 				null,
 				null,
+				null,
 				zeptoMailService,
 				null,
 				clinicDao,

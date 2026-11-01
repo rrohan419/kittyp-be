@@ -42,7 +42,8 @@ class AuthSignupHttpTest {
 		authService = Mockito.mock(AuthService.class);
 		UserService userService = Mockito.mock(UserService.class);
 		ApiResponse<?> responseBuilder = new ApiResponse<>();
-		AuthController controller = new AuthController(authService, responseBuilder, userService);
+		AuthController controller = new AuthController(authService, responseBuilder, userService,
+				Mockito.mock(com.kittyp.auth.util.RefreshTokenCookie.class));
 		GlobalExceptionHandler advice = new GlobalExceptionHandler(responseBuilder);
 
 		LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();

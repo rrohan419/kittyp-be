@@ -74,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
 	private final RoleDao roleDao;
 	private final AuthenticationManager authenticationManager;
 	private final JwtUtils jwtUtils;
+	private final RefreshTokenService refreshTokenService;
 	private final ZeptoMailService zeptoMailService;
 	private final GoogleOAuth2Service googleOAuth2Service;
 	private final ClinicDao clinicDao;
@@ -485,7 +486,7 @@ public class AuthServiceImpl implements AuthService {
 			String accessToken = jwtUtils.generateJwtToken(authentication);
 
 			UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-			String refreshToken = jwtUtils.generateRefreshToken(userDetails.getEmail());
+			String refreshToken = refreshTokenService.issue(userDao.userByEmail(userDetails.getEmail()));
 			List<String> roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
 
 			// Late clinic CRM link: parent may have been registered at a clinic months ago.
@@ -558,7 +559,7 @@ public class AuthServiceImpl implements AuthService {
 
 			SecurityContextHolder.getContext().setAuthentication(authentication);
 			String accessToken = jwtUtils.generateJwtToken(authentication);
-			String refreshToken = jwtUtils.generateRefreshToken(userDetails.getEmail());
+			String refreshToken = refreshTokenService.issue(existingUser);
 			List<String> roles = userDetails.getAuthorities().stream()
 					.map(GrantedAuthority::getAuthority)
 					.toList();
@@ -574,21 +575,8 @@ public class AuthServiceImpl implements AuthService {
 	@Override
 	public JwtResponseModel refreshAccessToken(String refreshToken) {
 
-		if (!jwtUtils.isRefreshToken(refreshToken)) {
-			throw new CustomException(
-					"Invalid or expired refresh token",
-					HttpStatus.UNAUTHORIZED);
-		}
-
-		String email = jwtUtils.getUserNameFromJwtToken(refreshToken);
-
-		User user = userDao.userByEmail(email);
-
-		if (user == null) {
-			throw new CustomException(
-					"User not found",
-					HttpStatus.UNAUTHORIZED);
-		}
+		RefreshTokenService.Rotation rotation = refreshTokenService.rotate(refreshToken);
+		User user = rotation.user();
 
 		UserDetailsImpl userDetails = (UserDetailsImpl) UserDetailsImpl.build(user);
 
@@ -599,7 +587,7 @@ public class AuthServiceImpl implements AuthService {
 				userDetails.getAuthorities());
 
 		String newAccessToken = jwtUtils.generateJwtToken(authentication);
-		String newRefreshToken = jwtUtils.generateRefreshToken(userDetails.getEmail());
+		String newRefreshToken = rotation.refreshToken();
 		List<String> roles = userDetails.getAuthorities()
 				.stream()
 				.map(GrantedAuthority::getAuthority)
@@ -612,6 +600,11 @@ public class AuthServiceImpl implements AuthService {
 				userDetails.getUuid(),
 				userDetails.getEmail(),
 				roles);
+	}
+
+	@Override
+	public void logout(String refreshToken) {
+		refreshTokenService.revoke(refreshToken);
 	}
 
 }
