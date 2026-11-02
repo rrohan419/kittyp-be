@@ -27,6 +27,7 @@ public class ApiUrl {
 	public static final String SOCIAL_SSO = AUTH_BASE_URL + "/social-sso";
 	public static final String SEND_CODE = AUTH_BASE_URL + "/send-code";
 	public static final String REFRESH_CODE = AUTH_BASE_URL + "/refresh";
+	public static final String LOGOUT = AUTH_BASE_URL + "/logout";
 	public static final String VERIFY_CODE = AUTH_BASE_URL + "/verify-code";
 	public static final String USER_PASSWORD_RESET = AUTH_BASE_URL + "/password-reset";
 
@@ -209,6 +210,8 @@ public class ApiUrl {
 	public static final String CLINIC_INVENTORY_MOVEMENTS = CLINIC_INVENTORY + "/movements";
 	public static final String CLINIC_INVENTORY_ITEM = CLINIC_INVENTORY + "/{itemUuid}";
 	public static final String CLINIC_INVENTORY_STOCK = CLINIC_INVENTORY_ITEM + "/stock";
+	public static final String CLINIC_INVENTORY_BATCHES = CLINIC_INVENTORY_ITEM + "/batches";
+	public static final String CLINIC_INVENTORY_BATCH = CLINIC_INVENTORY_BATCHES + "/{batchUuid}";
 	public static final String CLINIC_INVOICES = CLINIC_BY_UUID + "/invoices";
 	public static final String CLINIC_INVOICE_BY_UUID = CLINIC_INVOICES + "/{invoiceUuid}";
 	public static final String CLINIC_INVOICE_GENERATE_PDF = CLINIC_INVOICE_BY_UUID + "/generate-pdf";

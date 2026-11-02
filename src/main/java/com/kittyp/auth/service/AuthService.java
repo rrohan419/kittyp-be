@@ -34,4 +34,6 @@ public interface AuthService {
 	JwtResponseModel googleUserSignin(SocialSso socialSso);
 
 	JwtResponseModel refreshAccessToken(String refreshToken);
+
+	void logout(String refreshToken);
 }

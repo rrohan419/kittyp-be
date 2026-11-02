@@ -57,4 +57,9 @@ public class ClinicInventoryReservation extends BaseEntity implements HasPublicI
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private InventoryReservationStatus status;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id")
+    private ClinicInventoryBatch batch;
+
 }

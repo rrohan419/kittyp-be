@@ -5,6 +5,7 @@ package com.kittyp.auth.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,11 +15,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-import com.kittyp.auth.dto.RefreshTokenRequest;
 import com.kittyp.auth.dto.SignupOtpSendRequest;
 import com.kittyp.auth.dto.SignupOtpVerifyRequest;
 import com.kittyp.auth.dto.SocialSso;
 import com.kittyp.auth.service.AuthService;
+import com.kittyp.auth.util.RefreshTokenCookie;
+import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.common.constants.ResponseMessage;
 import com.kittyp.common.dto.ApiResponse;
@@ -34,6 +36,7 @@ import com.kittyp.user.dto.UpdatePasswordDto;
 import com.kittyp.user.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
@@ -48,13 +51,16 @@ public class AuthController {
 	private final AuthService authService;
 	private final ApiResponse<?> responseBuilder;
 	private final UserService userService;
+	private final RefreshTokenCookie refreshTokenCookie;
 
 	@PostMapping(ApiUrl.SIGNIN)
 	public ResponseEntity<SuccessResponse<JwtResponseModel>> authenticateUser(
 			@Valid @RequestBody LoginRequestDto loginRequest,
-			HttpServletRequest request) {
+			HttpServletRequest request,
+			HttpServletResponse httpResponse) {
 
 		JwtResponseModel response = authService.loginUser(loginRequest, ClientIp.from(request));
+		refreshTokenCookie.write(httpResponse, response.getRefreshToken());
 
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
@@ -105,8 +111,10 @@ public class AuthController {
 	}
 
 	@PostMapping(ApiUrl.SOCIAL_SSO)
-	public ResponseEntity<SuccessResponse<JwtResponseModel>> socialSso(@RequestBody SocialSso socialSso) {
+	public ResponseEntity<SuccessResponse<JwtResponseModel>> socialSso(@RequestBody SocialSso socialSso,
+			HttpServletResponse httpResponse) {
 		JwtResponseModel response = authService.googleUserSignin(socialSso);
+		refreshTokenCookie.write(httpResponse, response.getRefreshToken());
 		return responseBuilder.buildSuccessResponse(response, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 
@@ -135,13 +143,34 @@ public class AuthController {
 
 	@PostMapping(ApiUrl.REFRESH_CODE)
 	public ResponseEntity<SuccessResponse<JwtResponseModel>> refreshToken(
-			@Valid @RequestBody RefreshTokenRequest request) {
+			@CookieValue(name = RefreshTokenCookie.NAME, required = false) String refreshToken,
+			HttpServletResponse httpResponse) {
 
-		JwtResponseModel response = authService.refreshAccessToken(request.getRefreshToken());
+		JwtResponseModel response;
+		try {
+			response = authService.refreshAccessToken(refreshToken);
+		} catch (CustomException ex) {
+			refreshTokenCookie.clear(httpResponse);
+			throw ex;
+		}
+
+		// Null when a concurrent refresh already delivered the new cookie.
+		if (response.getRefreshToken() != null) {
+			refreshTokenCookie.write(httpResponse, response.getRefreshToken());
+		}
 
 		return responseBuilder.buildSuccessResponse(
 				response,
 				ResponseMessage.SUCCESS,
 				HttpStatus.OK);
+	}
+
+	@PostMapping(ApiUrl.LOGOUT)
+	public ResponseEntity<SuccessResponse<Boolean>> logout(
+			@CookieValue(name = RefreshTokenCookie.NAME, required = false) String refreshToken,
+			HttpServletResponse httpResponse) {
+		authService.logout(refreshToken);
+		refreshTokenCookie.clear(httpResponse);
+		return responseBuilder.buildSuccessResponse(true, ResponseMessage.SUCCESS, HttpStatus.OK);
 	}
 }

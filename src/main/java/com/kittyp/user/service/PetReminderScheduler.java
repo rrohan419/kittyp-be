@@ -13,7 +13,7 @@ public class PetReminderScheduler {
 
     private final PetReminderService petReminderService;
 
-    @Scheduled(fixedDelayString = "${kittyp.reminders.check-ms:900000}")
+    @Scheduled(cron = "${kittyp.reminders.cron:0 0 10 * * *}", zone = "${kittyp.reminders.zone:Asia/Kolkata}")
     public void processDue() {
         int sent = petReminderService.processDueReminders();
         if (sent > 0) {

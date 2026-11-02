@@ -5,5 +5,7 @@ public enum InventoryMovementAction {
     ADJUST,
     CONSUME,
     RESERVE,
-    RELEASE
+    RELEASE,
+    RECEIVE,
+    REVIEW
 }

@@ -3,7 +3,7 @@ package com.kittyp.auth.util;
 import java.security.Key;
 import java.util.Date;
 import java.util.Set;
-
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -78,11 +78,16 @@ public class JwtUtils {
         return Jwts.builder()
                 .setSubject(email)
                 .setAudience(audience)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date((new Date()).getTime() + expirationMs))
+                .setId(UUID.randomUUID().toString())
+                .setIssuedAt(now)
+                .setExpiration(new Date(now.getTime() + expirationMs))
                 .claim(KeyConstant.TOKEN_TYPE_CLAIM, tokenType)
                 .signWith(key(), SignatureAlgorithm.HS256)
                 .compact();
+    }
+
+    public long getRefreshTokenExpirationMs() {
+        return refreshTokenExpirationMs;
     }
 
     public Claims getClaimsFromJwtToken(String token) {

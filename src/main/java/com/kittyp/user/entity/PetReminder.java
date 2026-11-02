@@ -58,5 +58,10 @@ public class PetReminder extends BaseEntity {
     @Builder.Default
     private Boolean whatsappEnabled = true;
 
+    /** Set once the final (1-day-before) reminder has gone out. */
     private LocalDateTime sentAt;
+
+    private LocalDateTime sevenDaySentAt;
+
+    private LocalDateTime oneDaySentAt;
 }
