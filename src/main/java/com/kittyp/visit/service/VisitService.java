@@ -8,6 +8,7 @@ import com.kittyp.clinic.dto.ClinicDtos.BookingModel;
 import com.kittyp.common.model.PaginationModel;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
 import com.kittyp.visit.dto.VisitDtos.ParentBookingCreateRequest;
+import com.kittyp.visit.dto.VisitDtos.PrescriptionFirstRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingCreateRequest;
 import com.kittyp.visit.dto.VisitDtos.ScheduleBookingPatchRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
@@ -57,6 +58,9 @@ public interface VisitService {
     VisitModel startVisit(String visitUuid, String email);
 
     VisitModel saveChart(String visitUuid, VisitChartRequest request, String email);
+
+    /** Create walk-in visit in background and save chart on it (prescription-first). */
+    VisitModel createPrescriptionFirst(PrescriptionFirstRequest request, String email);
 
     VisitModel completeVisit(String visitUuid, String email);
 
