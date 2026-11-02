@@ -45,6 +45,8 @@ import com.kittyp.user.entity.User;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.PrescriptionFirstRequest;
+import com.kittyp.visit.dto.VisitDtos.WalkInOwnerRequest;
+import com.kittyp.visit.dto.VisitDtos.WalkInPetRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
 import com.kittyp.visit.entity.Visit;
@@ -194,5 +196,48 @@ class VisitServiceImplPrescriptionFirstTest {
 
         assertNotEquals("visit-old", model.uuid());
         assertNull(candidate.getPlan());
+    }
+
+    @Test
+    void createsNewPetWithoutOwnerPhone() {
+        AtomicReference<ClinicPetOwner> newOwner = new AtomicReference<>();
+        AtomicReference<Pet> newPet = new AtomicReference<>();
+        when(clinicPetOwnerRepository.findByClinic_IdAndEmailIgnoreCaseAndIsActiveTrue(10L, "new@example.com"))
+                .thenReturn(Optional.empty());
+        when(clinicPetOwnerRepository.save(any(ClinicPetOwner.class))).thenAnswer(inv -> {
+            ClinicPetOwner owner = inv.getArgument(0);
+            newOwner.set(owner);
+            return owner;
+        });
+        when(clinicOwnerUserLinkService.linkOwnerIfUserExists(any(ClinicPetOwner.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(petsRepository.save(any(Pet.class))).thenAnswer(inv -> {
+            Pet savedPet = inv.getArgument(0);
+            savedPet.setUuid("pet-new");
+            newPet.set(savedPet);
+            return savedPet;
+        });
+        when(clinicPetEnrollmentRepository.findByClinic_IdAndPet_UuidAndIsActiveTrue(10L, "pet-new"))
+                .thenAnswer(inv -> Optional.of(ClinicPetEnrollment.builder()
+                        .clinic(clinic)
+                        .pet(newPet.get())
+                        .clinicOwner(newOwner.get())
+                        .build()));
+        when(visitDao.findByPetAndClinic("pet-new", 10L)).thenReturn(List.of());
+
+        PrescriptionFirstRequest request = new PrescriptionFirstRequest(
+                "clinic-1",
+                null,
+                new WalkInOwnerRequest("New", null, "new@example.com", null, null),
+                new WalkInPetRequest("Milo", "CAT", null, null, null, null),
+                "checkup",
+                VisitUrgency.ROUTINE,
+                false,
+                chart);
+
+        VisitModel model = visitService.createPrescriptionFirst(request, "doc@example.com");
+
+        assertEquals("pet-new", model.petUuid());
+        assertNull(newOwner.get().getPhone());
     }
 }

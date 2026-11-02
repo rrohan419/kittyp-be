@@ -1444,7 +1444,7 @@ public class VisitServiceImpl implements VisitService {
 
         String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(ownerReq.email());
         String phoneDigits = ClinicOwnerUserLinkService.normalizePhoneDigits(ownerReq.phone());
-        if (phoneDigits == null || !phoneDigits.matches("\\d{10}")) {
+        if (phoneDigits != null && !phoneDigits.matches("\\d{10}")) {
             throw new CustomException("Owner phone must be a valid 10-digit number", HttpStatus.BAD_REQUEST);
         }
 
@@ -1466,7 +1466,9 @@ public class VisitServiceImpl implements VisitService {
             if (ownerReq.lastName() != null) {
                 owner.setLastName(ownerReq.lastName().trim());
             }
-            owner.setPhone(phoneDigits);
+            if (phoneDigits != null) {
+                owner.setPhone(phoneDigits);
+            }
             if (ownerReq.address() != null && !ownerReq.address().isBlank()) {
                 owner.setAddress(ownerReq.address().trim());
             }
