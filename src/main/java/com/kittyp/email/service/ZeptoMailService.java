@@ -58,6 +58,14 @@ public interface ZeptoMailService {
 
 	void sendClinicProfileRejected(String email, String customerName, String clinicName, String rejectionReason);
 
+	/**
+	 * Pet reminder email. Uses the vaccine template when {@code vaccine} is true, otherwise the generic template
+	 * (skipped if not configured).
+	 */
+	void sendPetReminderEmail(boolean vaccine, String recipientEmail, String customerName, String petName,
+			String clinicName, String clinicPhone, String clinicAddress, String doctorName, String reminderName,
+			String reminderTitle, String reminderMessage, String reminderDate, String reminderTime);
+
 	void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
 			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename);
 }

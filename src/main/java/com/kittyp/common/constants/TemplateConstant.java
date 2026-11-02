@@ -30,6 +30,8 @@ public class TemplateConstant {
 	public static final String ZOHO_CLINIC_PROFILE_VERIFIED_TEMPLATE_ID = "zoho.clinic.profile.verified.template.id";
 	public static final String ZOHO_CLINIC_PROFILE_REJECTED_TEMPLATE_ID = "zoho.clinic.profile.rejected.template.id";
 	public static final String ZOHO_TREATMENT_INVOICE_EMAIL_TEMPLATE_ID = "zoho.treatment.invoice.email.template.id";
+	public static final String ZEPTO_PET_VACCINE_REMINDER_EMAIL_TEMPLATE_ID = "zoho.pet.vaccine.reminder.email.template.id";
+	public static final String ZEPTO_PET_GENERIC_REMINDER_EMAIL_TEMPLATE_ID = "zoho.pet.generic.reminder.email.template.id";
 	public static final String ZOHO_CONTACT_ADMIN_EMAIL_TEMPLATE_ID = "zoho.contact.admin.email.template.id";
 	public static final String ZOHO_CONTACT_ACK_EMAIL_TEMPLATE_ID = "zoho.contact.ack.email.template.id";
 }

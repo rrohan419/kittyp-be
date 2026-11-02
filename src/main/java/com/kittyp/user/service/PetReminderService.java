@@ -1,6 +1,10 @@
 package com.kittyp.user.service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,6 +17,7 @@ import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
+import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.notification.service.OutboundMessageService;
 import com.kittyp.notification.service.WhatsAppSenderCredentials;
 import com.kittyp.user.dao.UserDao;
@@ -34,6 +39,10 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class PetReminderService {
 
+    private static final DateTimeFormatter EMAIL_DATE = DateTimeFormatter.ofPattern("dd MMM yyyy");
+    private static final DateTimeFormatter EMAIL_TIME = DateTimeFormatter.ofPattern("hh:mm a");
+
+    private final ZeptoMailService zeptoMailService;
     private final PetReminderRepository petReminderRepository;
     private final PetsRepository petsRepository;
     private final ClinicPetEnrollmentRepository clinicPetEnrollmentRepository;
@@ -84,6 +93,8 @@ public class PetReminderService {
         if (request.dueAt() != null) {
             reminder.setDueAt(request.dueAt());
             reminder.setSentAt(null);
+            reminder.setSevenDaySentAt(null);
+            reminder.setOneDaySentAt(null);
         }
         if (request.note() != null) {
             reminder.setNote(blankToNull(request.note()));
@@ -111,12 +122,27 @@ public class PetReminderService {
 
     @Transactional
     public int processDueReminders() {
-        List<PetReminder> due = petReminderRepository.findDueUnsent(LocalDateTime.now());
+        LocalDate today = LocalDate.now();
+        List<PetReminder> candidates = petReminderRepository.findPendingBetween(
+                today.atStartOfDay(), today.plusDays(8).atStartOfDay());
         int sent = 0;
-        for (PetReminder reminder : due) {
+        for (PetReminder reminder : candidates) {
+            long daysLeft = ChronoUnit.DAYS.between(today, reminder.getDueAt().toLocalDate());
+            boolean oneDay = daysLeft <= 1;
+            boolean sevenDay = daysLeft == 7;
+
+            if (oneDay ? reminder.getOneDaySentAt() != null : reminder.getSevenDaySentAt() != null) {
+                continue;
+            }
             try {
-                dispatch(reminder);
-                reminder.setSentAt(LocalDateTime.now());
+                dispatch(reminder, oneDay ? "tomorrow" : "in " + daysLeft + " days");
+                LocalDateTime now = LocalDateTime.now();
+                if (oneDay) {
+                    reminder.setOneDaySentAt(now);
+                    reminder.setSentAt(now);
+                } else {
+                    reminder.setSevenDaySentAt(now);
+                }
                 petReminderRepository.save(reminder);
                 sent++;
             } catch (Exception e) {
@@ -126,7 +152,7 @@ public class PetReminderService {
         return sent;
     }
 
-    private void dispatch(PetReminder reminder) {
+    private void dispatch(PetReminder reminder, String whenLabel) {
         User user = reminder.getUser();
         Pet pet = reminder.getPet();
         String petName = pet != null ? pet.getName() : "your pet";
@@ -134,11 +160,13 @@ public class PetReminderService {
         String title = "Pet " + typeLabel + " reminder";
         String body = reminder.getNote() != null && !reminder.getNote().isBlank()
                 ? reminder.getNote()
-                : String.format("%s has a %s due now", petName, typeLabel);
+                : String.format("%s has a %s due %s", petName, typeLabel, whenLabel);
 
         if (Boolean.TRUE.equals(reminder.getPushEnabled()) && user.getEmail() != null) {
             userService.sendPushNotification(user.getEmail(), title, body);
         }
+
+        sendEmail(reminder, user, pet, petName, typeLabel);
 
         if (Boolean.TRUE.equals(reminder.getWhatsappEnabled()) && user.getPhoneNumber() != null) {
             WhatsAppSenderCredentials sender = resolveSender(pet);
@@ -155,6 +183,48 @@ public class PetReminderService {
                 }
             }
         }
+    }
+
+    private void sendEmail(PetReminder reminder, User user, Pet pet, String petName, String typeLabel) {
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            return;
+        }
+        try {
+            Clinic clinic = resolveClinic(pet);
+            boolean vaccine = reminder.getType() == PetReminderType.VACCINATION
+                    || reminder.getType() == PetReminderType.INJECTION;
+            boolean hasNote = reminder.getNote() != null && !reminder.getNote().isBlank();
+            String reminderName = hasNote ? reminder.getNote() : typeLabel;
+            String title = Character.toUpperCase(typeLabel.charAt(0)) + typeLabel.substring(1) + " reminder";
+            String message = hasNote ? reminder.getNote()
+                    : String.format("%s has a %s due on %s", petName, typeLabel,
+                            reminder.getDueAt().format(EMAIL_DATE));
+            // Midnight means the owner only picked a date.
+            String time = reminder.getDueAt().toLocalTime().equals(LocalTime.MIDNIGHT) ? ""
+                    : reminder.getDueAt().format(EMAIL_TIME);
+            String address = clinic == null ? null
+                    : java.util.stream.Stream.of(clinic.getAddress(), clinic.getCity())
+                            .filter(s -> s != null && !s.isBlank())
+                            .collect(java.util.stream.Collectors.joining(", "));
+            zeptoMailService.sendPetReminderEmail(vaccine, user.getEmail(), user.getFirstName(), petName,
+                    clinic == null ? null : clinic.getName(),
+                    clinic == null ? null : clinic.getPhone(),
+                    address,
+                    null, // TODO: doctor name is not tracked on reminders yet
+                    reminderName, title, message,
+                    reminder.getDueAt().format(EMAIL_DATE),
+                    time);
+        } catch (Exception e) {
+            log.warn("Reminder email failed for {}: {}", reminder.getUuid(), e.getMessage());
+        }
+    }
+
+    private Clinic resolveClinic(Pet pet) {
+        if (pet == null) {
+            return null;
+        }
+        List<ClinicPetEnrollment> enrollments = clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId());
+        return enrollments.size() == 1 ? enrollments.get(0).getClinic() : null;
     }
 
     private WhatsAppSenderCredentials resolveSender(Pet pet) {
