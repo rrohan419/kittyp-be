@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kittyp.clinic.dto.ClinicInventoryDtos.BatchReceiptRequest;
+import com.kittyp.clinic.dto.ClinicInventoryDtos.BatchReviewRequest;
+import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryBatchModel;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryEditAccess;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemModel;
 import com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryItemRequest;
@@ -96,6 +99,28 @@ public class ClinicInventoryController {
     public ResponseEntity<SuccessResponse<InventoryItemModel>> adjustStock(@PathVariable String uuid,
             @PathVariable String itemUuid, @Valid @RequestBody StockAdjustmentRequest request) {
         return success(inventoryService.adjustStock(uuid, itemUuid, request, email()));
+    }
+
+    @GetMapping(ApiUrl.CLINIC_INVENTORY_BATCHES)
+    @PreAuthorize(CLINIC_ACCESS)
+    public ResponseEntity<SuccessResponse<List<InventoryBatchModel>>> batches(@PathVariable String uuid,
+            @PathVariable String itemUuid, @RequestParam(defaultValue = "false") boolean includeEmpty) {
+        return success(inventoryService.listBatches(uuid, itemUuid, includeEmpty, email()));
+    }
+
+    @PostMapping(ApiUrl.CLINIC_INVENTORY_BATCHES)
+    @PreAuthorize(INVENTORY_EDITORS)
+    public ResponseEntity<SuccessResponse<InventoryBatchModel>> receiveBatch(@PathVariable String uuid,
+            @PathVariable String itemUuid, @Valid @RequestBody BatchReceiptRequest request) {
+        return success(inventoryService.receiveBatch(uuid, itemUuid, request, email()));
+    }
+
+    @PatchMapping(ApiUrl.CLINIC_INVENTORY_BATCH)
+    @PreAuthorize(INVENTORY_EDITORS)
+    public ResponseEntity<SuccessResponse<InventoryBatchModel>> reviewBatch(@PathVariable String uuid,
+            @PathVariable String itemUuid, @PathVariable String batchUuid,
+            @Valid @RequestBody BatchReviewRequest request) {
+        return success(inventoryService.reviewBatch(uuid, itemUuid, batchUuid, request, email()));
     }
 
     @DeleteMapping(ApiUrl.CLINIC_INVENTORY_ITEM)

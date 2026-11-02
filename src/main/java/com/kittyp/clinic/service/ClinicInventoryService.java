@@ -27,5 +27,14 @@ public interface ClinicInventoryService {
 
     void delete(String clinicUuid, String itemUuid, String email);
 
+    List<com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryBatchModel> listBatches(String clinicUuid, String itemUuid,
+            boolean includeEmpty, String email);
+
+    com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryBatchModel receiveBatch(String clinicUuid, String itemUuid,
+            com.kittyp.clinic.dto.ClinicInventoryDtos.BatchReceiptRequest request, String email);
+
+    com.kittyp.clinic.dto.ClinicInventoryDtos.InventoryBatchModel reviewBatch(String clinicUuid, String itemUuid,
+            String batchUuid, com.kittyp.clinic.dto.ClinicInventoryDtos.BatchReviewRequest request, String email);
+
     InventoryEditAccess editAccess(String clinicUuid, String email);
 }

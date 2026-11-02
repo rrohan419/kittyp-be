@@ -20,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 
+import com.kittyp.auth.service.RefreshTokenService;
 import com.kittyp.auth.util.JwtUtils;
 import com.kittyp.clinic.service.ClinicOwnerUserLinkService;
 import com.kittyp.common.exception.CustomException;
@@ -67,6 +68,7 @@ public class UserServiceImpl implements UserService {
 	private final FcmPushNotificationService fcmPushNotificationService;
 	private final UserFcmTokenDao fcmTokenDao;
 	private final JwtUtils jwtUtils;
+	private final RefreshTokenService refreshTokenService;
 	private final SmsService smsService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 
@@ -358,6 +360,7 @@ public class UserServiceImpl implements UserService {
 		if (verified) {
 			user.setPassword(encoder.encode(updatePasswordDto.getPassword()));
 			userDao.saveUser(user);
+			refreshTokenService.revokeAllForUser(user.getId());
 			logger.info("Password updated successfully for user UUID: {}", user.getUuid());
 			return true;
 		}

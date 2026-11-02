@@ -431,6 +431,32 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
+	public void sendPetReminderEmail(boolean vaccine, String recipientEmail, String customerName, String petName,
+			String clinicName, String clinicPhone, String clinicAddress, String doctorName, String reminderName,
+			String reminderTitle, String reminderMessage, String reminderDate, String reminderTime) {
+		String name = blankToDefault(customerName, "there");
+		Map<String, Object> merge = new HashMap<>();
+		merge.put("customer_name", name);
+		merge.put("pet_name", blankToDefault(petName, "your pet"));
+		merge.put("clinic_name", blankToDefault(clinicName, "KittyP"));
+		merge.put("clinic_phone", blankToDefault(clinicPhone, ""));
+		merge.put("doctor_name", blankToDefault(doctorName, "your veterinarian"));
+		merge.put("reminder_date", blankToDefault(reminderDate, ""));
+		if (vaccine) {
+			merge.put("vaccine_name", blankToDefault(reminderName, "reminder"));
+		} else {
+			merge.put("clinic_address", blankToDefault(clinicAddress, ""));
+			merge.put("reminder_title", blankToDefault(reminderTitle, "Reminder"));
+			merge.put("reminder_message", blankToDefault(reminderMessage, ""));
+			merge.put("reminder_time", blankToDefault(reminderTime, ""));
+		}
+		sendDedicated(recipientEmail, name,
+				vaccine ? TemplateConstant.ZEPTO_PET_VACCINE_REMINDER_EMAIL_TEMPLATE_ID
+						: TemplateConstant.ZEPTO_PET_GENERIC_REMINDER_EMAIL_TEMPLATE_ID,
+				merge);
+	}
+
+	@Override
 	public void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
 			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename) {
 		if (email == null || email.isBlank()) {

@@ -1,7 +1,11 @@
 package com.kittyp.clinic.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,7 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.clinic.entity.Clinic;
+import com.kittyp.clinic.entity.ClinicInventoryAllocation;
+import com.kittyp.clinic.entity.ClinicInventoryBatch;
 import com.kittyp.clinic.entity.ClinicInventoryItem;
+import com.kittyp.clinic.repository.ClinicInventoryAllocationRepository;
 import com.kittyp.clinic.entity.ClinicInventoryMovement;
 import com.kittyp.clinic.entity.ClinicInventoryReservation;
 import com.kittyp.clinic.enums.InventoryMovementAction;
@@ -46,6 +53,8 @@ public class ClinicInventoryConsumptionService {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final Environment environment;
+    private final ClinicInventoryStockSupport stock;
+    private final ClinicInventoryAllocationRepository allocationRepository;
 
     /** Bind stocked lines to this clinic's catalog. Does not change quantities. */
     public void prepareLines(Clinic clinic, List<TreatmentLineItemDto> items) {
@@ -88,7 +97,10 @@ public class ClinicInventoryConsumptionService {
         }
     }
 
-    /** Hold stock for a draft. Does not reduce on-hand quantity. Short lines are left unreserved. */
+    /**
+     * Hold eligible (unexpired, reviewed) stock for a draft, FEFO across batches. Does not reduce on-hand
+     * quantity. Lines that cannot be fully covered by eligible stock are left unreserved.
+     */
     @Transactional
     public void reserveForDraft(ConsultationInvoice invoice) {
         if (invoice.getClinic() == null || invoice.getUuid() == null) {
@@ -102,32 +114,50 @@ public class ClinicInventoryConsumptionService {
         User actor = currentActor();
         int reservationMinutes = reservationMinutes();
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(reservationMinutes);
+        LocalDate today = LocalDate.now();
         for (TreatmentLineItemDto line : stockedLines(invoice)) {
             ClinicInventoryItem item = lockItem(invoice, line.getInventoryItemUuid());
             requireCategory(line.getItemType(), item);
             int units = requireWholeUnits(line.getQuantity(), item.getName());
-            int onHand = onHand(item);
-            int available = onHand - reservedNow(item.getUuid());
-            if (units > available) {
+            List<ClinicInventoryBatch> batches = stock.batches(item);
+            stock.ensureLegacyBatch(item, batches);
+            List<ClinicInventoryStockSupport.Slot> slots = stock.slots(item, batches, today);
+            if (units > slots.stream().mapToInt(ClinicInventoryStockSupport.Slot::available).sum()) {
                 continue;
             }
-            ClinicInventoryReservation reservation = ClinicInventoryReservation.builder()
-                    .clinic(invoice.getClinic())
-                    .itemUuid(item.getUuid())
-                    .invoiceUuid(invoice.getUuid())
-                    .invoiceNumber(invoice.getInvoiceNumber())
-                    .quantity(units)
-                    .expiresAt(expiresAt)
-                    .status(InventoryReservationStatus.ACTIVE)
-                    .build();
-            reservation.setIsActive(true);
-            reservationRepository.save(reservation);
-            record(invoice, item, actor, InventoryMovementAction.RESERVE, -units, onHand,
-                    "Reserved " + units + " for " + reservationMinutes + " minutes");
+            int left = units;
+            for (ClinicInventoryStockSupport.Slot slot : slots) {
+                if (left == 0) {
+                    break;
+                }
+                int take = Math.min(left, slot.available());
+                left -= take;
+                ClinicInventoryReservation reservation = ClinicInventoryReservation.builder()
+                        .clinic(invoice.getClinic())
+                        .itemUuid(item.getUuid())
+                        .invoiceUuid(invoice.getUuid())
+                        .invoiceNumber(invoice.getInvoiceNumber())
+                        .quantity(take)
+                        .expiresAt(expiresAt)
+                        .status(InventoryReservationStatus.ACTIVE)
+                        .batch(slot.batch())
+                        .build();
+                reservation.setIsActive(true);
+                reservationRepository.save(reservation);
+                stock.record(invoice.getClinic(), item, actor, InventoryMovementAction.RESERVE, -take,
+                        ClinicInventoryStockSupport.qty(slot.batch()),
+                        "Reserved " + take + " for " + reservationMinutes + " minutes (batch "
+                                + slot.batch().getBatchNumber() + ")",
+                        InventoryMovementSource.INVOICE, invoice.getUuid(), invoice.getInvoiceNumber(), slot.batch());
+            }
         }
     }
 
-    /** PDF generation and mark paid. An active hold is consumed without asking again. */
+    /**
+     * PDF generation and mark paid. Allocates FEFO from eligible batches (expired/unreviewed stock is never
+     * consumed), decrements batch quantities, records allocations and per-batch movements, and re-syncs the item
+     * aggregate. The invoice's own active holds are settled first; every other invoice's holds are respected.
+     */
     @Transactional
     public void consumeForIssue(ConsultationInvoice invoice) {
         if (invoice.getClinic() == null || invoice.getUuid() == null || alreadyConsumed(invoice)) {
@@ -135,36 +165,75 @@ public class ClinicInventoryConsumptionService {
         }
         releaseExpiredReservations();
         User actor = currentActor();
-        LocalDateTime now = LocalDateTime.now();
-        for (TreatmentLineItemDto line : stockedLines(invoice)) {
-            ClinicInventoryItem item = lockItem(invoice, line.getInventoryItemUuid());
-            requireCategory(line.getItemType(), item);
-            int units = requireWholeUnits(line.getQuantity(), item.getName());
-            int onHand = onHand(item);
-            Optional<ClinicInventoryReservation> found = reservationRepository
-                    .findFirstByInvoiceUuidAndItemUuidAndStatusAndExpiresAtAfter(invoice.getUuid(), item.getUuid(),
-                            InventoryReservationStatus.ACTIVE, now);
-            ClinicInventoryReservation hold = found == null ? null
-                    : found.filter(reservation -> reservation.getQuantity() != null && reservation.getQuantity() >= units)
-                            .orElse(null);
-            int held = hold == null || hold.getQuantity() == null ? 0 : hold.getQuantity();
-            int available = onHand - Math.max(0, reservedNow(item.getUuid()) - held);
-            int free = Math.max(available, 0);
-            if (units > free) {
-                String unit = item.getUnit() == null || item.getUnit().isBlank() ? "units" : item.getUnit();
-                throw new CustomException(
-                        "Only " + free + " " + item.getName() + " on hand. Add " + (units - free) + " " + unit
-                                + " in inventory before billing " + units + ".",
-                        HttpStatus.CONFLICT);
+        LocalDate today = LocalDate.now();
+        List<TreatmentLineItemDto> all = readItems(invoice.getLineItems());
+        Map<String, List<Integer>> linesByItem = new TreeMap<>();
+        for (int i = 0; i < all.size(); i++) {
+            TreatmentLineItemDto line = all.get(i);
+            if (isStocked(line.getItemType()) && blankToNull(line.getInventoryItemUuid()) != null) {
+                linesByItem.computeIfAbsent(line.getInventoryItemUuid().trim(), k -> new ArrayList<>()).add(i);
             }
-            int after = onHand - units;
-            item.setQuantity(after);
-            inventoryRepository.save(item);
-            if (hold != null) {
-                hold.setStatus(InventoryReservationStatus.CONSUMED);
-                reservationRepository.save(hold);
+        }
+        for (Map.Entry<String, List<Integer>> entry : linesByItem.entrySet()) { // sorted: stable lock order
+            ClinicInventoryItem item = lockItem(invoice, entry.getKey());
+            List<ClinicInventoryBatch> batches = stock.batches(item);
+            stock.ensureLegacyBatch(item, batches);
+            List<ClinicInventoryReservation> holds = reservationRepository.findByInvoiceUuidAndItemUuidAndStatus(
+                    invoice.getUuid(), item.getUuid(), InventoryReservationStatus.ACTIVE);
+            if (holds != null) {
+                for (ClinicInventoryReservation hold : holds) {
+                    boolean usable = hold.getBatch() == null
+                            || ClinicInventoryStockSupport.eligible(hold.getBatch(), today);
+                    hold.setStatus(usable ? InventoryReservationStatus.CONSUMED : InventoryReservationStatus.RELEASED);
+                    reservationRepository.save(hold);
+                }
             }
-            record(invoice, item, actor, InventoryMovementAction.CONSUME, -units, after, "Invoice consumption");
+            for (int index : entry.getValue()) {
+                TreatmentLineItemDto line = all.get(index);
+                requireCategory(line.getItemType(), item);
+                int units = requireWholeUnits(line.getQuantity(), item.getName());
+                List<ClinicInventoryStockSupport.Slot> slots = stock.slots(item, batches, today);
+                int free = slots.stream().mapToInt(ClinicInventoryStockSupport.Slot::available).sum();
+                if (units > free) {
+                    ClinicInventoryStockSupport.ItemStock s = ClinicInventoryStockSupport.summarize(item, batches,
+                            today, Map.of(), 0);
+                    String unit = item.getUnit() == null || item.getUnit().isBlank() ? "units" : item.getUnit();
+                    throw new CustomException("Only " + free + " eligible " + item.getName()
+                            + " available (not expired or awaiting expiry review)."
+                            + (s.expired() + s.unreviewed() > 0
+                                    ? " " + s.expired() + " expired and " + s.unreviewed() + " unreviewed " + unit
+                                            + " cannot be billed."
+                                    : "")
+                            + " Add stock or review expiry in inventory before billing " + units + ".",
+                            HttpStatus.CONFLICT);
+                }
+                int left = units;
+                for (ClinicInventoryStockSupport.Slot slot : slots) {
+                    if (left == 0) {
+                        break;
+                    }
+                    int take = Math.min(left, slot.available());
+                    left -= take;
+                    ClinicInventoryBatch batch = slot.batch();
+                    batch.setQuantityOnHand(ClinicInventoryStockSupport.qty(batch) - take);
+                    stock.saveBatch(batch);
+                    ClinicInventoryAllocation allocation = new ClinicInventoryAllocation();
+                    allocation.setClinic(invoice.getClinic());
+                    allocation.setInvoiceUuid(invoice.getUuid());
+                    allocation.setInvoiceLineIndex(index);
+                    allocation.setItem(item);
+                    allocation.setBatch(batch);
+                    allocation.setQuantity(take);
+                    allocation.setUnitCost(batch.getUnitCost() == null ? BigDecimal.ZERO : batch.getUnitCost());
+                    allocation.setIsActive(true);
+                    allocationRepository.save(allocation);
+                    stock.record(invoice.getClinic(), item, actor, InventoryMovementAction.CONSUME, -take,
+                            ClinicInventoryStockSupport.qty(batch),
+                            "Invoice consumption (batch " + batch.getBatchNumber() + ")",
+                            InventoryMovementSource.INVOICE, invoice.getUuid(), invoice.getInvoiceNumber(), batch);
+                }
+            }
+            stock.syncAggregate(item, batches);
         }
     }
 
@@ -186,7 +255,8 @@ public class ClinicInventoryConsumptionService {
         ClinicInventoryItem item = inventoryRepository
                 .findByUuidAndClinic_IdAndIsActiveTrue(reservation.getItemUuid(), reservation.getClinic().getId())
                 .orElse(null);
-        int onHand = item == null ? 0 : onHand(item);
+        int onHand = reservation.getBatch() != null ? ClinicInventoryStockSupport.qty(reservation.getBatch())
+                : item == null ? 0 : onHand(item);
         ClinicInventoryMovement movement = new ClinicInventoryMovement();
         movement.setClinic(reservation.getClinic());
         movement.setItemUuid(reservation.getItemUuid());
@@ -198,10 +268,10 @@ public class ClinicInventoryConsumptionService {
         movement.setSource(InventoryMovementSource.INVOICE);
         movement.setInvoiceUuid(reservation.getInvoiceUuid());
         movement.setInvoiceNumber(reservation.getInvoiceNumber());
+        movement.setBatch(reservation.getBatch());
         movement.setIsActive(true);
         movementRepository.save(movement);
     }
-
     static boolean isStocked(TreatmentInvoiceItemType itemType) {
         return itemType == TreatmentInvoiceItemType.MEDICINE
                 || itemType == TreatmentInvoiceItemType.CONSUMABLE
@@ -271,32 +341,8 @@ public class ClinicInventoryConsumptionService {
                 .orElseThrow(() -> new ResourceNotFoundException("clinic inventory item", "uuid", itemUuid));
     }
 
-    private int reservedNow(String itemUuid) {
-        return reservationRepository.sumActiveQuantity(itemUuid, InventoryReservationStatus.ACTIVE,
-                LocalDateTime.now());
-    }
-
     private static int onHand(ClinicInventoryItem item) {
         return item.getQuantity() == null ? 0 : item.getQuantity();
-    }
-
-    private void record(ConsultationInvoice invoice, ClinicInventoryItem item, User actor, InventoryMovementAction action,
-            int delta, int after, String note) {
-        ClinicInventoryMovement movement = new ClinicInventoryMovement();
-        movement.setClinic(invoice.getClinic());
-        movement.setItemUuid(item.getUuid());
-        movement.setItemName(item.getName());
-        movement.setActor(actor);
-        movement.setActorName(ClinicInventoryServiceImpl.displayName(actor));
-        movement.setAction(action);
-        movement.setQuantityDelta(delta);
-        movement.setQuantityAfter(after);
-        movement.setNote(note);
-        movement.setSource(InventoryMovementSource.INVOICE);
-        movement.setInvoiceUuid(invoice.getUuid());
-        movement.setInvoiceNumber(invoice.getInvoiceNumber());
-        movement.setIsActive(true);
-        movementRepository.save(movement);
     }
 
     private User currentActor() {

@@ -20,8 +20,9 @@ public interface PetReminderRepository extends JpaRepository<PetReminder, Long> 
             SELECT r FROM PetReminder r
             WHERE r.isActive = true
               AND r.sentAt IS NULL
-              AND r.dueAt <= :until
+              AND r.dueAt >= :from
+              AND r.dueAt < :until
             ORDER BY r.dueAt ASC
             """)
-    List<PetReminder> findDueUnsent(@Param("until") LocalDateTime until);
+    List<PetReminder> findPendingBetween(@Param("from") LocalDateTime from, @Param("until") LocalDateTime until);
 }
