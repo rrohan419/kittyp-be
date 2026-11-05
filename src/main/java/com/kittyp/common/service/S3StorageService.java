@@ -46,8 +46,6 @@ public class S3StorageService {
     @Value("${aws.user.bucket.name}")
     private String userBucket;
 
-    private final S3Client s3;
-
     private final S3Presigner s3Presigner;
 
     private final S3Client s3Client;
@@ -60,7 +58,7 @@ public class S3StorageService {
                     .key(key)
                     .contentType("application/pdf")
                     .build();
-            s3.putObject(put, RequestBody.fromBytes(pdfBytes));
+            s3Client.putObject(put, RequestBody.fromBytes(pdfBytes));
         } catch (Exception e) {
             log.error(
                     "Error generating invoice for order number : " + orderId + " with message ====> " + e.getMessage());
@@ -76,7 +74,7 @@ public class S3StorageService {
                     .key(objectKey)
                     .contentType("application/pdf")
                     .build();
-            s3.putObject(put, RequestBody.fromBytes(pdfBytes));
+            s3Client.putObject(put, RequestBody.fromBytes(pdfBytes));
         } catch (Exception e) {
             log.error("Error uploading treatment invoice {}: {}", objectKey, e.getMessage());
             throw new CustomException("Failed to upload treatment invoice PDF", HttpStatus.INTERNAL_SERVER_ERROR, e);
@@ -86,7 +84,7 @@ public class S3StorageService {
 
     public byte[] downloadTreatmentInvoice(String objectKey) {
         try {
-            ResponseBytes<GetObjectResponse> bytes = s3.getObjectAsBytes(GetObjectRequest.builder()
+            ResponseBytes<GetObjectResponse> bytes = s3Client.getObjectAsBytes(GetObjectRequest.builder()
                     .bucket(invoiceBucket)
                     .key(objectKey)
                     .build());
@@ -101,7 +99,7 @@ public class S3StorageService {
 
     public URL presignedTreatmentInvoiceUrl(String objectKey, Duration ttl) {
         try {
-            s3.headObject(HeadObjectRequest.builder()
+            s3Client.headObject(HeadObjectRequest.builder()
                     .bucket(invoiceBucket)
                     .key(objectKey)
                     .build());
@@ -160,7 +158,7 @@ public class S3StorageService {
     }
 
     private String uploadFile(String folder, String fileName, byte[] fileData, String contentType) {
-        String key = folder != null && !folder.isEmpty() ? folder + "/" + fileName : fileName;
+        String key = resolveFreeKey(folder, fileName);
 
         PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(userBucket)
@@ -178,6 +176,21 @@ public class S3StorageService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to upload file to S3: " + e.getMessage(), e);
         }
+    }
+
+    // Adds a timestamp (plus a short random part, for same-millisecond uploads) before the extension
+    private String resolveFreeKey(String folder, String fileName) {
+        String base = fileName;
+        String ext = "";
+        int dot = fileName.lastIndexOf('.');
+        if (dot > 0) {
+            base = fileName.substring(0, dot);
+            ext = fileName.substring(dot);
+        }
+        String suffix = System.currentTimeMillis() + "-"
+                + java.util.UUID.randomUUID().toString().substring(0, 4);
+        String prefix = folder != null && !folder.isEmpty() ? folder + "/" : "";
+        return prefix + base + "_" + suffix + ext;
     }
 
     public List<String> uploadMultipleFiles(String folder, List<FileUploadRequest> files) {

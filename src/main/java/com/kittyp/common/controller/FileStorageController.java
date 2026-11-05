@@ -67,7 +67,7 @@ public class FileStorageController {
 			throw new CustomException("Admin upload not permitted", HttpStatus.FORBIDDEN);
 		}
 
-		String folder = adminUpload ? "admin-uploads" : "doctors/" + sanitizeEmail(email);
+		String folder = adminUpload ? "admin-uploads" : "user-uploads/" + sanitizeEmail(email);
 		return responseBuilder.buildSuccessResponse(
 				s3StorageService.uploadMultipleFiles(folder, toRequests(multipartFiles)),
 				ResponseMessage.SUCCESS, HttpStatus.OK);
