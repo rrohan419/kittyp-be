@@ -68,17 +68,14 @@ public class ClinicInventoryServiceImpl implements ClinicInventoryService {
 
     @Override
     @Transactional
-    public PaginationModel<InventoryItemModel> list(String clinicUuid, String category, Integer pageNumber,
+    public PaginationModel<InventoryItemModel> list(String clinicUuid, String category, String search, Integer pageNumber,
             Integer pageSize, String email) {
         Clinic clinic = clinicAccess(clinicUuid, email);
         int page = pageNumber == null || pageNumber < 1 ? 1 : pageNumber;
         int size = PaginationSupport.clampSize(pageSize);
         PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Order.asc("name"), Sort.Order.asc("uuid")));
-        String filter = blankToNull(category);
-        Page<ClinicInventoryItem> items = filter == null
-                ? inventoryRepository.findByClinic_IdAndIsActiveTrue(clinic.getId(), pageable)
-                : inventoryRepository.findByClinic_IdAndIsActiveTrueAndCategoryIgnoreCase(clinic.getId(), filter,
-                        pageable);
+        Page<ClinicInventoryItem> items = inventoryRepository.findAll(
+                ClinicInventorySpecification.filters(clinic.getId(), category, search), pageable);
         List<InventoryItemModel> models = toModels(clinic, items.getContent());
         Map<String, InventoryItemModel> byUuid = models.stream()
                 .collect(Collectors.toMap(InventoryItemModel::uuid, m -> m));

@@ -11,8 +11,8 @@ import com.kittyp.common.model.PaginationModel;
 
 public interface ClinicInventoryService {
 
-    PaginationModel<InventoryItemModel> list(String clinicUuid, String category, Integer pageNumber, Integer pageSize,
-            String email);
+    PaginationModel<InventoryItemModel> list(String clinicUuid, String category, String search, Integer pageNumber,
+            Integer pageSize, String email);
 
     List<InventoryItemModel> options(String clinicUuid, String category, String email);
 
