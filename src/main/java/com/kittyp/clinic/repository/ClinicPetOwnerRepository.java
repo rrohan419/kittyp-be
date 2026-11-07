@@ -4,12 +4,11 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.kittyp.clinic.entity.ClinicPetOwner;
 
-public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, Long> {
+public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, Long>, JpaSpecificationExecutor<ClinicPetOwner> {
 
 	List<ClinicPetOwner> findByClinic_IdAndIsActiveTrue(Long clinicId);
 
@@ -40,27 +39,4 @@ public interface ClinicPetOwnerRepository extends JpaRepository<ClinicPetOwner, 
 
 	List<ClinicPetOwner> findByClinic_IdAndIsActiveTrueAndPhone(Long clinicId, String phone);
 
-	@Query("""
-			SELECT o FROM ClinicPetOwner o
-			WHERE o.clinic.id = :clinicId AND o.isActive = true
-			AND (
-				LOWER(o.email) LIKE LOWER(CONCAT('%', :q, '%'))
-				OR LOWER(o.firstName) LIKE LOWER(CONCAT('%', :q, '%'))
-				OR LOWER(COALESCE(o.lastName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-				OR o.phone LIKE CONCAT('%', :q, '%')
-				OR COALESCE(o.alternatePhone, '') LIKE CONCAT('%', :q, '%')
-			)
-			""")
-	List<ClinicPetOwner> searchByClinic(@Param("clinicId") Long clinicId, @Param("q") String q);
-
-	/** Appointment picker: owner email or generated UUID — not name or phone. */
-	@Query("""
-			SELECT o FROM ClinicPetOwner o
-			WHERE o.clinic.id = :clinicId AND o.isActive = true
-			AND (
-				LOWER(o.email) LIKE LOWER(CONCAT('%', :q, '%'))
-				OR LOWER(o.uuid) LIKE LOWER(CONCAT('%', :q, '%'))
-			)
-			""")
-	List<ClinicPetOwner> searchByClinicEmailOrId(@Param("clinicId") Long clinicId, @Param("q") String q);
 }

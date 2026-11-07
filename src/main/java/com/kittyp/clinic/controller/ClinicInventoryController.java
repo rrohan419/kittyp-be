@@ -53,9 +53,10 @@ public class ClinicInventoryController {
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<PaginationModel<InventoryItemModel>>> list(@PathVariable String uuid,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = KeyConstant.PAGE_NUMBER) Integer pageNumber,
             @RequestParam(defaultValue = KeyConstant.PAGE_SIZE) Integer pageSize) {
-        return success(inventoryService.list(uuid, category, pageNumber, pageSize, email()));
+        return success(inventoryService.list(uuid, category, search, pageNumber, pageSize, email()));
     }
 
     @GetMapping(ApiUrl.CLINIC_INVENTORY_OPTIONS)

@@ -65,4 +65,14 @@ public interface PetsRepository extends JpaRepository<Pet, Long> {
 	Optional<Pet> findFirstByClinic_IdAndPatientNumberIgnoreCase(Long clinicId, String patientNumber);
 
 	List<Pet> findByParentUserUuid(String parentUserUuid);
+
+	/** Both mappings use pets.user_uuid; do not infer ownership from clinic records. */
+	@Query("""
+			SELECT p FROM Pet p
+			WHERE p.parentUserUuid = :userUuid OR EXISTS (
+				SELECT u.id FROM User u
+				WHERE u.uuid = :userUuid AND p MEMBER OF u.pets
+			)
+			""")
+	List<Pet> findPlatformPetsOfUser(@Param("userUuid") String userUuid);
 }

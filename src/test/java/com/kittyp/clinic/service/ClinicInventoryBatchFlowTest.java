@@ -18,6 +18,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.env.Environment;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -431,10 +433,11 @@ class ClinicInventoryBatchFlowTest {
 
     @Test
     void listPreservesPaginationAndAddsStockSummary() {
-        when(itemRepo.findByClinic_IdAndIsActiveTrue(any(), any()))
+        when(itemRepo.findAll(org.mockito.ArgumentMatchers.<Specification<ClinicInventoryItem>>any(),
+                org.mockito.ArgumentMatchers.<Pageable>any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(item)));
 
-        var page = service.list(CLINIC_UUID, null, 1, 20, EMAIL);
+        var page = service.list(CLINIC_UUID, null, "amox", 1, 20, EMAIL);
 
         assertEquals(1, page.getPageNumber());
         assertEquals(1L, page.getTotalElements());

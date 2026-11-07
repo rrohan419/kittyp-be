@@ -10,6 +10,9 @@ Kittyp Backend (`kittyp-be`) is the server-side application powering the Kittyp 
 - **Product Catalog:** CRUD operations for products, categories, and favorites.
 - **Cart & Orders:** Shopping cart, checkout, and order management.
 - **Favorites:** User-specific favorite products with pagination and category filtering.
+- **Clinic inventory:** `GET /api/v1/clinic/{uuid}/inventory` accepts an optional `search` query parameter for case-insensitive
+  partial matches on item name or category. It can be combined with the exact `category` filter and pagination;
+  results remain scoped to active items in the selected clinic.
 - **Admin Tools:** Role-based access for admin operations.
 - **Integrations:** Payment (Razorpay), email (Zoho), AWS S3 for storage.
 - **Async & Scheduled Tasks:** Background jobs and scheduled operations.
