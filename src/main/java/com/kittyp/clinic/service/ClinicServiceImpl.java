@@ -133,6 +133,8 @@ import com.kittyp.user.entity.UserRole;
 import com.kittyp.user.enums.ERole;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
+import com.kittyp.user.service.PlatformUserSearchSpecification;
+import com.kittyp.user.service.PlatformUserSearchSpecification.SearchMode;
 import com.kittyp.vaccine.dao.PetVaccineScheduleDao;
 import com.kittyp.vaccine.entity.PetVaccineSchedule;
 import com.kittyp.vaccine.entity.VaccineMaster;
@@ -1505,21 +1507,30 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     @Transactional
-    public List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly) {
+    public List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly,
+            boolean appointmentSearch, boolean appointmentLocal) {
         Clinic clinic = access(clinicUuid, email);
         List<ClinicPetOwner> owners;
         if (q == null || q.isBlank()) {
-            owners = emailOrIdOnly
+            owners = emailOrIdOnly || appointmentSearch || appointmentLocal
                     ? List.of()
                     : clinicPetOwnerRepository.findByClinic_IdAndIsActiveTrue(clinic.getId());
+        } else if (appointmentSearch || appointmentLocal) {
+            String query = appointmentSearchQuery(q);
+            owners = query.length() < 3
+                    ? List.of()
+                    : clinicPetOwnerRepository.findAll(ClinicOwnerSpecification.search(
+                            clinic.getId(), query, ClinicOwnerSpecification.SearchMode.APPOINTMENT));
         } else if (emailOrIdOnly) {
-            owners = clinicPetOwnerRepository.searchByClinicEmailOrId(clinic.getId(), q.trim());
+            owners = clinicPetOwnerRepository.findAll(ClinicOwnerSpecification.search(
+                    clinic.getId(), q.trim(), ClinicOwnerSpecification.SearchMode.EMAIL_OR_ID));
         } else {
-            owners = clinicPetOwnerRepository.searchByClinic(clinic.getId(), q.trim());
+            owners = clinicPetOwnerRepository.findAll(ClinicOwnerSpecification.search(
+                    clinic.getId(), q.trim(), ClinicOwnerSpecification.SearchMode.GENERAL));
         }
         return owners.stream()
-                .map(this::toOwnerModel)
-                .filter(o -> o.petCount() > 0)
+                .map(owner -> toOwnerModel(owner, appointmentLocal))
+                .filter(o -> appointmentLocal || o.petCount() > 0)
                 .sorted(Comparator.comparing(ClinicOwnerModel::lastVisit, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
@@ -1527,13 +1538,15 @@ public class ClinicServiceImpl implements ClinicService {
     @Override
     @Transactional
     public PaginationModel<ClinicOwnerModel> pageOwners(String clinicUuid, String q, String email,
-            boolean emailOrIdOnly, Integer pageNumber, Integer pageSize) {
-        return PaginationSupport.slice(listOwners(clinicUuid, q, email, emailOrIdOnly), pageNumber, pageSize);
+            boolean emailOrIdOnly, boolean appointmentSearch, boolean appointmentLocal, Integer pageNumber, Integer pageSize) {
+        return PaginationSupport.slice(
+                listOwners(clinicUuid, q, email, emailOrIdOnly, appointmentSearch, appointmentLocal), pageNumber, pageSize);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email,
-            boolean emailOrIdOnly) {
+            boolean emailOrIdOnly, boolean appointmentSearch) {
         Clinic clinic = access(clinicUuid, email);
         if (q == null || q.isBlank()) {
             return List.of();
@@ -1550,13 +1563,13 @@ public class ClinicServiceImpl implements ClinicService {
         }
         // Fresh DB read — ROLE_USER only; includes accounts created moments ago.
         LinkedHashMap<String, User> byUuid = new LinkedHashMap<>();
-        List<User> users = emailOrIdOnly
-                ? userRepository.searchActiveUsersByEmailOrUuid(query, PageRequest.of(0, 20))
-                : userRepository.searchActiveUsers(query, PageRequest.of(0, 20));
+        SearchMode searchMode = appointmentSearch ? SearchMode.APPOINTMENT
+                : emailOrIdOnly ? SearchMode.EMAIL_OR_ID : SearchMode.GENERAL;
+        List<User> users = searchActivePlatformUsers(query, searchMode);
         for (User u : users) {
             byUuid.put(u.getUuid(), u);
         }
-        if (emailOrIdOnly) {
+        if (emailOrIdOnly && !appointmentSearch) {
             userRepository.findByUuidIgnoreCase(query).ifPresent(u -> byUuid.putIfAbsent(u.getUuid(), u));
             petsRepository.findByUuidIgnoreCase(query).ifPresent(pet -> userDao
                     .findOptionalByPetUuid(pet.getUuid())
@@ -1586,8 +1599,31 @@ public class ClinicServiceImpl implements ClinicService {
                     u.getEmail(),
                     formatClinicPhone(u.getPhoneNumber()),
                     existing == null ? null : existing.getUuid(),
-                    existing != null);
+                    existing != null && (!appointmentSearch || (existing.getLinkedUser() != null
+                            && existing.getLinkedUser().getId().equals(u.getId()))),
+                    appointmentSearch ? platformAppointmentPets(clinic, u) : List.of());
         }).toList();
+    }
+
+    private List<ClinicOwnerPetModel> platformAppointmentPets(Clinic clinic, User owner) {
+        return petsRepository.findPlatformPetsOfUser(owner.getUuid()).stream()
+                .filter(ClinicServiceImpl::platformPetSelectableForAppointment)
+                .filter(pet -> !isLegacyDoctorImport(pet))
+                .map(pet -> new ClinicOwnerPetModel(
+                        pet.getUuid(),
+                        pet.resolveGlobalPetId(),
+                        pet.getName(),
+                        pet.getType(),
+                        pet.getBreed(),
+                        pet.getGender(),
+                        pet.getDateOfBirth(),
+                        pet.getWeight(),
+                        pet.getMicrochipNumber(),
+                        pet.getProfilePicture(),
+                        pet.getPatientNumber(),
+                        pet.getRegisteredAt() == null ? null : pet.getRegisteredAt().atStartOfDay(),
+                        petAtClinic(clinic, pet)))
+                .toList();
     }
 
     @Override
@@ -1770,7 +1806,8 @@ public class ClinicServiceImpl implements ClinicService {
                     platformUser.getEmail(),
                     formatClinicPhone(platformUser.getPhoneNumber()),
                     clinicOwner == null ? null : clinicOwner.getUuid(),
-                    clinicOwner != null);
+                    clinicOwner != null,
+                    List.of());
         }
         return new OwnerEmailLookupModel(true, source, ownerModel, platformModel);
     }
@@ -1969,7 +2006,8 @@ public class ClinicServiceImpl implements ClinicService {
 
     @Override
     @Transactional
-    public List<ClinicPetListModel> listPets(String clinicUuid, String q, String email, boolean emailOrIdOnly) {
+    public List<ClinicPetListModel> listPets(String clinicUuid, String q, String email, boolean emailOrIdOnly,
+            boolean appointmentSearch, boolean appointmentLocal) {
         Clinic clinic = access(clinicUuid, email);
         List<ClinicPetEnrollment> enrollments = clinicPetEnrollmentRepository
                 .findByClinic_IdAndIsActiveTrue(clinic.getId());
@@ -1977,14 +2015,16 @@ public class ClinicServiceImpl implements ClinicService {
         List<Pet> pets = new ArrayList<>();
         for (ClinicPetEnrollment enrollment : enrollments) {
             Pet pet = enrollment.getPet();
-            if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || isLegacyDoctorImport(pet)) {
+            if (pet == null || !Boolean.TRUE.equals(pet.getIsActive()) || isLegacyDoctorImport(pet)
+                    || (appointmentLocal && (enrollment.getClinicOwner() == null
+                            || !Boolean.TRUE.equals(enrollment.getClinicOwner().getIsActive())))) {
                 continue;
             }
             ownersByPetUuid.put(pet.getUuid(), enrollment.getClinicOwner());
             pets.add(pet);
         }
         if (q == null || q.isBlank()) {
-            if (emailOrIdOnly) {
+            if (emailOrIdOnly || appointmentSearch || appointmentLocal) {
                 return List.of();
             }
         } else if (emailOrIdOnly) {
@@ -1997,6 +2037,13 @@ public class ClinicServiceImpl implements ClinicService {
                     .sorted(Comparator.comparing(ClinicPetListModel::lastVisit,
                             Comparator.nullsLast(Comparator.reverseOrder())))
                     .toList();
+        } else if (appointmentSearch || appointmentLocal) {
+            String query = appointmentSearchQuery(q).toLowerCase(Locale.ROOT);
+            if (query.length() < 3) {
+                return List.of();
+            }
+            pets = pets.stream().filter(p -> petMatchesAppointmentSearch(
+                    p, ownersByPetUuid.get(p.getUuid()), query)).toList();
         } else {
             String query = q.trim().toLowerCase(Locale.ROOT);
             pets = pets.stream().filter(p -> petMatchesClinicSearch(
@@ -2021,15 +2068,44 @@ public class ClinicServiceImpl implements ClinicService {
                         || containsIgnoreCase(owner.getAlternatePhone(), query)));
     }
 
+    private boolean petMatchesAppointmentSearch(Pet pet, ClinicPetOwner owner, String query) {
+        if (containsIgnoreCase(pet.getName(), query)
+                || containsIgnoreCase(pet.getUuid(), query)
+                || containsIgnoreCase(pet.getPatientNumber(), query)
+                || containsIgnoreCase(pet.getParentUserUuid(), query)
+                || appointmentOwnerMatches(owner, query)) {
+            return true;
+        }
+        return owner != null && owner.getLinkedUser() != null
+                && (containsIgnoreCase(owner.getLinkedUser().getFirstName(), query)
+                        || containsIgnoreCase(owner.getLinkedUser().getLastName(), query)
+                        || containsIgnoreCase(fullName(owner.getLinkedUser()), query)
+                        || containsIgnoreCase(owner.getLinkedUser().getUuid(), query));
+    }
+
+    private boolean appointmentOwnerMatches(ClinicPetOwner owner, String query) {
+        return owner != null
+                && (containsIgnoreCase(owner.getUuid(), query)
+                        || containsIgnoreCase(owner.getEmail(), query)
+                        || containsIgnoreCase(owner.getFirstName(), query)
+                        || containsIgnoreCase(owner.getLastName(), query)
+                        || containsIgnoreCase(clinicOwnerName(owner), query));
+    }
+
     private static boolean containsIgnoreCase(String value, String query) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private static String appointmentSearchQuery(String q) {
+        return q == null ? "" : q.replace("%", "").replace("_", "").trim();
     }
 
     @Override
     @Transactional
     public PaginationModel<ClinicPetListModel> pagePets(String clinicUuid, String q, String email,
-            boolean emailOrIdOnly, Integer pageNumber, Integer pageSize) {
-        return PaginationSupport.slice(listPets(clinicUuid, q, email, emailOrIdOnly), pageNumber, pageSize);
+            boolean emailOrIdOnly, boolean appointmentSearch, boolean appointmentLocal, Integer pageNumber, Integer pageSize) {
+        return PaginationSupport.slice(
+                listPets(clinicUuid, q, email, emailOrIdOnly, appointmentSearch, appointmentLocal), pageNumber, pageSize);
     }
 
     private static boolean isLegacyDoctorImport(Pet pet) {
@@ -2066,7 +2142,7 @@ public class ClinicServiceImpl implements ClinicService {
                 found.putIfAbsent(pet.getUuid(), pet);
             }
         }
-        for (User platformUser : userRepository.searchActiveUsersByEmailOrUuid(query, PageRequest.of(0, 20))) {
+        for (User platformUser : searchActivePlatformUsers(query, SearchMode.EMAIL_OR_ID)) {
             String ownerEmail = ClinicOwnerUserLinkService.normalizeEmail(platformUser.getEmail());
             if (!containsIgnoreCase(ownerEmail, needle) && !containsIgnoreCase(platformUser.getUuid(), needle)) {
                 continue;
@@ -2078,6 +2154,11 @@ public class ClinicServiceImpl implements ClinicService {
             }
         }
         return new ArrayList<>(found.values());
+    }
+
+    private List<User> searchActivePlatformUsers(String query, SearchMode mode) {
+        return userRepository.findAll(PlatformUserSearchSpecification.search(query, mode),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
     }
 
     private List<Pet> platformPetsOf(User platformUser) {
@@ -2357,6 +2438,10 @@ public class ClinicServiceImpl implements ClinicService {
     }
 
     private ClinicOwnerModel toOwnerModel(ClinicPetOwner owner) {
+        return toOwnerModel(owner, false);
+    }
+
+    private ClinicOwnerModel toOwnerModel(ClinicPetOwner owner, boolean enrolledOnly) {
         List<Pet> pets = new ArrayList<>();
         Set<String> seenPetUuids = new HashSet<>();
         for (ClinicPetEnrollment enrollment : clinicPetEnrollmentRepository
@@ -2364,11 +2449,12 @@ public class ClinicServiceImpl implements ClinicService {
             Pet pet = enrollment.getPet();
             if (enrollment.getClinicOwner() != null && enrollment.getClinicOwner().getId().equals(owner.getId())
                     && pet != null && Boolean.TRUE.equals(pet.getIsActive())
+                    && (!enrolledOnly || !isLegacyDoctorImport(pet))
                     && seenPetUuids.add(pet.getUuid())) {
                 pets.add(pet);
             }
         }
-        if (owner.getLinkedUser() != null) {
+        if (!enrolledOnly && owner.getLinkedUser() != null) {
             for (Pet pet : platformPetsOf(owner.getLinkedUser())) {
                 if (!seenPetUuids.contains(pet.getUuid()) && platformPetSelectableForAppointment(pet)) {
                     pets.add(pet);

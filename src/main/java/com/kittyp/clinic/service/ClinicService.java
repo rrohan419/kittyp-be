@@ -124,14 +124,15 @@ public interface ClinicService {
 
     PatientDetailModel addPatient(String clinicUuid, AddPatientRequest request, String email);
 
-    List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly);
+    List<ClinicOwnerModel> listOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly,
+            boolean appointmentSearch, boolean appointmentLocal);
 
     PaginationModel<ClinicOwnerModel> pageOwners(String clinicUuid, String q, String email, boolean emailOrIdOnly,
-            Integer pageNumber, Integer pageSize);
+            boolean appointmentSearch, boolean appointmentLocal, Integer pageNumber, Integer pageSize);
 
     /** Search all active KittyP users (live DB) for existing-customer pickers. */
     List<PlatformUserSearchModel> searchPlatformUsers(String clinicUuid, String q, String email,
-            boolean emailOrIdOnly);
+            boolean emailOrIdOnly, boolean appointmentSearch);
 
     /** Ensure a clinic client row exists for the given platform user and return it. */
     ClinicOwnerModel ensureOwnerFromUser(String clinicUuid, String userUuid, String email);
@@ -171,10 +172,11 @@ public interface ClinicService {
 
     ClinicPetListModel addPetToOwner(String clinicUuid, String ownerUuid, AddOwnerPetRequest request, String email);
 
-    List<ClinicPetListModel> listPets(String clinicUuid, String q, String email, boolean emailOrIdOnly);
+    List<ClinicPetListModel> listPets(String clinicUuid, String q, String email, boolean emailOrIdOnly,
+            boolean appointmentSearch, boolean appointmentLocal);
 
     PaginationModel<ClinicPetListModel> pagePets(String clinicUuid, String q, String email, boolean emailOrIdOnly,
-            Integer pageNumber, Integer pageSize);
+            boolean appointmentSearch, boolean appointmentLocal, Integer pageNumber, Integer pageSize);
 
     ClinicPetMedicalProfileModel petMedicalProfile(String clinicUuid, String petUuid, String email);
 

@@ -302,14 +302,16 @@ public class ClinicController {
             @RequestParam(required = false) String q, @RequestParam(required = false) String by,
             @RequestParam(defaultValue = "1") Integer pageNumber,
             @RequestParam(defaultValue = "20") Integer pageSize) {
-        return success(clinicService.pageOwners(uuid, q, email(), emailOrIdOnly(by), pageNumber, pageSize));
+        return success(clinicService.pageOwners(uuid, q, email(), emailOrIdOnly(by), appointmentSearch(by),
+                appointmentLocal(by),
+                pageNumber, pageSize));
     }
 
     @GetMapping(ApiUrl.CLINIC_USERS_SEARCH)
     @PreAuthorize(CLINIC_ACCESS)
     public ResponseEntity<SuccessResponse<List<PlatformUserSearchModel>>> searchUsers(@PathVariable String uuid,
             @RequestParam(required = false) String q, @RequestParam(required = false) String by) {
-        return success(clinicService.searchPlatformUsers(uuid, q, email(), emailOrIdOnly(by)));
+        return success(clinicService.searchPlatformUsers(uuid, q, email(), emailOrIdOnly(by), appointmentSearch(by)));
     }
 
     @PostMapping(ApiUrl.CLINIC_OWNER_FROM_USER)
@@ -408,7 +410,9 @@ public class ClinicController {
             @RequestParam(required = false) String q, @RequestParam(required = false) String by,
             @RequestParam(defaultValue = "1") Integer pageNumber,
             @RequestParam(defaultValue = "20") Integer pageSize) {
-        return success(clinicService.pagePets(uuid, q, email(), emailOrIdOnly(by), pageNumber, pageSize));
+        return success(clinicService.pagePets(uuid, q, email(), emailOrIdOnly(by), appointmentSearch(by),
+                appointmentLocal(by),
+                pageNumber, pageSize));
     }
 
     @GetMapping(ApiUrl.CLINIC_PET_DETAIL)
@@ -560,6 +564,14 @@ public class ClinicController {
 
     private static boolean emailOrIdOnly(String by) {
         return "emailOrId".equalsIgnoreCase(by);
+    }
+
+    private static boolean appointmentSearch(String by) {
+        return "appointment".equalsIgnoreCase(by);
+    }
+
+    private static boolean appointmentLocal(String by) {
+        return "appointmentLocal".equalsIgnoreCase(by);
     }
 
     private <T> ResponseEntity<SuccessResponse<T>> success(T data) {

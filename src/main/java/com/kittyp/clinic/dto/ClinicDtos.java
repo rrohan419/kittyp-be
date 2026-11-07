@@ -201,7 +201,8 @@ public final class ClinicDtos {
             String email,
             String phone,
             String clinicOwnerUuid,
-            boolean alreadyClient) {
+            boolean alreadyClient,
+            List<ClinicOwnerPetModel> pets) {
     }
 
     public record EnsureOwnerFromUserRequest(@NotBlank String userUuid) {
