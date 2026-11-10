@@ -2,6 +2,9 @@ package com.kittyp.user.dto;
 
 import java.time.LocalDate;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 
@@ -16,6 +19,8 @@ public class PetDetailDto {
     private String weight;
     private String activityLevel;
     private String gender;
+    @JsonProperty("isNeutered")
+    @JsonAlias("neutered")
     private boolean isNeutered;
     private String currentFoodBrand;
     private String healthConditions;

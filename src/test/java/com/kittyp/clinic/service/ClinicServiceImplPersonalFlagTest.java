@@ -2,6 +2,7 @@ package com.kittyp.clinic.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -243,6 +244,84 @@ class ClinicServiceImplPersonalFlagTest {
 		verify(clinicDoctorRepository).save(argThat(affiliation -> affiliation.getClinic().getId().equals(300L)
 				&& affiliation.getDoctor() == profile
 				&& "doctor".equals(affiliation.getRole())));
+	}
+
+	@Test
+	void createClinic_preservesSelectedPlaceId() {
+		User owner = userWithRoles(34L, "owner@example.com", ERole.ROLE_CLINIC_ADMIN);
+		when(userDao.userByEmail(owner.getEmail())).thenReturn(owner);
+		when(clinicDao.saveClinic(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+		clinicService.create(new ClinicRequest("New clinic", null, "Address", null, null, null, null,
+				"City", 12.5, 77.5, null, "place-id", null), owner.getEmail());
+
+		verify(clinicDao).saveClinic(argThat(clinic -> "place-id".equals(clinic.getGooglePlaceId())));
+	}
+
+	@Test
+	void updateClinic_locationSelectionReplacesAllLocationFields() {
+		User owner = userWithRoles(31L, "owner@example.com", ERole.ROLE_CLINIC_ADMIN);
+		Clinic clinic = clinic(owner);
+		clinic.setAddress("Old address");
+		clinic.setCity("Old city");
+		clinic.setLatitude(1.0);
+		clinic.setLongitude(2.0);
+		clinic.setGooglePlaceId("old-place");
+		stubUpdate(owner, clinic);
+
+		clinicService.update(CLINIC_UUID, new ClinicRequest("Branch", null, "New address", null, null,
+				null, null, "New city", 12.5, 77.5, null, "new-place", true), owner.getEmail());
+
+		assertEquals("New address", clinic.getAddress());
+		assertEquals("New city", clinic.getCity());
+		assertEquals(12.5, clinic.getLatitude());
+		assertEquals(77.5, clinic.getLongitude());
+		assertEquals("new-place", clinic.getGooglePlaceId());
+	}
+
+	@Test
+	void updateClinic_manualAddressClearsOldLocationFields() {
+		User owner = userWithRoles(32L, "owner@example.com", ERole.ROLE_CLINIC_ADMIN);
+		Clinic clinic = clinic(owner);
+		clinic.setCity("Old city");
+		clinic.setLatitude(1.0);
+		clinic.setLongitude(2.0);
+		clinic.setGooglePlaceId("old-place");
+		stubUpdate(owner, clinic);
+
+		clinicService.update(CLINIC_UUID, new ClinicRequest("Branch", null, "Manual address", null, null,
+				null, null, null, null, null, null, null, true), owner.getEmail());
+
+		assertEquals("Manual address", clinic.getAddress());
+		assertNull(clinic.getCity());
+		assertNull(clinic.getLatitude());
+		assertNull(clinic.getLongitude());
+		assertNull(clinic.getGooglePlaceId());
+	}
+
+	@Test
+	void updateClinic_unmodifiedLocationIsPreserved() {
+		User owner = userWithRoles(33L, "owner@example.com", ERole.ROLE_CLINIC_ADMIN);
+		Clinic clinic = clinic(owner);
+		clinic.setCity("Old city");
+		clinic.setLatitude(1.0);
+		clinic.setLongitude(2.0);
+		clinic.setGooglePlaceId("old-place");
+		stubUpdate(owner, clinic);
+
+		clinicService.update(CLINIC_UUID, new ClinicRequest("Branch", null, null, null, null, null, null),
+				owner.getEmail());
+
+		assertEquals("Old city", clinic.getCity());
+		assertEquals(1.0, clinic.getLatitude());
+		assertEquals(2.0, clinic.getLongitude());
+		assertEquals("old-place", clinic.getGooglePlaceId());
+	}
+
+	private void stubUpdate(User owner, Clinic clinic) {
+		when(userDao.userByEmail(owner.getEmail())).thenReturn(owner);
+		when(clinicDao.findByUuid(CLINIC_UUID)).thenReturn(clinic);
+		when(clinicDao.saveClinic(any())).thenAnswer(invocation -> invocation.getArgument(0));
 	}
 
 	private void stubMineMembership(User owner, Clinic clinic) {

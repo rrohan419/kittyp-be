@@ -549,12 +549,14 @@ public class UserServiceImpl implements UserService {
 
 
 	@Override
-	public void sendPushNotification(String email, String title, String body) {
+	public boolean sendPushNotification(String email, String title, String body) {
 		User user = userDao.userByEmail(email);
 		List<UserFcmToken> fcmTokens = fcmTokenDao.findByUser(user);
 		if (fcmTokens != null && !fcmTokens.isEmpty()) {
 			List<String> fcmTokensList = fcmTokens.stream().map(UserFcmToken::getToken).toList();
 			fcmPushNotificationService.sendNotificationToUser(fcmTokensList, title, body);
+			return true;
 		}
+		return false;
 	}
 }

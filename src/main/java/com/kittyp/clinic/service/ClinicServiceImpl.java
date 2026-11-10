@@ -230,6 +230,7 @@ public class ClinicServiceImpl implements ClinicService {
                 .timezone(request.timezone()).operatingHours(request.operatingHours()).owner(owner)
                 .practiceModel(PracticeModel.ORGANIZATION).status(ClinicStatus.PENDING)
                 .city(blankToNull(request.city())).latitude(request.latitude()).longitude(request.longitude())
+                .googlePlaceId(blankToNull(request.googlePlaceId()))
                 .profileImageUrl(blankToNull(request.profileImageUrl()))
                 .build();
         clinic = clinicDao.saveClinic(clinic);
@@ -399,13 +400,18 @@ public class ClinicServiceImpl implements ClinicService {
         clinic.setEmail(newEmail);
         clinic.setTimezone(request.timezone());
         clinic.setOperatingHours(request.operatingHours());
-        if (request.city() != null) {
+        if (Boolean.TRUE.equals(request.updateLocation())) {
+            clinic.setCity(blankToNull(request.city()));
+            clinic.setLatitude(request.latitude());
+            clinic.setLongitude(request.longitude());
+            clinic.setGooglePlaceId(blankToNull(request.googlePlaceId()));
+        } else if (request.city() != null) {
             clinic.setCity(blankToNull(request.city()));
         }
-        if (request.latitude() != null) {
+        if (!Boolean.TRUE.equals(request.updateLocation()) && request.latitude() != null) {
             clinic.setLatitude(request.latitude());
         }
-        if (request.longitude() != null) {
+        if (!Boolean.TRUE.equals(request.updateLocation()) && request.longitude() != null) {
             clinic.setLongitude(request.longitude());
         }
         if (request.profileImageUrl() != null) {

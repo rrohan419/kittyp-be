@@ -47,5 +47,6 @@ public interface UserService {
 
 	FcmTokenModel updateUserFcmToken(String email, String fcmToken, HttpServletRequest request);
 
-	void sendPushNotification(String email, String title, String body);
+	/** Returns whether at least one device token was submitted for delivery. */
+	boolean sendPushNotification(String email, String title, String body);
 }
