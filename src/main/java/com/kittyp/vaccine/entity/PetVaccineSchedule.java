@@ -1,6 +1,7 @@
 package com.kittyp.vaccine.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import com.kittyp.common.entity.BaseEntity;
 import com.kittyp.user.entity.Pet;
@@ -46,4 +47,8 @@ public class PetVaccineSchedule extends BaseEntity{
 
     @Builder.Default
     private Boolean reminderSent = false;
+
+    private LocalDateTime sevenDaySentAt;
+
+    private LocalDateTime oneDaySentAt;
 }

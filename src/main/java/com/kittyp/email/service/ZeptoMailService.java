@@ -62,7 +62,7 @@ public interface ZeptoMailService {
 	 * Pet reminder email. Uses the vaccine template when {@code vaccine} is true, otherwise the generic template
 	 * (skipped if not configured).
 	 */
-	void sendPetReminderEmail(boolean vaccine, String recipientEmail, String customerName, String petName,
+	boolean sendPetReminderEmail(boolean vaccine, String recipientEmail, String customerName, String petName,
 			String clinicName, String clinicPhone, String clinicAddress, String doctorName, String reminderName,
 			String reminderTitle, String reminderMessage, String reminderDate, String reminderTime);
 

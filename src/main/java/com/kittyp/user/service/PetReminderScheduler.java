@@ -15,7 +15,9 @@ public class PetReminderScheduler {
 
     @Scheduled(cron = "${kittyp.reminders.cron:0 0 10 * * *}", zone = "${kittyp.reminders.zone:Asia/Kolkata}")
     public void processDue() {
+        log.info("======================================Starting to process due pet reminders==================================================");
         int sent = petReminderService.processDueReminders();
+        log.info("=========================================================================================Finished processing due pet reminders, dispatched {} reminders", sent);
         if (sent > 0) {
             log.info("Dispatched {} due pet reminders", sent);
         }

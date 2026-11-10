@@ -1,0 +1,757 @@
+[
+  {
+    "species": "DOG",
+    "name": "Indian Pariah Dog",
+    "aliases": [
+      "INDog",
+      "Indian Native Dog",
+      "Desi dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Rajapalayam",
+    "aliases": [
+      "Poligar Hound"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Chippiparai",
+    "aliases": []
+  },
+  {
+    "species": "DOG",
+    "name": "Mudhol Hound",
+    "aliases": [
+      "Caravan Hound",
+      "Karwani"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Gaddi",
+    "aliases": [
+      "Gaddi Kutta",
+      "Himalayan Sheepdog (regional usage)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Changkhi",
+    "aliases": [
+      "Changki",
+      "Ladakhi livestock guardian dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Kombai",
+    "aliases": [
+      "Combai"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Kanni",
+    "aliases": [
+      "Maiden's Beast (informal translation)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Rampur Hound",
+    "aliases": [
+      "Rampur Greyhound"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Banjara Hound",
+    "aliases": [
+      "Vanjari Hound",
+      "Banjari Hound"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Kaikadi",
+    "aliases": [
+      "Kaikadi dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Jonangi",
+    "aliases": [
+      "Jonangi dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Pandikona",
+    "aliases": [
+      "Pandikona dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Vaghari Hound",
+    "aliases": [
+      "Vaghari dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Mahratta Hound",
+    "aliases": [
+      "Maratha Hound",
+      "Mahrahta Hound"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Bakharwal Dog",
+    "aliases": [
+      "Bakarwal",
+      "Bakharwal Mastiff"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Bhutia Dog",
+    "aliases": [
+      "Bhotia",
+      "Himalayan sheepdog (overlapping regional usage)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Tibetan Mastiff",
+    "aliases": [
+      "Do-Khyi",
+      "Tibetan mountain dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Bully Kutta",
+    "aliases": [
+      "Indian/Pakistani Mastiff",
+      "Pakistani Mastiff"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Gull Terrier",
+    "aliases": [
+      "Pakistani Bull Terrier (regional name)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Gull Dong",
+    "aliases": [
+      "Pakistani mastiff/bull-type cross (regional usage)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Sri Lankan village dog",
+    "aliases": [
+      "Local Sri Lankan dog",
+      "village-dog population"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Bhote Kukur",
+    "aliases": [
+      "Nepalese mountain dog (common descriptive name)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Indian Spitz",
+    "aliases": []
+  },
+  {
+    "species": "DOG",
+    "name": "Labrador Retriever",
+    "aliases": [
+      "Labrador"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "German Shepherd Dog",
+    "aliases": [
+      "Alsatian",
+      "GSD"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Golden Retriever",
+    "aliases": [
+      "Golden"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Shih Tzu",
+    "aliases": [
+      "Shih-Tzu"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Pomeranian",
+    "aliases": [
+      "Dwarf Spitz"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Beagle",
+    "aliases": [
+      "English Beagle"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Pug",
+    "aliases": [
+      "Chinese Pug"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Rottweiler",
+    "aliases": [
+      "Rottie"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Doberman Pinscher",
+    "aliases": [
+      "Dobermann"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Dachshund",
+    "aliases": [
+      "Sausage dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Lhasa Apso",
+    "aliases": [
+      "Lhasa"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Great Dane",
+    "aliases": [
+      "German Mastiff"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Saint Bernard",
+    "aliases": [
+      "St. Bernard"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Siberian Husky",
+    "aliases": [
+      "Husky"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Chow Chow",
+    "aliases": [
+      "Chow"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Boxer",
+    "aliases": [
+      "German Boxer"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Cocker Spaniel",
+    "aliases": [
+      "English Cocker Spaniel",
+      "American Cocker Spaniel"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "French Bulldog",
+    "aliases": [
+      "Frenchie"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Belgian Malinois",
+    "aliases": [
+      "Malinois"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Poodle",
+    "aliases": [
+      "Standard Poodle",
+      "Miniature Poodle",
+      "Toy Poodle"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Border Collie",
+    "aliases": [
+      "Collie"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Dogo Argentino",
+    "aliases": [
+      "Argentine Mastiff"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "American Pit Bull Terrier",
+    "aliases": [
+      "Pit Bull (often used generically)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Chihuahua",
+    "aliases": [
+      "Chi"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Maltese",
+    "aliases": [
+      "Maltese Terrier (historical name)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Bichon Frise",
+    "aliases": [
+      "Bichon"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Akita",
+    "aliases": [
+      "Akita Inu",
+      "Japanese Akita"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Tibetan Terrier",
+    "aliases": [
+      "Tsang Apso",
+      "Dokhi Apso"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Vikhan Dog",
+    "aliases": [
+      "Vikhan",
+      "Afghan-Pakistani mountain dog (descriptive)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Kuchi Dog",
+    "aliases": [
+      "Kuchi shepherd dog",
+      "Afghan pastoral dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Afghan Hound",
+    "aliases": [
+      "Tazi",
+      "Baluchi Hound (regional historical naming varies)"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Australian Shepherd",
+    "aliases": [
+      "Aussie",
+      "Australian Shepherd Dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Airedale Terrier",
+    "aliases": [
+      "Airedale",
+      "King of Terriers"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Basenji",
+    "aliases": [
+      "Congo Dog",
+      "African Barkless Dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Basset Hound",
+    "aliases": [
+      "Basset",
+      "French Basset Hound"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Boston Terrier",
+    "aliases": [
+      "Boston",
+      "American Gentleman"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Bulldog",
+    "aliases": [
+      "English Bulldog",
+      "British Bulldog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Bull Terrier",
+    "aliases": [
+      "English Bull Terrier"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Cavalier King Charles Spaniel",
+    "aliases": [
+      "Cavalier",
+      "CKCS"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Dalmatian",
+    "aliases": [
+      "Dalmatian Dog"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Samoyed",
+    "aliases": [
+      "Samoiedskaïa Sabaka",
+      "Sammy"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Miniature Schnauzer",
+    "aliases": [
+      "Zwergschnauzer"
+    ]
+  },
+  {
+    "species": "DOG",
+    "name": "Cane Corso",
+    "aliases": [
+      "Italian Mastiff",
+      "Cane Corso Italiano"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Indian domestic cat",
+    "aliases": [
+      "Indie cat",
+      "Indian Domestic Shorthair",
+      "street/rescue cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Domestic Shorthair",
+    "aliases": [
+      "DSH",
+      "short-haired domestic cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Domestic Longhair",
+    "aliases": [
+      "DLH",
+      "long-haired domestic cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Ceylon",
+    "aliases": [
+      "Ceylon cat",
+      "Sri Lankan cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Persian",
+    "aliases": [
+      "Persian Longhair"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Himalayan",
+    "aliases": [
+      "Colourpoint Persian",
+      "Persian-Himalayan"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Siamese",
+    "aliases": [
+      "Traditional Siamese",
+      "Modern Siamese"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Maine Coon",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "British Shorthair",
+    "aliases": [
+      "BSH"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Ragdoll",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "Bengal",
+    "aliases": [
+      "Bengal cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Scottish Fold",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "Exotic Shorthair",
+    "aliases": [
+      "Exotic"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Bombay",
+    "aliases": [
+      "Bombay cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Russian Blue",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "American Shorthair",
+    "aliases": [
+      "ASH"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Turkish Angora",
+    "aliases": [
+      "Angora"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Sphynx",
+    "aliases": [
+      "Canadian Sphynx"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Abyssinian",
+    "aliases": [
+      "Aby"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Burmese",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "Norwegian Forest Cat",
+    "aliases": [
+      "Wegie"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Oriental Shorthair",
+    "aliases": [
+      "Oriental"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Balinese",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "Devon Rex",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "Cornish Rex",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "Singapura",
+    "aliases": []
+  },
+  {
+    "species": "CAT",
+    "name": "Birman",
+    "aliases": [
+      "Sacred Cat of Burma"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "American Curl",
+    "aliases": [
+      "American Curl Shorthair",
+      "American Curl Longhair"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Egyptian Mau",
+    "aliases": [
+      "Mau"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Chartreux",
+    "aliases": [
+      "Chartreux cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Japanese Bobtail",
+    "aliases": [
+      "Japanese Bobtail Shorthair",
+      "Japanese Bobtail Longhair"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Korat",
+    "aliases": [
+      "Korat cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Manx",
+    "aliases": [
+      "Manx cat",
+      "Stubbin"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Ocicat",
+    "aliases": [
+      "Oci"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Tonkinese",
+    "aliases": [
+      "Tonkinese cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Turkish Van",
+    "aliases": [
+      "Turkish Van cat",
+      "Van Kedisi"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Snowshoe",
+    "aliases": [
+      "Snowshoe cat"
+    ]
+  },
+  {
+    "species": "CAT",
+    "name": "Khao Manee",
+    "aliases": [
+      "Khaomanee",
+      "White Gem"
+    ]
+  }
+]

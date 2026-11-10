@@ -117,6 +117,7 @@ public class ApiUrl {
 	// public controller
 	public static final String PUBLIC_BASE_URL = "/public";
 	public static final String PUBLIC_TIMEZONES = PUBLIC_BASE_URL + "/timezones";
+	public static final String PUBLIC_BREEDS = PUBLIC_BASE_URL + "/breeds";
 	public static final String PUBLIC_PLACES_AUTOCOMPLETE = PUBLIC_BASE_URL + "/places/autocomplete";
 	public static final String PUBLIC_PLACES_DETAILS = PUBLIC_BASE_URL + "/places/details";
 	public static final String SITEMAP = PUBLIC_BASE_URL + "/sitemap.xml";

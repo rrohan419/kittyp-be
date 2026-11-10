@@ -431,9 +431,13 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
-	public void sendPetReminderEmail(boolean vaccine, String recipientEmail, String customerName, String petName,
+	public boolean sendPetReminderEmail(boolean vaccine, String recipientEmail, String customerName, String petName,
 			String clinicName, String clinicPhone, String clinicAddress, String doctorName, String reminderName,
 			String reminderTitle, String reminderMessage, String reminderDate, String reminderTime) {
+		if (recipientEmail == null || recipientEmail.isBlank()) {
+			log.warn("Skipping pet reminder email: recipient is blank");
+			return false;
+		}
 		String name = blankToDefault(customerName, "there");
 		Map<String, Object> merge = new HashMap<>();
 		merge.put("customer_name", name);
@@ -450,10 +454,12 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			merge.put("reminder_message", blankToDefault(reminderMessage, ""));
 			merge.put("reminder_time", blankToDefault(reminderTime, ""));
 		}
-		sendDedicated(recipientEmail, name,
-				vaccine ? TemplateConstant.ZEPTO_PET_VACCINE_REMINDER_EMAIL_TEMPLATE_ID
-						: TemplateConstant.ZEPTO_PET_GENERIC_REMINDER_EMAIL_TEMPLATE_ID,
-				merge);
+		ZeptoMailDto mailDto = new ZeptoMailDto();
+		mailDto.setMergeInfo(merge);
+		mailDto.setRecipientEmail(recipientEmail.trim());
+		mailDto.setRecipientName(name);
+		return dispatch(mailDto, vaccine ? TemplateConstant.ZEPTO_PET_VACCINE_REMINDER_EMAIL_TEMPLATE_ID
+				: TemplateConstant.ZEPTO_PET_GENERIC_REMINDER_EMAIL_TEMPLATE_ID);
 	}
 
 	@Override

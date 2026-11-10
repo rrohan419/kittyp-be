@@ -24,10 +24,10 @@ public final class ClinicDtos {
 
     public record ClinicRequest(@NotBlank String name, String licenseNumber, String address, String phone, String email,
             String timezone, String operatingHours, String city, Double latitude, Double longitude,
-            String profileImageUrl) {
+            String profileImageUrl, String googlePlaceId, Boolean updateLocation) {
         public ClinicRequest(@NotBlank String name, String licenseNumber, String address, String phone, String email,
                 String timezone, String operatingHours) {
-            this(name, licenseNumber, address, phone, email, timezone, operatingHours, null, null, null, null);
+            this(name, licenseNumber, address, phone, email, timezone, operatingHours, null, null, null, null, null, null);
         }
     }
 
