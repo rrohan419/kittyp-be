@@ -91,7 +91,7 @@ class VisitServiceImplPrescriptionFirstTest {
     @Mock
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     @Mock
-    private com.kittyp.user.repository.PetWeightLogRepository petWeightLogRepository;
+    private com.kittyp.user.service.PetWeightService petWeightService;
 
     @InjectMocks
     private VisitServiceImpl visitService;
@@ -162,8 +162,33 @@ class VisitServiceImplPrescriptionFirstTest {
         assertEquals(VisitStatus.IN_PROGRESS, model.status());
         assertEquals("medicine plan", model.chart().plan());
         assertEquals("pet-1", model.petUuid());
-        assertEquals("4.5", pet.getWeight());
-        verify(petWeightLogRepository).save(any(com.kittyp.user.entity.PetWeightLog.class));
+        verify(petWeightService).recordVisit(any(Visit.class), org.mockito.ArgumentMatchers.eq(4.5), any(User.class));
+    }
+
+    @Test
+    void unconfirmedExistingWeightDoesNotCreateMeasurement() {
+        chart = new VisitChartRequest("exam", "assessment", "medicine plan", null,
+                java.util.Map.of("weightKg", 4.5), null, false);
+        when(visitDao.findByPetAndClinic("pet-1", 10L)).thenReturn(List.of());
+        visitService.createPrescriptionFirst(request(false), "doc@example.com");
+        verify(petWeightService, never()).recordVisit(any(), org.mockito.ArgumentMatchers.anyDouble(), any());
+    }
+
+    @Test
+    void missingWeightDoesNotCreateMeasurement() {
+        chart = new VisitChartRequest("exam", "assessment", "medicine plan", null, null, null, true);
+        when(visitDao.findByPetAndClinic("pet-1", 10L)).thenReturn(List.of());
+        visitService.createPrescriptionFirst(request(false), "doc@example.com");
+        verify(petWeightService, never()).recordVisit(any(), org.mockito.ArgumentMatchers.anyDouble(), any());
+    }
+
+    @Test
+    void invalidWeightFailsBeforeChartSave() {
+        chart = new VisitChartRequest("exam", "assessment", "medicine plan", null,
+                java.util.Map.of("weightKg", -2), null, true);
+        when(visitDao.findByPetAndClinic("pet-1", 10L)).thenReturn(List.of());
+        assertThrows(CustomException.class, () -> visitService.createPrescriptionFirst(request(false), "doc@example.com"));
+        verify(petWeightService, never()).recordVisit(any(), org.mockito.ArgumentMatchers.anyDouble(), any());
     }
 
     @Test

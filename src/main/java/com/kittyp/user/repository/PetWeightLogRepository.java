@@ -9,7 +9,9 @@ import com.kittyp.user.entity.PetWeightLog;
 
 public interface PetWeightLogRepository extends JpaRepository<PetWeightLog, Long> {
 
-    List<PetWeightLog> findByPet_UuidOrderByRecordedAtDesc(String petUuid);
+    List<PetWeightLog> findByPet_UuidOrderByRecordedAtDescIdDesc(String petUuid);
 
-    Optional<PetWeightLog> findFirstByPet_UuidOrderByRecordedAtDesc(String petUuid);
+    Optional<PetWeightLog> findFirstByPet_UuidOrderByRecordedAtDescIdDesc(String petUuid);
+
+    Optional<PetWeightLog> findByVisit_Id(Long visitId);
 }

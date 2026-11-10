@@ -23,6 +23,26 @@ Kittyp Backend (`kittyp-be`) is the server-side application powering the Kittyp 
 
 ---
 
+### Pet weight history
+
+Doctor chart and prescription-first saves record a positive, finite `weightKg` in the
+pet's weight history and update the profile from the latest measurement. There is one
+entry per visit: repeated saves are idempotent and a correction updates the entry while
+retaining its original timestamp and recorder, with the correcting user and time recorded
+separately. Manual owner entries include the recorder and may be backdated; the profile
+uses the latest recorded timestamp (and entry ID as a tie-breaker).
+
+Chart clients can send `weightMeasured: false` when carrying forward an existing chart
+value without measuring it again. Omitting the flag retains compatibility with existing
+clients, which treat a supplied weight as a measurement. No historical prescriptions are
+backfilled; existing logs can have no recorder or visit attribution.
+
+Before deploying, apply `scripts/add_weight_log_visit_attribution.sql` to PostgreSQL,
+including environments where Hibernate schema updates are enabled. It adds nullable
+attribution columns, foreign keys, and the visit uniqueness and history indexes.
+
+---
+
 ### Vaccine schedule reminders
 
 The pet reminder job also processes active, incomplete vaccine schedules due within the

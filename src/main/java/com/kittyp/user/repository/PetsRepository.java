@@ -5,9 +5,11 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 
 import com.kittyp.user.entity.Pet;
+import jakarta.persistence.LockModeType;
 
 public interface PetsRepository extends JpaRepository<Pet, Long> {
 
@@ -18,6 +20,10 @@ public interface PetsRepository extends JpaRepository<Pet, Long> {
 	boolean existsByUuid(String uuid);
 
 	Optional<Pet> findOptionalByUuid(String uuid);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT p FROM Pet p WHERE p.uuid = :uuid")
+	Optional<Pet> findForWeightUpdate(@Param("uuid") String uuid);
 
 	List<Pet> findByClinic_IdAndIsActiveTrue(Long clinicId);
 

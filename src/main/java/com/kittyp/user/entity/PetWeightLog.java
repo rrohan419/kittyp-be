@@ -3,6 +3,7 @@ package com.kittyp.user.entity;
 import java.time.LocalDateTime;
 
 import com.kittyp.common.entity.BaseEntity;
+import com.kittyp.visit.entity.Visit;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,4 +38,19 @@ public class PetWeightLog extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String note;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "visit_id", unique = true)
+    private Visit visit;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recorded_by_user_id")
+    private User recordedBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "corrected_by_user_id")
+    private User correctedBy;
+
+    @Column(name = "corrected_at")
+    private LocalDateTime correctedAt;
 }

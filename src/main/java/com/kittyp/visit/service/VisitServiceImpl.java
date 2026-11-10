@@ -69,12 +69,11 @@ import com.kittyp.notification.service.OutboundMessageService;
 import com.kittyp.notification.service.WhatsAppSenderCredentials;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
-import com.kittyp.user.entity.PetWeightLog;
 import com.kittyp.user.entity.User;
-import com.kittyp.user.repository.PetWeightLogRepository;
 import com.kittyp.user.repository.PetsRepository;
 import com.kittyp.user.repository.UserRepository;
 import com.kittyp.user.service.PetAccessGuard;
+import com.kittyp.user.service.PetWeightService;
 import com.kittyp.user.service.UserService;
 import com.kittyp.visit.dao.VisitDao;
 import com.kittyp.visit.dto.VisitDtos.AttendedPatientModel;
@@ -140,7 +139,7 @@ public class VisitServiceImpl implements VisitService {
     private final UserRepository userRepository;
     private final ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
     private final ZeptoMailService zeptoMailService;
-    private final PetWeightLogRepository petWeightLogRepository;
+    private final PetWeightService petWeightService;
 
     @Value("${app.frontend.base-url:https://kittyp.in}")
     private String frontendBaseUrl;
@@ -929,6 +928,8 @@ public class VisitServiceImpl implements VisitService {
                     "Prescription can no longer be edited. More than one hour has passed since the visit was finished.",
                     HttpStatus.BAD_REQUEST);
         }
+        Object rawWeight = request.vitals() == null ? null : request.vitals().get("weightKg");
+        Double weight = rawWeight == null ? null : PetWeightService.validateWeight(rawWeight);
         if (STARTABLE.contains(visit.getStatus())) {
             applyStatusTransition(visit, VisitStatus.IN_PROGRESS);
         }
@@ -951,34 +952,10 @@ public class VisitServiceImpl implements VisitService {
             visit.setVitalsJson(writeJson(request.vitals()));
         }
         Visit saved = visitDao.save(visit);
-        syncPetWeightFromVitals(saved.getPet(), request.vitals());
+        if (weight != null && !Boolean.FALSE.equals(request.weightMeasured())) {
+            petWeightService.recordVisit(saved, weight, userDao.userByEmail(email));
+        }
         return toModel(saved, true);
-    }
-
-    /** Keep pet profile weight + parent weight trend in sync with chart vitals (all chart flows). */
-    private void syncPetWeightFromVitals(Pet pet, Map<String, Object> vitals) {
-        if (pet == null || vitals == null || vitals.get("weightKg") == null) {
-            return;
-        }
-        pet.setWeight(vitals.get("weightKg").toString());
-        petsRepository.save(pet);
-        try {
-            double weightKg = Double.parseDouble(vitals.get("weightKg").toString());
-            boolean changed = petWeightLogRepository
-                    .findFirstByPet_UuidOrderByRecordedAtDesc(pet.getUuid())
-                    .map(latest -> latest.getWeight() == null || Double.compare(latest.getWeight(), weightKg) != 0)
-                    .orElse(true);
-            if (weightKg > 0 && changed) {
-                petWeightLogRepository.save(PetWeightLog.builder()
-                        .pet(pet)
-                        .weight(weightKg)
-                        .recordedAt(LocalDateTime.now())
-                        .note("Recorded during visit")
-                        .build());
-            }
-        } catch (NumberFormatException ignored) {
-            // Non-numeric weight stays in vitals only.
-        }
     }
 
     /** CHECKING_OUT / COMPLETED: chart (prescription) stays editable for 1 hour after finish. */

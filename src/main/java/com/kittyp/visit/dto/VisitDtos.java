@@ -132,7 +132,12 @@ public final class VisitDtos {
             String plan,
             String nextVisitNotes,
             Map<String, Object> vitals,
-            String internalNotes) {
+            String internalNotes,
+            Boolean weightMeasured) {
+        public VisitChartRequest(String examinationNotes, String assessment, String plan, String nextVisitNotes,
+                Map<String, Object> vitals, String internalNotes) {
+            this(examinationNotes, assessment, plan, nextVisitNotes, vitals, internalNotes, null);
+        }
     }
 
     public record VisitChartModel(

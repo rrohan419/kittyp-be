@@ -3,12 +3,12 @@ package com.kittyp.user.controller;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,6 +35,7 @@ import com.kittyp.user.models.PetDashboardModel;
 import com.kittyp.user.models.PetModel;
 import com.kittyp.user.models.PetWeightLogModel;
 import com.kittyp.user.repository.PetWeightLogRepository;
+import com.kittyp.user.service.PetWeightService;
 import com.kittyp.vaccine.dao.PetVaccineScheduleDao;
 
 import jakarta.validation.Valid;
@@ -56,36 +57,31 @@ public class PetDashboardController {
     private final UserDao userDao;
     private final PetDao petDao;
     private final PetWeightLogRepository petWeightLogRepository;
+    private final PetWeightService petWeightService;
     private final PetVaccineScheduleDao petVaccineScheduleDao;
     private final NutritionPlanDao nutritionPlanDao;
     private final PetFeedingLogDao petFeedingLogDao;
 
     @PostMapping(ApiUrl.PET_WEIGHT)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @Transactional
     public ResponseEntity<SuccessResponse<PetWeightLogModel>> logWeight(
             @PathVariable String uuid,
             @RequestBody @Valid PetWeightLogRequest request) {
         Pet pet = ownedPet(uuid);
         LocalDateTime recordedAt = request.recordedAt() == null ? LocalDateTime.now() : request.recordedAt();
-        Optional<PetWeightLog> latest = petWeightLogRepository.findFirstByPet_UuidOrderByRecordedAtDesc(uuid);
-        PetWeightLog saved = petWeightLogRepository.save(PetWeightLog.builder()
-                .pet(pet)
-                .weight(request.weight())
-                .recordedAt(recordedAt)
-                .note(request.note())
-                .build());
-        if (latest.isEmpty() || !recordedAt.isBefore(latest.get().getRecordedAt())) {
-            pet.setWeight(String.valueOf(request.weight()));
-            petDao.savePets(pet);
-        }
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        PetWeightLog saved = petWeightService.recordManual(pet, request.weight(), recordedAt, request.note(),
+                userDao.userByEmail(email));
         return responseBuilder.buildSuccessResponse(toWeightModel(saved), ResponseMessage.SUCCESS, HttpStatus.CREATED);
     }
 
     @GetMapping(ApiUrl.PET_WEIGHT_HISTORY)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @Transactional(readOnly = true)
     public ResponseEntity<SuccessResponse<List<PetWeightLogModel>>> weightHistory(@PathVariable String uuid) {
         ownedPet(uuid);
-        List<PetWeightLogModel> history = petWeightLogRepository.findByPet_UuidOrderByRecordedAtDesc(uuid).stream()
+        List<PetWeightLogModel> history = petWeightLogRepository.findByPet_UuidOrderByRecordedAtDescIdDesc(uuid).stream()
                 .map(this::toWeightModel)
                 .toList();
         return responseBuilder.buildSuccessResponse(history, ResponseMessage.SUCCESS, HttpStatus.OK);
@@ -93,12 +89,13 @@ public class PetDashboardController {
 
     @GetMapping(ApiUrl.PET_DASHBOARD)
     @PreAuthorize(KeyConstant.IS_AUTHENTICATED)
+    @Transactional(readOnly = true)
     public ResponseEntity<SuccessResponse<PetDashboardModel>> dashboard(@PathVariable String uuid) {
         Pet pet = ownedPet(uuid);
         LocalDate today = LocalDate.now();
         PetDashboardModel response = new PetDashboardModel(
                 toPetModel(pet),
-                petWeightLogRepository.findFirstByPet_UuidOrderByRecordedAtDesc(uuid).map(this::toWeightModel).orElse(null),
+                petWeightLogRepository.findFirstByPet_UuidOrderByRecordedAtDescIdDesc(uuid).map(this::toWeightModel).orElse(null),
                 vaccineDues(uuid, today),
                 activeNutritionPlan(uuid),
                 completedFeedingsToday(uuid, today),
@@ -147,7 +144,18 @@ public class PetDashboardController {
     }
 
     private PetWeightLogModel toWeightModel(PetWeightLog log) {
-        return new PetWeightLogModel(log.getId(), log.getWeight(), log.getRecordedAt(), log.getNote());
+        return new PetWeightLogModel(log.getId(), log.getWeight(), log.getRecordedAt(), log.getNote(),
+                log.getVisit() == null ? null : log.getVisit().getUuid(),
+                log.getRecordedBy() == null ? null : log.getRecordedBy().getUuid(), displayName(log.getRecordedBy()),
+                log.getCorrectedBy() == null ? null : log.getCorrectedBy().getUuid(), displayName(log.getCorrectedBy()),
+                log.getCorrectedAt());
+    }
+
+    private String displayName(User user) {
+        if (user == null) return null;
+        String name = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
+                + (user.getLastName() == null ? "" : user.getLastName())).trim();
+        return name.isEmpty() ? "User " + user.getUuid() : name;
     }
 
     private PetModel toPetModel(Pet pet) {
