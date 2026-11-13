@@ -230,6 +230,8 @@ public class ApiUrl {
 	public static final String WEBHOOK_ZEPTOMAIL = "/webhook/zeptomail";
 
 	public static final String DOCTOR_VISITS = DOCTOR_BASE_URL + "/visits";
+	public static final String DOCTOR_SMART_PHRASES = DOCTOR_BASE_URL + "/smart-phrases";
+	public static final String DOCTOR_SMART_PHRASE_BY_UUID = DOCTOR_SMART_PHRASES + "/{phraseUuid}";
 	public static final String DOCTOR_VISITS_MINE = DOCTOR_VISITS + "/mine";
 	public static final String DOCTOR_VISIT_BY_UUID = DOCTOR_VISITS + "/{visitUuid}";
 	public static final String DOCTOR_VISIT_START = DOCTOR_VISIT_BY_UUID + "/start";

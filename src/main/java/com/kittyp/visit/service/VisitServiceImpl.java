@@ -926,7 +926,7 @@ public class VisitServiceImpl implements VisitService {
         }
         if (chartLocked(visit)) {
             throw new CustomException(
-                    "Prescription can no longer be edited. More than one hour has passed since the visit was finished.",
+                    "Chart can no longer be edited after treatment is finished.",
                     HttpStatus.BAD_REQUEST);
         }
         if (STARTABLE.contains(visit.getStatus())) {
@@ -981,20 +981,12 @@ public class VisitServiceImpl implements VisitService {
         }
     }
 
-    /** CHECKING_OUT / COMPLETED: chart (prescription) stays editable for 1 hour after finish. */
+    /** The chart is immutable after treatment is finished. */
     private boolean chartLocked(Visit visit) {
         VisitStatus status = visit.getStatus();
-        if (status == VisitStatus.WAITLIST || status == VisitStatus.CHECKED_IN || status == VisitStatus.IN_PROGRESS) {
-            return false;
-        }
-        if (status != VisitStatus.CHECKING_OUT && status != VisitStatus.COMPLETED) {
-            return true;
-        }
-        LocalDateTime doneAt = visit.getCheckingOutAt() != null ? visit.getCheckingOutAt() : visit.getCompletedAt();
-        if (doneAt == null) {
-            return true;
-        }
-        return doneAt.isBefore(LocalDateTime.now().minusHours(1));
+        return status != VisitStatus.WAITLIST
+                && status != VisitStatus.CHECKED_IN
+                && status != VisitStatus.IN_PROGRESS;
     }
 
     @Override
