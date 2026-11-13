@@ -2,6 +2,7 @@ package com.kittyp.visit.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.kittyp.booking.enums.BookingMode;
 import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
+import com.kittyp.common.exception.CustomException;
 import com.kittyp.doctor.dao.DoctorProfileDao;
 import com.kittyp.doctor.entity.DoctorProfile;
 import com.kittyp.doctor.repository.DoctorReviewRepository;
@@ -23,6 +25,7 @@ import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.User;
 import com.kittyp.visit.dao.VisitDao;
+import com.kittyp.visit.dto.VisitDtos.VisitChartRequest;
 import com.kittyp.visit.dto.VisitDtos.VisitModel;
 import com.kittyp.visit.entity.Visit;
 import com.kittyp.visit.enums.VisitSource;
@@ -88,5 +91,33 @@ class VisitServiceImplCompleteVisitTest {
 		assertEquals(VisitStatus.CHECKING_OUT, visit.getStatus());
 		assertNotNull(visit.getCheckingOutAt());
 		assertEquals(VisitStatus.CHECKING_OUT, model.status());
+	}
+
+	@Test
+	void saveChart_rejectsEditsAfterTreatmentIsFinished() {
+		User user = User.builder().email("doc@example.com").password("x").uuid("u-doc").firstName("Ajit")
+				.lastName("Attarde").build();
+		user.setId(8L);
+		DoctorProfile profile = DoctorProfile.builder().user(user).build();
+		profile.setId(3L);
+
+		Clinic clinic = Clinic.builder().uuid("clinic-1").name("Clinic one").build();
+		clinic.setId(10L);
+		Visit visit = Visit.builder()
+				.uuid("visit-1")
+				.clinic(clinic)
+				.doctor(profile)
+				.status(VisitStatus.CHECKING_OUT)
+				.build();
+
+		when(userDao.userByEmail("doc@example.com")).thenReturn(user);
+		when(doctorProfileDao.findByUserId(8L)).thenReturn(profile);
+		when(visitDao.findByUuid("visit-1")).thenReturn(Optional.of(visit));
+		when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(10L, 8L)).thenReturn(true);
+
+		CustomException ex = assertThrows(CustomException.class, () -> visitService.saveChart(
+				"visit-1", new VisitChartRequest(null, null, "updated plan", null, null, null), "doc@example.com"));
+
+		assertEquals("Chart can no longer be edited after treatment is finished.", ex.getMessage());
 	}
 }
