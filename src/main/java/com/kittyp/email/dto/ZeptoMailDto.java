@@ -23,6 +23,8 @@ public class ZeptoMailDto implements IEmailDto{
 	private String replyToEmail;
 	private String replyToName;
 	private String message;
+	private String subject;
+	private Long clinicAccountId;
 //	private String provider;
 	private Map<String, Object> mergeInfo;
 	private List<EmailAttachment> attachments;

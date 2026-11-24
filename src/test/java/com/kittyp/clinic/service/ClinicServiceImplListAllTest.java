@@ -107,7 +107,7 @@ class ClinicServiceImplListAllTest {
 		assertEquals("Missing license", model.rejectionReason());
 		assertEquals("Missing license", clinic.getRejectionReason());
 		verify(zeptoMailService).sendClinicProfileRejected(
-				"owner@example.com", "Casey", "Alpha", "Missing license");
+				"owner@example.com", "Casey", "Alpha", "Missing license", 1L);
 	}
 
 	@Test

@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.common.exception.CustomException;
@@ -23,7 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Thin outbound router for WhatsApp (primary) with optional notification audit.
- * Sender credentials must come from DoctorProfile or Clinic — never cross-use.
+ * All practice messages use Kittyp's centrally configured WhatsApp sender.
  */
 @Slf4j
 @Service
@@ -31,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 public class OutboundMessageService {
 
     private final WhatsAppService whatsAppService;
+    private final KittypWhatsAppMessagingService kittypWhatsAppMessaging;
     private final NotificationLogRepository notificationLogRepository;
     private final ObjectMapper objectMapper;
 
@@ -49,128 +51,134 @@ public class OutboundMessageService {
     @Value("${whatsapp.promo-template:promo_offer}")
     private String promoTemplate;
 
-    @Value("${whatsapp.appointment-template:checkup_reminder}")
+    @Value("${whatsapp.appointment-template:}")
     private String appointmentTemplate;
 
     @Value("${whatsapp.invoice-template-lang:en}")
     private String defaultLang;
 
-    public void requireSenderReady(WhatsAppSenderCredentials sender, String ownerLabel) {
-        // Check tenant credentials first — do not confuse "feature off" with "missing Meta IDs".
-        if (sender == null || !sender.isConfigured()) {
-            throw new CustomException(
-                    "WhatsApp is not configured for this " + ownerLabel
-                            + ". Add Meta Phone Number ID and token in settings.",
-                    HttpStatus.SERVICE_UNAVAILABLE);
-        }
+    public void requireSenderReady() {
         if (!whatsAppService.isDeliveryEnabled()) {
             throw new CustomException(
                     "WhatsApp sending is disabled on the server. Set WHATSAPP_ENABLED=true to deliver messages.",
                     HttpStatus.SERVICE_UNAVAILABLE);
         }
-    }
-
-    /**
-     * Invoice PDF sends require the {@code invoice_receipt} template to be APPROVED by Meta.
-     */
-    public void requireInvoiceTemplateApproved(WhatsAppSenderCredentials sender) {
-        String status = sender == null ? null : sender.invoiceTemplateStatus();
-        if (WhatsAppConnectionStatuses.isInvoiceTemplateApproved(status)) {
-            return;
+        WhatsAppSenderCredentials sender = kittypWhatsAppMessaging.requireSender();
+        if (!whatsAppService.isConfigured(sender)) {
+            throw new CustomException(
+                    "Kittyp WhatsApp sender credentials are not configured correctly.",
+                    HttpStatus.SERVICE_UNAVAILABLE);
         }
-        throw new CustomException(
-                "WhatsApp invoice template not approved yet",
-                HttpStatus.SERVICE_UNAVAILABLE);
     }
 
-    public void sendInvoicePdfWhatsApp(
-            WhatsAppSenderCredentials sender,
+    /** Invoice sends require Kittyp's configured document template to be approved by Meta. */
+    public void requireInvoiceTemplateApproved() {
+        requireSenderReady();
+        kittypWhatsAppMessaging.requireInvoiceDocumentTemplate(
+                configuredValue(invoiceTemplate, "invoice"),
+                configuredValue(invoiceTemplateLang, "en"));
+    }
+
+    public void sendInvoiceWhatsApp(
             String ownerPhone,
             byte[] pdfBytes,
             String filename,
             List<String> bodyParams,
             User auditUser,
             Pet auditPet) {
-        requireInvoiceTemplateApproved(sender);
+        requireInvoiceTemplateApproved();
+        WhatsAppSenderCredentials sender = kittypWhatsAppMessaging.requireSender();
         String to = whatsAppService.toE164Digits(ownerPhone);
+        String templateName = configuredValue(invoiceTemplate, "invoice");
+        String templateLanguage = configuredValue(invoiceTemplateLang, "en");
         String mediaId = whatsAppService.uploadDocumentPdf(sender, pdfBytes, filename);
         whatsAppService.sendDocumentTemplate(
-                sender, to, invoiceTemplate, invoiceTemplateLang, mediaId, filename, bodyParams);
+                sender, to, templateName, templateLanguage, mediaId, filename, bodyParams);
         audit(auditUser, auditPet, NotificationType.INVOICE_SENT, NotificationChannel.WHATSAPP, Map.of(
                 "to", to,
-                "template", invoiceTemplate,
+                "template", templateName,
                 "filename", filename,
-                "phoneNumberId", sender != null ? sender.phoneNumberId() : ""));
+                "phoneNumberId", sender.phoneNumberId()));
+    }
+
+    private static String configuredValue(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
     }
 
     public void sendVaccineReminder(
-            WhatsAppSenderCredentials sender,
             String ownerPhone,
             List<String> bodyParams,
             User auditUser,
             Pet auditPet) {
-        sendText(sender, ownerPhone, vaccineTemplate, bodyParams, NotificationType.VACCINE_REMINDER, auditUser, auditPet);
+        sendText(ownerPhone, vaccineTemplate, bodyParams, NotificationType.VACCINE_REMINDER, auditUser, auditPet);
     }
 
     public void sendCheckupReminder(
-            WhatsAppSenderCredentials sender,
             String ownerPhone,
             List<String> bodyParams,
             User auditUser,
             Pet auditPet) {
-        sendText(sender, ownerPhone, checkupTemplate, bodyParams, NotificationType.CHECKUP_REMINDER, auditUser, auditPet);
+        sendText(ownerPhone, checkupTemplate, bodyParams, NotificationType.CHECKUP_REMINDER, auditUser, auditPet);
     }
 
     public void sendPromoOffer(
-            WhatsAppSenderCredentials sender,
             String ownerPhone,
             List<String> bodyParams,
             User auditUser,
             Pet auditPet) {
-        sendText(sender, ownerPhone, promoTemplate, bodyParams, NotificationType.PROMO_OFFER, auditUser, auditPet);
+        sendText(ownerPhone, promoTemplate, bodyParams, NotificationType.PROMO_OFFER, auditUser, auditPet);
     }
 
     /**
-     * Best-effort appointment notice. Uses checkup template by default; never throws if WhatsApp is off.
+     * Best-effort appointment notice. Requires the configured appointment template and never throws.
      */
-    public void trySendAppointmentNotice(
-            WhatsAppSenderCredentials sender,
+    public boolean trySendAppointmentNotice(
             String phone,
             List<String> bodyParams,
             User auditUser,
             Pet auditPet) {
-        if (!whatsAppService.isDeliveryEnabled() || sender == null || !sender.isConfigured()) {
-            return;
+        if (!whatsAppService.isDeliveryEnabled() || !StringUtils.hasText(appointmentTemplate)) {
+            return false;
         }
         try {
-            sendText(sender, phone, appointmentTemplate, bodyParams, NotificationType.APPOINTMENT_REMINDER,
+            sendText(phone, appointmentTemplate, bodyParams, NotificationType.APPOINTMENT_REMINDER,
                     auditUser, auditPet);
+            return true;
         } catch (Exception e) {
             log.warn("WhatsApp appointment notice skipped: {}", e.getMessage());
+            return false;
         }
     }
 
     private void sendText(
-            WhatsAppSenderCredentials sender,
             String ownerPhone,
             String template,
             List<String> bodyParams,
             NotificationType type,
             User auditUser,
             Pet auditPet) {
+        requireSenderReady();
+        WhatsAppSenderCredentials sender = kittypWhatsAppMessaging.requireSender();
+        String language = configuredValue(defaultLang, "en");
+        var approvedTemplate = kittypWhatsAppMessaging.requireApprovedTextTemplate(
+                configuredValue(template, ""), language);
+        if (bodyParams == null || approvedTemplate.variables().size() != bodyParams.size()) {
+            throw new CustomException(
+                    "WhatsApp template parameter count does not match the approved Kittyp template",
+                    HttpStatus.BAD_REQUEST);
+        }
         String to = whatsAppService.toE164Digits(ownerPhone);
-        whatsAppService.sendTextTemplate(sender, to, template, defaultLang, bodyParams);
+        whatsAppService.sendTextTemplate(sender, to, approvedTemplate.name(), language, bodyParams);
         audit(auditUser, auditPet, type, NotificationChannel.WHATSAPP, Map.of(
                 "to", to,
-                "template", template));
+                "template", approvedTemplate.name()));
     }
 
     @Transactional
     protected void audit(
             User user, Pet pet, NotificationType type, NotificationChannel channel, Map<String, Object> payload) {
         if (user == null) {
-            log.info("WhatsApp {} sent (no linked user for NotificationLog) channel={} payload={}",
-                    type, channel, payload);
+            log.info("WhatsApp notification sent without linked user type={} channel={}", type, channel);
             return;
         }
         try {

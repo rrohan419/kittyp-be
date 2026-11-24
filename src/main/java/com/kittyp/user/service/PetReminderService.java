@@ -3,6 +3,7 @@ package com.kittyp.user.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -20,8 +21,10 @@ import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.exception.ResourceNotFoundException;
 import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.notification.service.OutboundMessageService;
-import com.kittyp.notification.service.WhatsAppSenderCredentials;
 import com.kittyp.notification.service.WhatsAppService;
+import com.kittyp.notification.service.AutomationMessageBridge;
+import com.kittyp.notification.enums.MessageChannel;
+import com.kittyp.notification.enums.MessageTenantType;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.dto.PetReminderDtos.PetReminderModel;
 import com.kittyp.user.dto.PetReminderDtos.PetReminderRequest;
@@ -56,6 +59,7 @@ public class PetReminderService {
     private final UserService userService;
     private final OutboundMessageService outboundMessageService;
     private final WhatsAppService whatsAppService;
+    private final AutomationMessageBridge automationMessageBridge;
 
     @Transactional(readOnly = true)
     public List<PetReminderModel> listMine(String email) {
@@ -85,7 +89,9 @@ public class PetReminderService {
                 .whatsappEnabled(request.whatsappEnabled() == null || request.whatsappEnabled())
                 .build();
         reminder.setIsActive(true);
-        return toModel(petReminderRepository.save(reminder));
+        reminder=petReminderRepository.save(reminder);
+        scheduleAutomation(reminder);
+        return toModel(reminder);
     }
 
     @Transactional
@@ -114,7 +120,13 @@ public class PetReminderService {
         if (request.isActive() != null) {
             reminder.setIsActive(request.isActive());
         }
-        return toModel(petReminderRepository.save(reminder));
+        reminder=petReminderRepository.save(reminder);
+        if (Boolean.FALSE.equals(reminder.getIsActive())) {
+            cancelAutomation(reminder);
+        } else {
+            scheduleAutomation(reminder);
+        }
+        return toModel(reminder);
     }
 
     @Transactional
@@ -124,11 +136,12 @@ public class PetReminderService {
                 .orElseThrow(() -> new ResourceNotFoundException("reminder", "uuid", reminderUuid));
         reminder.setIsActive(false);
         petReminderRepository.save(reminder);
+        cancelAutomation(reminder);
     }
 
     @Transactional
     public int processDueReminders() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
         List<PetReminder> candidates = petReminderRepository.findPendingBetween(
                 today.atStartOfDay(), today.plusDays(8).atStartOfDay());
         int sent = 0;
@@ -143,7 +156,8 @@ public class PetReminderService {
                 continue;
             }
             try {
-                dispatch(reminder, oneDay ? "tomorrow" : "in " + daysLeft + " days");
+                dispatch(reminder, oneDay ? "tomorrow" : "in " + daysLeft + " days",
+                        oneDay ? "ONE_DAY" : "SEVEN_DAY");
                 LocalDateTime now = LocalDateTime.now();
                 if (oneDay) {
                     reminder.setOneDaySentAt(now);
@@ -170,7 +184,8 @@ public class PetReminderService {
                 continue;
             }
             try {
-                if (!dispatchVaccineSchedule(schedule, daysLeft)) {
+                String stage = oneDay ? "ONE_DAY" : "SEVEN_DAY";
+                if (!dispatchVaccineSchedule(schedule, daysLeft, stage)) {
                     continue;
                 }
                 if (oneDay) {
@@ -188,7 +203,7 @@ public class PetReminderService {
         return sent;
     }
 
-    private boolean dispatchVaccineSchedule(PetVaccineSchedule schedule, long daysLeft) {
+    private boolean dispatchVaccineSchedule(PetVaccineSchedule schedule, long daysLeft, String stage) {
         Pet pet = schedule.getPet();
         if (pet == null || schedule.getVaccine() == null || pet.getUuid() == null) {
             log.warn("Vaccine schedule {} has no pet or vaccine; reminder not sent", schedule.getId());
@@ -203,7 +218,10 @@ public class PetReminderService {
             return false;
         }
         String email = user != null ? user.getEmail() : owner.getEmail();
-        String phone = user != null ? user.getPhoneNumber() : owner.getPhone();
+        String phone = user != null
+                ? (user.getWhatsappNumber() != null && !user.getWhatsappNumber().isBlank()
+                        ? user.getWhatsappNumber() : user.getPhoneNumber())
+                : owner.getPhone();
         String name = user != null ? user.getFirstName() : owner.getFirstName();
         Clinic clinic = enrollment == null ? null : enrollment.getClinic();
         String petName = pet.getName() == null || pet.getName().isBlank() ? "your pet" : pet.getName();
@@ -215,21 +233,50 @@ public class PetReminderService {
         String dueLabel = daysLeft == 0 ? "today" : daysLeft == 1 ? "tomorrow" : "in " + daysLeft + " days";
         String title = "Pet vaccination reminder";
         String message = String.format("%s has a %s vaccination due %s", petName, vaccineName, dueLabel);
+        String sourceUuid = "VACCINE_SCHEDULE_" + schedule.getId();
+        MessageTenantType tenantType = clinic == null ? null : MessageTenantType.CLINIC;
+        Long tenantId = clinic == null ? null : clinic.getId();
         boolean attempted = false;
         if (user != null && email != null && !email.isBlank()) {
             attempted = userService.sendPushNotification(email, title, message);
         }
         if (email != null && !email.isBlank()) {
-            attempted |= sendReminderEmail(true, email, name, petName, clinic, vaccineName, title, message,
-                    schedule.getDueDate().atStartOfDay());
+            if (tenantId == null || automationMessageBridge.canDispatch(
+                    tenantType, tenantId, "PET_VACCINE_SCHEDULE", sourceUuid, stage, MessageChannel.EMAIL)) {
+                try {
+                    attempted |= sendReminderEmail(true, email, name, petName, clinic, vaccineName, title, message,
+                            schedule.getDueDate().atStartOfDay());
+                    if (tenantId != null) automationMessageBridge.markSent(
+                            tenantType, tenantId, "PET_VACCINE_SCHEDULE", sourceUuid, stage, MessageChannel.EMAIL, null);
+                } catch (Exception e) {
+                    if (tenantId != null) automationMessageBridge.markFailed(
+                            tenantType, tenantId, "PET_VACCINE_SCHEDULE", sourceUuid, stage, MessageChannel.EMAIL, "EMAIL_FAILED");
+                    throw e;
+                }
+            }
+        }
+        if (phone != null && !phone.isBlank() && clinic != null && !whatsAppService.isDeliveryEnabled()) {
+            throw new CustomException(
+                    "WhatsApp reminder delivery is disabled; reminder will be retried",
+                    HttpStatus.SERVICE_UNAVAILABLE);
         }
         if (phone != null && !phone.isBlank() && clinic != null) {
-            WhatsAppSenderCredentials sender = WhatsAppSenderCredentials.of(
-                    clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
-            if (sender.isConfigured() && whatsAppService.isDeliveryEnabled()) {
-                outboundMessageService.sendVaccineReminder(sender, phone,
-                        List.of(petName, vaccineName, schedule.getDueDate().format(EMAIL_DATE)), user, pet);
-                attempted = true;
+            if (tenantId == null || automationMessageBridge.canDispatch(
+                    tenantType, tenantId, "PET_VACCINE_SCHEDULE", sourceUuid, stage, MessageChannel.WHATSAPP)) {
+                try {
+                        String ownerName = name == null || name.isBlank() ? "Pet parent" : name;
+                    String clinicName = clinic.getName() == null ? "your clinic" : clinic.getName();
+                    outboundMessageService.sendVaccineReminder(phone,
+                            List.of(ownerName, petName, clinicName, vaccineName,
+                                    schedule.getDueDate().format(EMAIL_DATE)), user, pet);
+                    if (tenantId != null) automationMessageBridge.markSent(
+                            tenantType, tenantId, "PET_VACCINE_SCHEDULE", sourceUuid, stage, MessageChannel.WHATSAPP, null);
+                    attempted = true;
+                } catch (Exception e) {
+                    if (tenantId != null) automationMessageBridge.markFailed(
+                            tenantType, tenantId, "PET_VACCINE_SCHEDULE", sourceUuid, stage, MessageChannel.WHATSAPP, "PROVIDER_REJECTED");
+                    throw e;
+                }
             }
         }
         if (!attempted) {
@@ -238,10 +285,13 @@ public class PetReminderService {
         return attempted;
     }
 
-    private void dispatch(PetReminder reminder, String whenLabel) {
+    private void dispatch(PetReminder reminder, String whenLabel, String stage) throws Exception {
         log.info("Dispatching reminder {} for user {}", reminder.getUuid(), reminder.getUser().getEmail());
         User user = reminder.getUser();
         Pet pet = reminder.getPet();
+        Clinic clinic = resolveClinic(pet);
+        MessageTenantType tenantType = clinic == null ? null : MessageTenantType.CLINIC;
+        Long tenantId = clinic == null ? null : clinic.getId();
         String petName = pet != null ? pet.getName() : "your pet";
         String typeLabel = reminder.getType() == null ? "reminder" : reminder.getType().name().toLowerCase();
         String title = "Pet " + typeLabel + " reminder";
@@ -252,21 +302,56 @@ public class PetReminderService {
             userService.sendPushNotification(user.getEmail(), title, body);
         }
 
-        sendEmail(reminder, user, pet, petName, typeLabel);
+        if (tenantId == null || automationMessageBridge.canDispatch(
+                tenantType, tenantId, "PET_REMINDER", reminder.getUuid(), stage, MessageChannel.EMAIL)) {
+            try {
+                sendEmail(reminder, user, pet, petName, typeLabel);
+                if (tenantId != null) automationMessageBridge.markSent(
+                        tenantType, tenantId, "PET_REMINDER", reminder.getUuid(), stage, MessageChannel.EMAIL, null);
+            } catch (Exception e) {
+                if (tenantId != null) automationMessageBridge.markFailed(
+                        tenantType, tenantId, "PET_REMINDER", reminder.getUuid(), stage, MessageChannel.EMAIL, "EMAIL_FAILED");
+            }
+        }
 
-        if (Boolean.TRUE.equals(reminder.getWhatsappEnabled()) && user.getPhoneNumber() != null) {
-            WhatsAppSenderCredentials sender = resolveSender(pet);
-
-            if (sender.isConfigured()) {
-                if (reminder.getType() == PetReminderType.VACCINATION || reminder.getType() == PetReminderType.INJECTION) {
-                    outboundMessageService.sendVaccineReminder(sender, user.getPhoneNumber(),
-                            List.of(petName, typeLabel), user, pet);
-                } else if (reminder.getType() == PetReminderType.CHECKUP || reminder.getType() == PetReminderType.VISIT) {
-                    outboundMessageService.sendCheckupReminder(sender, user.getPhoneNumber(),
-                            List.of(petName, typeLabel), user, pet);
-                } else {
-                    outboundMessageService.trySendAppointmentNotice(sender, user.getPhoneNumber(),
-                            List.of(petName, typeLabel, reminder.getDueAt().toString()), user, pet);
+        String whatsappPhone = user.getWhatsappNumber() != null && !user.getWhatsappNumber().isBlank()
+                ? user.getWhatsappNumber() : user.getPhoneNumber();
+        if (Boolean.TRUE.equals(reminder.getWhatsappEnabled()) && whatsappPhone != null
+                && !whatsAppService.isDeliveryEnabled()) {
+            throw new CustomException(
+                    "WhatsApp reminder delivery is disabled; reminder will be retried",
+                    HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        if (Boolean.TRUE.equals(reminder.getWhatsappEnabled()) && whatsappPhone != null) {
+            if (tenantId == null || automationMessageBridge.canDispatch(
+                    tenantType, tenantId, "PET_REMINDER", reminder.getUuid(), stage, MessageChannel.WHATSAPP)) {
+                try {
+                    String ownerName = user.getFirstName() == null ? "Pet parent" : user.getFirstName();
+                    String clinicName = clinic == null || clinic.getName() == null ? "your clinic" : clinic.getName();
+                    String dueDate = reminder.getDueAt().format(EMAIL_DATE);
+                    if (reminder.getType() == PetReminderType.VACCINATION || reminder.getType() == PetReminderType.INJECTION) {
+                        outboundMessageService.sendVaccineReminder(whatsappPhone,
+                                List.of(ownerName, petName, clinicName, typeLabel, dueDate), user, pet);
+                    } else if (reminder.getType() == PetReminderType.CHECKUP || reminder.getType() == PetReminderType.VISIT) {
+                        String previousVisitDate = reminder.getCreatedAt() == null
+                                ? dueDate : reminder.getCreatedAt().format(EMAIL_DATE);
+                        outboundMessageService.sendCheckupReminder(whatsappPhone,
+                                List.of(ownerName, petName, clinicName, previousVisitDate, dueDate), user, pet);
+                    } else {
+                        if (!outboundMessageService.trySendAppointmentNotice(whatsappPhone,
+                                List.of(ownerName, petName, clinicName, dueDate, dueDate), user, pet)) {
+                            if (tenantId != null) automationMessageBridge.markFailed(
+                                    tenantType, tenantId, "PET_REMINDER", reminder.getUuid(), stage,
+                                    MessageChannel.WHATSAPP, "TEMPLATE_NOT_CONFIGURED");
+                            return;
+                        }
+                    }
+                    if (tenantId != null) automationMessageBridge.markSent(
+                            tenantType, tenantId, "PET_REMINDER", reminder.getUuid(), stage, MessageChannel.WHATSAPP, null);
+                } catch (Exception e) {
+                    if (tenantId != null) automationMessageBridge.markFailed(
+                            tenantType, tenantId, "PET_REMINDER", reminder.getUuid(), stage, MessageChannel.WHATSAPP, "PROVIDER_REJECTED");
+                    throw e;
                 }
             }
         }
@@ -303,7 +388,8 @@ public class PetReminderService {
         return zeptoMailService.sendPetReminderEmail(vaccine, email, name, petName,
                 clinic == null ? null : clinic.getName(),
                 clinic == null ? null : clinic.getPhone(),
-                address, null, reminderName, title, message, dueAt.format(EMAIL_DATE), time);
+                address, null, reminderName, title, message, dueAt.format(EMAIL_DATE), time,
+                clinic == null ? null : clinic.getId());
     }
 
     private Clinic resolveClinic(Pet pet) {
@@ -314,18 +400,60 @@ public class PetReminderService {
         return enrollments.size() == 1 ? enrollments.get(0).getClinic() : null;
     }
 
-    private WhatsAppSenderCredentials resolveSender(Pet pet) {
-        if (pet == null) {
-            return WhatsAppSenderCredentials.of(null, null);
+    private void scheduleAutomation(PetReminder reminder) {
+        Clinic clinic = resolveClinic(reminder.getPet());
+        if (clinic == null) return;
+        MessageTenantType tenantType = MessageTenantType.CLINIC;
+        Long tenantId = clinic.getId();
+        String petName = reminder.getPet() == null || reminder.getPet().getName() == null
+                ? "your pet" : reminder.getPet().getName();
+        String typeLabel = reminder.getType() == null ? "reminder" : reminder.getType().name().toLowerCase();
+        String body = reminder.getNote() != null && !reminder.getNote().isBlank()
+                ? reminder.getNote()
+                : String.format("%s has a %s due", petName, typeLabel);
+        String recipientName = reminder.getUser() == null ? "" : reminder.getUser().getFirstName();
+        String email = reminder.getUser() == null ? null : reminder.getUser().getEmail();
+        String phone = reminder.getUser() == null ? null
+                : reminder.getUser().getWhatsappNumber() != null
+                        && !reminder.getUser().getWhatsappNumber().isBlank()
+                                ? reminder.getUser().getWhatsappNumber()
+                                : reminder.getUser().getPhoneNumber();
+        LocalDateTime sevenAt = reminder.getDueAt().minusDays(7);
+        LocalDateTime oneAt = reminder.getDueAt().minusDays(1);
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        if (!sevenAt.toLocalDate().isBefore(today)) {
+            scheduleStage(reminder, tenantType, tenantId, "SEVEN_DAY",
+                    sevenAt, recipientName, petName, email, phone, body);
         }
-        List<ClinicPetEnrollment> enrollments = clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId());
-        if (enrollments.size() != 1) {
-            return WhatsAppSenderCredentials.of(null, null);
+        if (!oneAt.toLocalDate().isBefore(today)) {
+            scheduleStage(reminder, tenantType, tenantId, "ONE_DAY",
+                    oneAt, recipientName, petName, email, phone, body);
         }
-        Clinic clinic = enrollments.get(0).getClinic();
-        return clinic == null
-                ? WhatsAppSenderCredentials.of(null, null)
-                : WhatsAppSenderCredentials.of(clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
+    }
+
+    private void scheduleStage(PetReminder reminder, MessageTenantType tenantType, Long tenantId, String stage,
+            LocalDateTime scheduledAt, String recipientName, String petName, String email, String phone, String body) {
+        if (email != null && !email.isBlank()) {
+            automationMessageBridge.schedule(tenantType, tenantId, "PET_REMINDER",
+                    "PET_REMINDER", reminder.getUuid(), stage, recipientName, petName,
+                    MessageChannel.EMAIL, email, "Pet " + typeLabel(reminder) + " reminder", body, scheduledAt);
+        }
+        if (Boolean.TRUE.equals(reminder.getWhatsappEnabled()) && phone != null && !phone.isBlank()) {
+            automationMessageBridge.schedule(tenantType, tenantId, "PET_REMINDER",
+                    "PET_REMINDER", reminder.getUuid(), stage, recipientName, petName,
+                    MessageChannel.WHATSAPP, phone, "Pet reminder", body, scheduledAt);
+        }
+    }
+
+    private void cancelAutomation(PetReminder reminder) {
+        Clinic clinic = resolveClinic(reminder.getPet());
+        if (clinic == null) return;
+        automationMessageBridge.cancelSource(MessageTenantType.CLINIC, clinic.getId(),
+                "PET_REMINDER", reminder.getUuid());
+    }
+
+    private String typeLabel(PetReminder reminder) {
+        return reminder.getType() == null ? "reminder" : reminder.getType().name().toLowerCase();
     }
 
     private PetReminderModel toModel(PetReminder reminder) {

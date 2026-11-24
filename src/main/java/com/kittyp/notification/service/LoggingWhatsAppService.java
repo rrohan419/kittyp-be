@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Active when WhatsApp Cloud API is disabled. Rejects real sends so FE gets a clear error.
- * Credential checks still reflect whether the clinic/doctor saved Meta IDs + token.
+ * Credential checks reflect Kittyp's centrally configured sender.
  */
 @Slf4j
 @Service
@@ -48,8 +48,7 @@ public class LoggingWhatsAppService implements WhatsAppService {
             String mediaId,
             String filename,
             List<String> bodyParams) {
-        log.warn("WhatsApp disabled — would send template {} to {}", templateName,
-                WhatsAppPhones.redact(toE164Digits));
+        log.warn("WhatsApp disabled — template send was not attempted; template={}", templateName);
         throw notConfigured();
     }
 
@@ -60,8 +59,7 @@ public class LoggingWhatsAppService implements WhatsAppService {
             String templateName,
             String languageCode,
             List<String> bodyParams) {
-        log.warn("WhatsApp disabled — would send text template {} to {}", templateName,
-                WhatsAppPhones.redact(toE164Digits));
+        log.warn("WhatsApp disabled — template send was not attempted; template={}", templateName);
         throw notConfigured();
     }
 
@@ -72,14 +70,13 @@ public class LoggingWhatsAppService implements WhatsAppService {
             String templateName,
             String languageCode,
             String code) {
-        log.warn("WhatsApp disabled — would send authentication template {} to {}", templateName,
-            WhatsAppPhones.redact(toE164Digits));
+        log.warn("WhatsApp disabled — authentication template send was not attempted");
         throw notConfigured();
         }
 
     private CustomException notConfigured() {
         return new CustomException(
-                "WhatsApp sending is disabled on the server. Set WHATSAPP_ENABLED=true, then use the Meta credentials saved in Clinic/Doctor settings.",
+                "WhatsApp sending is disabled on the server. Set WHATSAPP_ENABLED=true to use Kittyp's configured WhatsApp account.",
                 HttpStatus.SERVICE_UNAVAILABLE);
     }
 }

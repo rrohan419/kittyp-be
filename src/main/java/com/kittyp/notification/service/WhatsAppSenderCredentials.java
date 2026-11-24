@@ -3,8 +3,7 @@ package com.kittyp.notification.service;
 import org.springframework.util.StringUtils;
 
 /**
- * Meta Cloud API sender identity for one business WhatsApp number.
- * Doctor and clinic credentials must never be mixed on a single send.
+ * Meta Cloud API sender identity for one configured business WhatsApp number.
  */
 public record WhatsAppSenderCredentials(String token, String phoneNumberId, String invoiceTemplateStatus) {
 

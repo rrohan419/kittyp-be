@@ -2,6 +2,7 @@ package com.kittyp.clinic.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -122,6 +123,9 @@ import com.kittyp.notification.enums.NotificationType;
 import com.kittyp.notification.repository.NotificationLogRepository;
 import com.kittyp.notification.service.Msg91OtpVerifyService;
 import com.kittyp.notification.service.WhatsappOtpService;
+import com.kittyp.notification.service.AutomationMessageBridge;
+import com.kittyp.notification.enums.MessageChannel;
+import com.kittyp.notification.enums.MessageTenantType;
 import com.kittyp.user.dao.PetDao;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
@@ -174,6 +178,7 @@ public class ClinicServiceImpl implements ClinicService {
     private final ZeptoMailService zeptoMailService;
     private final WhatsappOtpService whatsappOtpService;
     private final Msg91OtpVerifyService msg91OtpVerifyService;
+    private final AutomationMessageBridge automationMessageBridge;
     private final ClinicPetParentSignupInviteService clinicPetParentSignupInviteService;
     private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
     private final ConsultationInvoiceRepository consultationInvoiceRepository;
@@ -326,7 +331,7 @@ public class ClinicServiceImpl implements ClinicService {
         String clinicName = clinic.getName();
         Runnable sendNotification = () -> {
             try {
-                zeptoMailService.sendClinicProfileVerified(email, customerName, clinicName, clinicUrl);
+                zeptoMailService.sendClinicProfileVerified(email, customerName, clinicName, clinicUrl, clinic.getId());
             } catch (RuntimeException e) {
                 log.warn("Failed to send clinic verification email for clinic {}: {}",
                         clinic.getUuid(), e.getMessage());
@@ -343,7 +348,8 @@ public class ClinicServiceImpl implements ClinicService {
         String customerName = owner != null ? owner.getFirstName() : null;
         Runnable sendNotification = () -> {
             try {
-                zeptoMailService.sendClinicProfileRejected(email, customerName, clinic.getName(), rejectionReason);
+                zeptoMailService.sendClinicProfileRejected(email, customerName, clinic.getName(), rejectionReason,
+                        clinic.getId());
             } catch (RuntimeException e) {
                 log.warn("Failed to send clinic rejection email for clinic {}: {}",
                         clinic.getUuid(), e.getMessage());
@@ -447,7 +453,7 @@ public class ClinicServiceImpl implements ClinicService {
             String code = verificationCodeService.generateCode(key);
             User owner = clinic.getOwner();
             String customerName = owner == null ? null : owner.getFirstName();
-            zeptoMailService.sendUpdateOtpEmail(newEmail, code, customerName, "Clinic", newEmail);
+            zeptoMailService.sendUpdateOtpEmail(newEmail, code, customerName, "Clinic", newEmail, clinic.getId());
             return new MessageResponse("OTP sent to the new practice email");
         }
         if ("WHATSAPP".equals(channel)) {
@@ -785,7 +791,8 @@ public class ClinicServiceImpl implements ClinicService {
 
         String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/clinic-invite/accept?token=" + invite.getToken();
         // Email may fail locally (missing Zepto template); invite is still stored and returned with token.
-        zeptoMailService.sendClinicDoctorInviteEmail(inviteEmail, doctorName, clinic.getName(), acceptUrl);
+        zeptoMailService.sendClinicDoctorInviteEmail(inviteEmail, doctorName, clinic.getName(), acceptUrl,
+                clinic.getId());
 
         // Include token so the clinic UI can show a shareable accept link when email is delayed.
         return inviteModel(invite, true);
@@ -912,7 +919,7 @@ public class ClinicServiceImpl implements ClinicService {
 
         String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/clinic-invite/accept?token=" + invite.getToken();
         zeptoMailService.sendClinicDoctorInviteReminderEmail(invite.getEmail(), invite.getDoctorName(),
-                clinic.getName(), acceptUrl);
+                clinic.getName(), acceptUrl, clinic.getId());
         invite.setLastRemindedAt(LocalDateTime.now());
         invite = clinicDoctorInviteRepository.save(invite);
         return inviteModel(invite, true);
@@ -1101,7 +1108,8 @@ public class ClinicServiceImpl implements ClinicService {
         String acceptUrl = frontendBaseUrl.replaceAll("/$", "") + "/staff-invite/accept?token=" + invite.getToken();
         log.info("Sending staff invite email to {} for clinic {}", inviteEmail, clinic.getName());
         log.info("Accept URL: {}", acceptUrl);
-        zeptoMailService.sendClinicStaffInviteEmail(inviteEmail, staffName, clinic.getName(), acceptUrl);
+        zeptoMailService.sendClinicStaffInviteEmail(inviteEmail, staffName, clinic.getName(), acceptUrl,
+                clinic.getId());
         return staffInviteModel(invite, true);
     }
 
@@ -1357,7 +1365,7 @@ public class ClinicServiceImpl implements ClinicService {
             clinicEmail = clinic.getOwner().getEmail();
         }
         zeptoMailService.sendClinicDoctorInviteResponseEmail(clinicEmail, clinic.getName(), invite.getDoctorName(),
-                invite.getEmail(), accepted);
+                invite.getEmail(), accepted, clinic.getId());
     }
 
     private static boolean canRemindInvite(ClinicDoctorInvite invite) {
@@ -1501,8 +1509,9 @@ public class ClinicServiceImpl implements ClinicService {
             String ownerName = clinicOwnerName(owner);
             String petName = pet.getName();
             String clinicName = clinic.getName();
+            Long clinicId = clinic.getId();
             sendAfterCommit(() -> zeptoMailService.sendClinicPetParentInviteEmail(ownerEmail, ownerName, petName,
-                    clinicName, signupUrl));
+                    clinicName, signupUrl, clinicId));
         }
         if (owner.getLinkedUser() != null) {
             clinicOwnerUserLinkService.linkOwnerIfUserExists(owner);
@@ -1717,7 +1726,7 @@ public class ClinicServiceImpl implements ClinicService {
             name = ownerEmail;
         }
         log.info("Clinic client-attach OTP generated clinic={} user={}", clinic.getUuid(), platformUser.getUuid());
-        zeptoMailService.sendClinicClientAttachOtpEmail(ownerEmail, name, clinic.getName(), code);
+        zeptoMailService.sendClinicClientAttachOtpEmail(ownerEmail, name, clinic.getName(), code, clinic.getId());
     }
 
     @Override
@@ -1836,7 +1845,8 @@ public class ClinicServiceImpl implements ClinicService {
         String otpKey = VerificationCodeService.clinicPetConsentOtpKey(clinic.getUuid(), ownerEmail, name);
         String code = verificationCodeService.generateCode(otpKey);
         log.info("Clinic pet-consent OTP generated clinic={} ownerEmail={} pet={}", clinic.getUuid(), ownerEmail, name);
-        zeptoMailService.sendClinicPetConsentOtpEmail(ownerEmail, clinicOwnerName(owner), clinic.getName(), name, code);
+        zeptoMailService.sendClinicPetConsentOtpEmail(ownerEmail, clinicOwnerName(owner), clinic.getName(), name, code,
+                clinic.getId());
     }
 
     @Override
@@ -2950,7 +2960,54 @@ public class ClinicServiceImpl implements ClinicService {
                 .dueDate(request.dueDate())
                 .completed(false)
                 .build();
-        return vaccineModel(petVaccineScheduleDao.save(schedule));
+        schedule=petVaccineScheduleDao.save(schedule);
+        scheduleVaccineAutomation(clinic,pet,schedule,vaccine);
+        return vaccineModel(schedule);
+    }
+
+    private void scheduleVaccineAutomation(Clinic clinic, Pet pet, PetVaccineSchedule schedule, VaccineMaster vaccine) {
+        String sourceUuid = "VACCINE_SCHEDULE_" + schedule.getId();
+        String petName = pet.getName() == null || pet.getName().isBlank() ? "your pet" : pet.getName();
+        String vaccineName = vaccine.getName() == null ? "vaccination" : vaccine.getName();
+        String body = String.format("%s has a %s vaccination due", petName, vaccineName);
+        List<ClinicPetEnrollment> enrollments =
+                clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId());
+        ClinicPetEnrollment enrollment = enrollments.size() == 1 ? enrollments.get(0) : null;
+        ClinicPetOwner owner = enrollment == null ? null : enrollment.getClinicOwner();
+        String recipientName = owner == null ? "" : owner.getFirstName();
+        String email = owner == null ? null : owner.getEmail();
+        String phone = owner == null ? null : owner.getPhone();
+        java.time.LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        java.time.LocalDateTime sevenAt = schedule.getDueDate().minusDays(7).atStartOfDay();
+        java.time.LocalDateTime oneAt = schedule.getDueDate().minusDays(1).atStartOfDay();
+        if (email != null && !email.isBlank()) {
+            if (!sevenAt.toLocalDate().isBefore(today)) {
+                automationMessageBridge.schedule(MessageTenantType.CLINIC, clinic.getId(),
+                        "VACCINE_REMINDER", "PET_VACCINE_SCHEDULE", sourceUuid, "SEVEN_DAY",
+                        recipientName, petName, MessageChannel.EMAIL, email,
+                        "Pet vaccination reminder", body, sevenAt);
+            }
+            if (!oneAt.toLocalDate().isBefore(today)) {
+                automationMessageBridge.schedule(MessageTenantType.CLINIC, clinic.getId(),
+                        "VACCINE_REMINDER", "PET_VACCINE_SCHEDULE", sourceUuid, "ONE_DAY",
+                        recipientName, petName, MessageChannel.EMAIL, email,
+                        "Pet vaccination reminder", body, oneAt);
+            }
+        }
+        if (phone != null && !phone.isBlank()) {
+            if (!sevenAt.toLocalDate().isBefore(today)) {
+                automationMessageBridge.schedule(MessageTenantType.CLINIC, clinic.getId(),
+                        "VACCINE_REMINDER", "PET_VACCINE_SCHEDULE", sourceUuid, "SEVEN_DAY",
+                        recipientName, petName, MessageChannel.WHATSAPP, phone,
+                        "Pet vaccination reminder", body, sevenAt);
+            }
+            if (!oneAt.toLocalDate().isBefore(today)) {
+                automationMessageBridge.schedule(MessageTenantType.CLINIC, clinic.getId(),
+                        "VACCINE_REMINDER", "PET_VACCINE_SCHEDULE", sourceUuid, "ONE_DAY",
+                        recipientName, petName, MessageChannel.WHATSAPP, phone,
+                        "Pet vaccination reminder", body, oneAt);
+            }
+        }
     }
 
     @Override
@@ -2972,7 +3029,10 @@ public class ClinicServiceImpl implements ClinicService {
         if (request != null && request.certificateUrl() != null && !request.certificateUrl().isBlank()) {
             schedule.setCertificateUrl(request.certificateUrl().trim());
         }
-        return vaccineModel(petVaccineScheduleDao.save(schedule));
+        schedule=petVaccineScheduleDao.save(schedule);
+        automationMessageBridge.cancelSource(MessageTenantType.CLINIC, clinic.getId(),
+                "PET_VACCINE_SCHEDULE", "VACCINE_SCHEDULE_" + schedule.getId());
+        return vaccineModel(schedule);
     }
 
     private Clinic access(String clinicUuid, String email) {

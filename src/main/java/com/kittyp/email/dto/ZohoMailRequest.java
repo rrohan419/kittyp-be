@@ -23,6 +23,9 @@ public class ZohoMailRequest implements IEmailDto {
 
     private String subject;
 
+    @JsonProperty("textbody")
+    private String textBody;
+
     @JsonProperty("bounce_address")
     private String bounceAddress;
 

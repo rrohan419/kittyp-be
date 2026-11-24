@@ -63,6 +63,12 @@ public class User extends BaseEntity implements HasPublicId {
     private String phoneNumber;
 
     @Column
+    private String whatsappCountryCode;
+
+    @Column
+    private String whatsappNumber;
+
+    @Column
     private Integer age;
 
     @Column(nullable = false)

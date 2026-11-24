@@ -127,7 +127,7 @@ public class WhatsAppConnectionService {
 			return;
 		}
 		if (templateName != null && !templateName.isBlank()
-				&& !WhatsAppTemplateSetupService.INVOICE_RECEIPT.equalsIgnoreCase(templateName)) {
+				&& !templateSetupService.invoiceTemplateName().equalsIgnoreCase(templateName)) {
 			return;
 		}
 		String normalized = WhatsAppConnectionStatuses.normalizeTemplateStatus(metaStatus);
@@ -143,7 +143,11 @@ public class WhatsAppConnectionService {
 		}
 	}
 
-	private static String resolveInvoiceStatus(Map<String, Object> templates) {
+	public String invoiceTemplateName() {
+		return templateSetupService.invoiceTemplateName();
+	}
+
+	private String resolveInvoiceStatus(Map<String, Object> templates) {
 		if (templates == null) {
 			return WhatsAppConnectionStatuses.TEMPLATE_MISSING;
 		}
@@ -154,7 +158,9 @@ public class WhatsAppConnectionService {
 		if (list instanceof List<?> rows) {
 			for (Object row : rows) {
 				if (row instanceof Map<?, ?> m
-						&& WhatsAppTemplateSetupService.INVOICE_RECEIPT.equals(String.valueOf(m.get("name")))) {
+						&& m.get("name") != null
+						&& templateSetupService.invoiceTemplateName()
+								.equalsIgnoreCase(String.valueOf(m.get("name")))) {
 					return WhatsAppConnectionStatuses.normalizeTemplateStatus(String.valueOf(m.get("status")));
 				}
 			}

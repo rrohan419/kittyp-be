@@ -3,6 +3,7 @@ package com.kittyp.clinic.repository;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,9 +11,15 @@ import com.kittyp.clinic.entity.Clinic;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.enums.PracticeModel;
 
+import jakarta.persistence.LockModeType;
+
 public interface ClinicRepository extends JpaRepository<Clinic, Long> {
 
     Clinic findByUuid(String uuid);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Clinic c WHERE c.id = :clinicId")
+    java.util.Optional<Clinic> lockById(@Param("clinicId") Long clinicId);
 
     @Query("SELECT c.owner.id FROM Clinic c WHERE c.id = :clinicId")
     Long findOwnerUserIdByClinicId(@Param("clinicId") Long clinicId);

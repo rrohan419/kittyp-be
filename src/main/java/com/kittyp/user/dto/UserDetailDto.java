@@ -18,6 +18,8 @@ public class UserDetailDto {
     private String email;
     private String phoneNumber;
     private String phoneCountryCode;
+    private String whatsappNumber;
+    private String whatsappCountryCode;
     private String profilePictureUrl;
     private Integer age;
 }

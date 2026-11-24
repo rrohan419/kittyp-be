@@ -140,7 +140,7 @@ public class ClinicInvoiceController {
         Clinic clinic = requireAccessibleClinic(uuid);
         ConsultationInvoice invoice = treatmentInvoiceService.requireClinicInvoice(clinic, invoiceUuid);
         invoice = treatmentInvoiceService.sendInvoiceWhatsApp(
-                invoice, null, treatmentInvoiceService.clinicSender(clinic));
+                invoice, null);
         return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

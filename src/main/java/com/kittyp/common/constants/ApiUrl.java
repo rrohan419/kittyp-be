@@ -46,6 +46,7 @@ public class ApiUrl {
 	public static final String ADMIN_PARENTS = ADMIN + "/parents";
 
 	public static final String DOCTOR_BASE_URL = "/doctor";
+	public static final String DOCTOR_MESSAGING = DOCTOR_BASE_URL + "/messaging";
 	public static final String DOCTOR_ME = DOCTOR_BASE_URL + "/me";
 	public static final String DOCTOR_REAPPLY = DOCTOR_BASE_URL + "/reapply";
 	public static final String DOCTOR_ME_AVAILABILITY = DOCTOR_ME + "/availability";
@@ -144,11 +145,15 @@ public class ApiUrl {
 	public static final String NUTRITION_PLAN_ACTIVE = NUTRITION_PLAN_BASE_URL + "/active";
 
 	public static final String CLINIC_BASE_URL = "/clinic";
+	public static final String CLINIC_MESSAGING = CLINIC_BASE_URL + "/{clinicUuid}/messaging";
+	public static final String ADMIN_MESSAGING_RATES = ADMIN + "/messaging/rates";
+	public static final String WEBHOOK_MESSAGING_STATUS = "/webhook/messaging/status";
 	public static final String CLINIC_MINE = CLINIC_BASE_URL + "/mine";
 	public static final String CLINIC_BY_UUID = CLINIC_BASE_URL + PATH_VARIABLE_UUID;
 	public static final String CLINIC_CONTACT_OTP_SEND = CLINIC_BY_UUID + "/contact/otp/send";
 	public static final String CLINIC_CONTACT_OTP_VERIFY = CLINIC_BY_UUID + "/contact/otp/verify";
 	public static final String CLINIC_REPORTS = CLINIC_BY_UUID + "/reports";
+	public static final String CLINIC_EMAIL_USAGE = CLINIC_BY_UUID + "/email-usage";
 	public static final String CLINIC_DOCTORS = CLINIC_BY_UUID + "/doctors";
 	public static final String CLINIC_DOCTOR_BY_UUID = CLINIC_DOCTORS + "/{doctorUuid}";
 	public static final String CLINIC_DOCTOR_INVENTORY = CLINIC_DOCTOR_BY_UUID + "/inventory";

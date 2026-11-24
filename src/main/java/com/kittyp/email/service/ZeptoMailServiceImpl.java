@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.kittyp.common.constants.AppConstant;
 import com.kittyp.common.constants.TemplateConstant;
+import com.kittyp.common.exception.CustomException;
 import com.kittyp.common.util.PiiMasker;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.dto.EmailAttachment;
@@ -148,7 +150,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	@Override
 	public void sendUpdateOtpEmail(String recipientEmail, String code, String name, String accountType,
-			String newEmail) {
+			String newEmail, Long clinicId) {
 		String customerName = name == null || name.isBlank() ? "Kittyp user" : name.trim();
 		ZeptoMailDto mailDto = new ZeptoMailDto();
 		mailDto.setMergeInfo(Map.of(
@@ -159,14 +161,16 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 				"new_email", newEmail));
 		mailDto.setRecipientEmail(recipientEmail);
 		mailDto.setRecipientName(customerName);
+		mailDto.setType(TemplateConstant.ZEPTO_EMAIL_CHANGE_OTP_TEMPLATE_ID);
 		mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_EMAIL_CHANGE_OTP_TEMPLATE_ID));
+		mailDto.setClinicAccountId(clinicId);
 		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 		addEmailAuditLog(responseModel, recipientEmail);
 	}
 
 	@Override
 	public void sendClinicPetConsentOtpEmail(String recipientEmail, String ownerName, String clinicName, String petName,
-			String code) {
+			String code, Long clinicId) {
 		String clinic = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName.trim();
 		String pet = petName == null || petName.isBlank() ? "pet" : petName.trim();
 		String name = ownerName == null || ownerName.isBlank() ? "Pet parent" : ownerName.trim();
@@ -180,6 +184,8 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 					"pet_name", pet));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
+			mailDto.setType(TemplateConstant.ZEPTO_CLINIC_PET_CONSENT_OTP_EMAIL_TEMPLATE_ID);
+			mailDto.setClinicAccountId(clinicId);
 			String templateKey = env.getProperty(TemplateConstant.ZEPTO_CLINIC_PET_CONSENT_OTP_EMAIL_TEMPLATE_ID);
 			if (templateKey == null || templateKey.isBlank()) {
 				templateKey = env.getProperty(TemplateConstant.ZEPTO_SIGNUP_OTP_EMAIL_TEMPLATE_ID);
@@ -188,6 +194,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
+			rethrowIfQuotaExceeded(e);
 			log.warn("Failed to send clinic pet-consent OTP to {}: {} (OTP remains in cache)", recipientEmail,
 					e.getMessage());
 		}
@@ -195,7 +202,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	@Override
 	public void sendClinicClientAttachOtpEmail(String recipientEmail, String ownerName, String clinicName,
-			String code) {
+			String code, Long clinicId) {
 		String clinic = clinicName == null || clinicName.isBlank() ? "Clinic" : clinicName.trim();
 		String name = ownerName == null || ownerName.isBlank() ? "Pet parent" : ownerName.trim();
 		log.info("Clinic pet-consent OTP to email={} clinic={}", recipientEmail, clinic);
@@ -207,12 +214,15 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 					"clinic_name", clinic));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
+			mailDto.setType(TemplateConstant.ZEPTO_CLINIC_CLIENT_CONSENT_EMAIL_TEMPLATE_ID);
+			mailDto.setClinicAccountId(clinicId);
 			String templateKey = env.getProperty(TemplateConstant.ZEPTO_CLINIC_CLIENT_CONSENT_EMAIL_TEMPLATE_ID);
 
 			mailDto.setTemplateKey(templateKey);
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
+			rethrowIfQuotaExceeded(e);
 			log.warn("Failed to send clinic pet-consent OTP to {}: {} (OTP remains in cache)", recipientEmail,
 					e.getMessage());
 		}
@@ -220,19 +230,19 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	@Override
 	public void sendClinicPetParentInviteEmail(String recipientEmail, String customerName, String petName,
-			String clinicName, String inviteUrl) {
+			String clinicName, String inviteUrl, Long clinicId) {
 		String name = blankToDefault(customerName, "Pet parent");
 		sendDedicated(recipientEmail, name, TemplateConstant.ZEPTO_CLINIC_PET_PARENT_INVITE_EMAIL_TEMPLATE_ID,
 				Map.of(
 						"customer_name", name,
 						"pet_name", blankToDefault(petName, "your pet"),
 						"clinic_name", blankToDefault(clinicName, "Clinic"),
-						"invite_url", blankToDefault(inviteUrl, "")));
+						"invite_url", blankToDefault(inviteUrl, "")), clinicId);
 	}
 
 	@Override
 	public void sendClinicDoctorInviteEmail(String recipientEmail, String doctorName, String clinicName,
-			String acceptUrl) {
+			String acceptUrl, Long clinicId) {
 		log.info("Clinic doctor invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
@@ -243,10 +253,13 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 					"acceptUrl", acceptUrl));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
+			mailDto.setClinicAccountId(clinicId);
+			mailDto.setType(TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_EMAIL_TEMPLATE_ID);
 			mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_EMAIL_TEMPLATE_ID));
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
+			rethrowIfQuotaExceeded(e);
 			log.warn("Failed to send clinic invite email to {}: {} (acceptUrl logged above)", recipientEmail,
 					e.getMessage());
 		}
@@ -254,7 +267,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	@Override
 	public void sendClinicStaffInviteEmail(String recipientEmail, String staffName, String clinicName,
-			String acceptUrl) {
+			String acceptUrl, Long clinicId) {
 		log.info("Clinic staff invite to email={} clinic={} acceptUrl={}", recipientEmail, clinicName, acceptUrl);
 		try {
 			ZeptoMailDto mailDto = new ZeptoMailDto();
@@ -265,10 +278,13 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 					"staff_name", name));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
+			mailDto.setClinicAccountId(clinicId);
+			mailDto.setType(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_EMAIL_TEMPLATE_ID);
 			mailDto.setTemplateKey(env.getProperty(TemplateConstant.ZEPTO_CLINIC_STAFF_INVITE_EMAIL_TEMPLATE_ID));
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
+			rethrowIfQuotaExceeded(e);
 			log.warn("Failed to send clinic staff invite email to {}: {} (acceptUrl logged above)", recipientEmail,
 					e.getMessage());
 		}
@@ -276,15 +292,15 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	@Override
 	public void sendClinicDoctorInviteReminderEmail(String recipientEmail, String doctorName, String clinicName,
-			String acceptUrl) {
+			String acceptUrl, Long clinicId) {
 		log.info("Clinic doctor invite REMINDER to email={} clinic={} acceptUrl={}", recipientEmail, clinicName,
 				acceptUrl);
-		sendClinicDoctorInviteEmail(recipientEmail, doctorName, clinicName, acceptUrl);
+		sendClinicDoctorInviteEmail(recipientEmail, doctorName, clinicName, acceptUrl, clinicId);
 	}
 
 	@Override
 	public void sendClinicDoctorInviteResponseEmail(String recipientEmail, String clinicName, String doctorName,
-			String doctorEmail, boolean accepted) {
+			String doctorEmail, boolean accepted, Long clinicId) {
 		String status = accepted ? "accepted" : "declined";
 		log.info("Clinic invite {} — notify clinicEmail={} clinic={} doctor={} <{}>", status, recipientEmail,
 				clinicName, doctorName, doctorEmail);
@@ -302,11 +318,14 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 					"status", status));
 			mailDto.setRecipientEmail(recipientEmail);
 			mailDto.setRecipientName(name);
+			mailDto.setClinicAccountId(clinicId);
+			mailDto.setType(TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_RESPONSE_EMAIL_TEMPLATE_ID);
 			mailDto.setTemplateKey(
 					env.getProperty(TemplateConstant.ZEPTO_CLINIC_DOCTOR_INVITE_RESPONSE_EMAIL_TEMPLATE_ID));
 			ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 			addEmailAuditLog(responseModel, recipientEmail);
 		} catch (Exception e) {
+			rethrowIfQuotaExceeded(e);
 			log.warn("Failed to send clinic invite response email to {}: {}", recipientEmail, e.getMessage());
 		}
 	}
@@ -412,28 +431,29 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 	}
 
 	@Override
-	public void sendClinicProfileVerified(String email, String customerName, String clinicName, String clinicUrl) {
+	public void sendClinicProfileVerified(String email, String customerName, String clinicName, String clinicUrl,
+			Long clinicId) {
 		String name = blankToDefault(customerName, "there");
 		sendDedicated(email, name, TemplateConstant.ZOHO_CLINIC_PROFILE_VERIFIED_TEMPLATE_ID, Map.of(
 				"customer_name", name,
 				"clinic_name", blankToDefault(clinicName, "Clinic"),
-				"clinic_url", blankToDefault(clinicUrl, "")));
+				"clinic_url", blankToDefault(clinicUrl, "")), clinicId);
 	}
 
 	@Override
 	public void sendClinicProfileRejected(String email, String customerName, String clinicName,
-			String rejectionReason) {
+			String rejectionReason, Long clinicId) {
 		String name = blankToDefault(customerName, "there");
 		sendDedicated(email, name, TemplateConstant.ZOHO_CLINIC_PROFILE_REJECTED_TEMPLATE_ID, Map.of(
 				"customer_name", name,
 				"clinic_name", blankToDefault(clinicName, "Clinic"),
-				"rejection_reason", rejectionReason));
+				"rejection_reason", rejectionReason), clinicId);
 	}
 
 	@Override
 	public boolean sendPetReminderEmail(boolean vaccine, String recipientEmail, String customerName, String petName,
 			String clinicName, String clinicPhone, String clinicAddress, String doctorName, String reminderName,
-			String reminderTitle, String reminderMessage, String reminderDate, String reminderTime) {
+			String reminderTitle, String reminderMessage, String reminderDate, String reminderTime, Long clinicId) {
 		if (recipientEmail == null || recipientEmail.isBlank()) {
 			log.warn("Skipping pet reminder email: recipient is blank");
 			return false;
@@ -458,13 +478,14 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		mailDto.setMergeInfo(merge);
 		mailDto.setRecipientEmail(recipientEmail.trim());
 		mailDto.setRecipientName(name);
+		mailDto.setClinicAccountId(clinicId);
 		return dispatch(mailDto, vaccine ? TemplateConstant.ZEPTO_PET_VACCINE_REMINDER_EMAIL_TEMPLATE_ID
 				: TemplateConstant.ZEPTO_PET_GENERIC_REMINDER_EMAIL_TEMPLATE_ID);
 	}
 
 	@Override
 	public void sendInvoiceEmail(String email, String customerName, String clinicName, String petName,
-			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename) {
+			String invoiceNumber, String amount, String invoiceUrl, byte[] pdfBytes, String filename, Long clinicId) {
 		if (email == null || email.isBlank()) {
 			log.warn("Skipping invoice email: recipient is blank");
 			return;
@@ -480,6 +501,7 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 				"invoice_url", blankToDefault(invoiceUrl, "")));
 		mailDto.setRecipientEmail(email.trim());
 		mailDto.setRecipientName(name);
+		mailDto.setClinicAccountId(clinicId);
 		if (pdfBytes != null && pdfBytes.length > 0) {
 			String attachName = filename == null || filename.isBlank() ? "invoice.pdf" : filename;
 			if (!attachName.toLowerCase().endsWith(".pdf")) {
@@ -510,6 +532,11 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 
 	private void sendDedicated(String recipientEmail, String recipientName, String templateProperty,
 			Map<String, Object> mergeInfo) {
+		sendDedicated(recipientEmail, recipientName, templateProperty, mergeInfo, null);
+	}
+
+	private void sendDedicated(String recipientEmail, String recipientName, String templateProperty,
+			Map<String, Object> mergeInfo, Long clinicId) {
 		if (recipientEmail == null || recipientEmail.isBlank()) {
 			return;
 		}
@@ -517,12 +544,14 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 		mailDto.setMergeInfo(mergeInfo);
 		mailDto.setRecipientEmail(recipientEmail.trim());
 		mailDto.setRecipientName(recipientName);
+		mailDto.setClinicAccountId(clinicId);
 		try {
 			if (dispatch(mailDto, templateProperty)) {
 				log.info("Dedicated template email sent to {} using {}", PiiMasker.maskEmail(recipientEmail),
 						templateProperty);
 			}
 		} catch (Exception e) {
+			rethrowIfQuotaExceeded(e);
 			log.warn("Failed to send dedicated template email to {}: {}", PiiMasker.maskEmail(recipientEmail),
 					e.getMessage());
 		}
@@ -543,9 +572,19 @@ public class ZeptoMailServiceImpl implements ZeptoMailService {
 			return false;
 		}
 		mailDto.setTemplateKey(templateKey);
+		if (mailDto.getType() == null || mailDto.getType().isBlank()) {
+			mailDto.setType(templateProperty);
+		}
 		ZeptoMailResponseModel responseModel = zeptoMailSender.sendEmail(mailDto);
 		addEmailAuditLog(responseModel, mailDto.getRecipientEmail());
 		return true;
+	}
+
+	private static void rethrowIfQuotaExceeded(Exception exception) {
+		if (exception instanceof CustomException customException
+				&& customException.getHttpStatus() == HttpStatus.TOO_MANY_REQUESTS) {
+			throw customException;
+		}
 	}
 
 }

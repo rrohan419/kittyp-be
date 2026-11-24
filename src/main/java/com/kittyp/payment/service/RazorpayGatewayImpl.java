@@ -28,7 +28,11 @@ public class RazorpayGatewayImpl implements RazorpayGateway {
 			Order order = client().orders.create(request);
 			return mapper.convertJsonToObejct(order.toJson(), CreateOrderModel.class);
 		} catch (RazorpayException e) {
-			throw new CustomException("Failed to create Razorpay order", HttpStatus.BAD_REQUEST, e);
+			throw new CustomException("Failed to create Razorpay order", HttpStatus.BAD_GATEWAY, e);
+		} catch (CustomException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new CustomException("Failed to create Razorpay order", HttpStatus.BAD_GATEWAY, e);
 		}
 	}
 
@@ -38,7 +42,11 @@ public class RazorpayGatewayImpl implements RazorpayGateway {
 			Order order = client().orders.fetch(razorpayOrderId);
 			return mapper.convertJsonToObejct(order.toJson(), CreateOrderModel.class);
 		} catch (RazorpayException e) {
-			throw new CustomException("Failed to fetch Razorpay order", HttpStatus.BAD_REQUEST, e);
+			throw new CustomException("Failed to fetch Razorpay order", HttpStatus.BAD_GATEWAY, e);
+		} catch (CustomException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new CustomException("Failed to fetch Razorpay order", HttpStatus.BAD_GATEWAY, e);
 		}
 	}
 

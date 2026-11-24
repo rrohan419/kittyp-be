@@ -16,11 +16,13 @@ public class VerificationCodeService {
 
     private static final int MAX_VERIFY_ATTEMPTS = 5;
     private static final int MAX_SENDS_PER_WINDOW = 5;
+    private static final long RESEND_COOLDOWN_SECONDS = 30;
 
     private final Cache<String, String> codeCache;
     private final Cache<String, Boolean> verifiedCache;
     private final Cache<String, AtomicInteger> attemptCache;
     private final Cache<String, AtomicInteger> sendRateCache;
+    private final Cache<String, Long> cooldownCache;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public VerificationCodeService() {
@@ -40,12 +42,27 @@ public class VerificationCodeService {
                 .expireAfterWrite(15, TimeUnit.MINUTES)
                 .maximumSize(10_000)
                 .build();
+        this.cooldownCache = Caffeine.newBuilder()
+                .expireAfterWrite(RESEND_COOLDOWN_SECONDS, TimeUnit.SECONDS)
+                .maximumSize(10_000)
+                .build();
     }
 
     public String generateCode(String key) {
+        Long previousSend = cooldownCache.getIfPresent(key);
+        if (previousSend != null) {
+            long remaining = RESEND_COOLDOWN_SECONDS
+                    - TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - previousSend);
+            if (remaining > 0) {
+                throw new CustomException(
+                        "Please wait " + remaining + " seconds before requesting another OTP",
+                        HttpStatus.TOO_MANY_REQUESTS);
+            }
+        }
         enforceSendRateLimit(key);
         int code = 100_000 + secureRandom.nextInt(900_000);
         String codeStr = String.valueOf(code);
+        cooldownCache.put(key, System.nanoTime());
         codeCache.put(key, codeStr);
         attemptCache.invalidate(key);
         return codeStr;
@@ -127,6 +144,14 @@ public class VerificationCodeService {
 
     public static String profilePhoneVerifiedKey(String userUuid, String phone) {
         return "profile-phone-ok:" + userUuid + ":" + phone.trim();
+    }
+
+    public static String profileWhatsappOtpKey(String userUuid, String phone) {
+        return "profile-whatsapp:" + userUuid + ":" + phone.trim();
+    }
+
+    public static String profileWhatsappVerifiedKey(String userUuid, String phone) {
+        return "profile-whatsapp-ok:" + userUuid + ":" + phone.trim();
     }
 
     public static String clinicContactEmailOtpKey(String clinicUuid, String email) {

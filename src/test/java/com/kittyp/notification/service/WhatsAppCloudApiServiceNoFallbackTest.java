@@ -44,7 +44,7 @@ class WhatsAppCloudApiServiceNoFallbackTest {
                 () -> service.sendDocumentTemplate(
                         WhatsAppSenderCredentials.of("tok", ""),
                         "919876543210",
-                        "invoice_receipt",
+                        "invoice",
                         "en",
                         "media",
                         "a.pdf",

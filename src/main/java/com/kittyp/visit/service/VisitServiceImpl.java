@@ -66,7 +66,6 @@ import com.kittyp.notification.entity.NotificationLog;
 import com.kittyp.notification.enums.NotificationType;
 import com.kittyp.notification.repository.NotificationLogRepository;
 import com.kittyp.notification.service.OutboundMessageService;
-import com.kittyp.notification.service.WhatsAppSenderCredentials;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.PetWeightLog;
@@ -237,7 +236,7 @@ public class VisitServiceImpl implements VisitService {
                 String token = clinicPetParentSignupInviteService.createInvite(ownerEmail);
                 String url = frontendBaseUrl.replaceAll("/$", "") + "/signup?role=USER&inviteToken=" + token;
                 zeptoMailService.sendClinicPetParentInviteEmail(ownerEmail, owner.getFirstName(),
-                        pet.getName(), clinic.getName(), url);
+                        pet.getName(), clinic.getName(), url, clinic.getId());
             } catch (Exception e) {
                 log.warn("Failed to send parent invite email: {}", e.getMessage());
             }
@@ -622,11 +621,14 @@ public class VisitServiceImpl implements VisitService {
                 log.warn("Failed to push booking notification: {}", e.getMessage());
             }
             try {
-                WhatsAppSenderCredentials sender = resolveBookingWhatsAppSender(booking);
                 String phone = doctor.getPhoneNumber() != null ? doctor.getPhoneNumber() : doctorUser.getPhoneNumber();
-                if (sender != null && sender.isConfigured() && phone != null && !phone.isBlank()) {
-                    outboundMessageService.trySendAppointmentNotice(
-                            sender, phone, List.of(petName, clinicName, when), doctorUser, pet);
+                if (phone != null && !phone.isBlank()) {
+                    boolean sent = outboundMessageService.trySendAppointmentNotice(
+                            phone, List.of(petName, clinicName, when), doctorUser, pet);
+                    if (!sent) {
+                        log.warn("WhatsApp booking notification was skipped because sending is unavailable "
+                                + "or the appointment template is not configured");
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Failed to WhatsApp booking notification: {}", e.getMessage());
@@ -643,22 +645,6 @@ public class VisitServiceImpl implements VisitService {
         } else {
             notify.run();
         }
-    }
-
-    private WhatsAppSenderCredentials resolveBookingWhatsAppSender(Booking booking) {
-        Clinic clinic = booking.getClinic();
-        if (clinic != null) {
-            WhatsAppSenderCredentials clinicSender = WhatsAppSenderCredentials.of(
-                    clinic.getWhatsappToken(), clinic.getWhatsappPhoneNumberId());
-            if (clinicSender.isConfigured()) {
-                return clinicSender;
-            }
-        }
-        DoctorProfile doctor = booking.getDoctor();
-        if (doctor != null) {
-            return WhatsAppSenderCredentials.of(doctor.getWhatsappToken(), doctor.getWhatsappPhoneNumberId());
-        }
-        return WhatsAppSenderCredentials.of(null, null);
     }
 
     @Override

@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -32,6 +33,7 @@ import com.kittyp.clinic.entity.ClinicPetEnrollment;
 import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
 import com.kittyp.email.service.ZeptoMailService;
+import com.kittyp.notification.service.AutomationMessageBridge;
 import com.kittyp.notification.service.OutboundMessageService;
 import com.kittyp.notification.service.WhatsAppService;
 import com.kittyp.user.dao.UserDao;
@@ -57,6 +59,7 @@ class PetReminderServiceVaccineTest {
     @Mock private UserService userService;
     @Mock private OutboundMessageService outbound;
     @Mock private WhatsAppService whatsApp;
+    @Mock private AutomationMessageBridge automation;
     @InjectMocks private PetReminderService service;
 
     @Test
@@ -67,7 +70,7 @@ class PetReminderServiceVaccineTest {
         when(users.findOptionalByPetUuid("pet-1")).thenReturn(Optional.of(user));
         when(userService.sendPushNotification(anyString(), anyString(), anyString())).thenReturn(true);
         when(mail.sendPetReminderEmail(anyBoolean(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any())).thenReturn(true);
+                any(), any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         assertEquals(1, service.processDueReminders());
         assertNotNull(schedule.getSevenDaySentAt());
@@ -79,7 +82,7 @@ class PetReminderServiceVaccineTest {
                 eq("Milo has a Rabies vaccination due in 7 days"));
         verify(mail).sendPetReminderEmail(true, "parent@example.com", "Pat", "Milo", null, null, null, null,
                 "Rabies", "Pet vaccination reminder", "Milo has a Rabies vaccination due in 7 days",
-                schedule.getDueDate().format(DateTimeFormatter.ofPattern("dd MMM yyyy")), "");
+                schedule.getDueDate().format(DateTimeFormatter.ofPattern("dd MMM yyyy")), "", null);
 
         schedule.setDueDate(LocalDate.now().plusDays(1));
         assertEquals(1, service.processDueReminders());
@@ -124,21 +127,46 @@ class PetReminderServiceVaccineTest {
         PetVaccineSchedule schedule = schedule(LocalDate.now().plusDays(1));
         Clinic clinic = Clinic.builder().name("Clinic").whatsappToken("token")
                 .whatsappPhoneNumberId("phone-id").build();
+        clinic.setId(12L);
         ClinicPetOwner owner = ClinicPetOwner.builder().email("owner@example.com").firstName("Pat")
                 .phone("1234567890").build();
         ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder().clinic(clinic).clinicOwner(owner).build();
         when(schedules.findPendingReminders(any(), any())).thenReturn(List.of(schedule));
         when(enrollments.findByPet_IdAndIsActiveTrue(1L)).thenReturn(List.of(enrollment));
         when(whatsApp.isDeliveryEnabled()).thenReturn(true);
+        when(automation.canDispatch(any(), anyLong(), anyString(), anyString(), anyString(), any()))
+                .thenReturn(true);
         when(mail.sendPetReminderEmail(anyBoolean(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any())).thenReturn(true);
+                any(), any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         assertEquals(1, service.processDueReminders());
         verify(userService, never()).sendPushNotification(any(), any(), any());
-        verify(outbound).sendVaccineReminder(any(), eq("1234567890"), eq(List.of("Milo", "Rabies",
+        verify(outbound).sendVaccineReminder(eq("1234567890"), eq(List.of("Pat", "Milo", "Clinic", "Rabies",
                 schedule.getDueDate().format(DateTimeFormatter.ofPattern("dd MMM yyyy")))),
                 eq(null), eq(schedule.getPet()));
         assertTrue(schedule.getReminderSent());
+    }
+
+    @Test
+    void leavesVaccineReminderPendingWhenWhatsAppIsDisabled() {
+        PetVaccineSchedule schedule = schedule(LocalDate.now().plusDays(1));
+        Clinic clinic = Clinic.builder().name("Clinic").build();
+        ClinicPetOwner owner = ClinicPetOwner.builder().email("owner@example.com").firstName("Pat")
+                .phone("1234567890").build();
+        ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder().clinic(clinic).clinicOwner(owner).build();
+        clinic.setId(12L);
+        when(schedules.findPendingReminders(any(), any())).thenReturn(List.of(schedule));
+        when(enrollments.findByPet_IdAndIsActiveTrue(1L)).thenReturn(List.of(enrollment));
+        when(mail.sendPetReminderEmail(anyBoolean(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any())).thenReturn(true);
+        when(automation.canDispatch(any(), anyLong(), anyString(), anyString(), anyString(), any()))
+                .thenReturn(true);
+
+        assertEquals(0, service.processDueReminders());
+        assertNull(schedule.getOneDaySentAt());
+        assertFalse(schedule.getReminderSent());
+        verify(outbound, never()).sendVaccineReminder(any(), any(), any(), any());
+        verify(schedules, never()).save(any());
     }
 
     @Test

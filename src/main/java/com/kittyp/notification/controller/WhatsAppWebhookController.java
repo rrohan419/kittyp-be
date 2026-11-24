@@ -18,7 +18,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kittyp.common.constants.ApiUrl;
 import com.kittyp.notification.service.WhatsAppConnectionService;
-import com.kittyp.notification.service.WhatsAppTemplateSetupService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,7 +78,7 @@ public class WhatsAppWebhookController {
 								status = value.path("message_template_status").asText(null);
 							}
 							if (!StringUtils.hasText(name)) {
-								name = WhatsAppTemplateSetupService.INVOICE_RECEIPT;
+								name = connectionService.invoiceTemplateName();
 							}
 							connectionService.updateInvoiceTemplateStatusForWaba(wabaId, name, status);
 							log.info("WhatsApp template webhook waba={} name={} status={}", wabaId, name, status);

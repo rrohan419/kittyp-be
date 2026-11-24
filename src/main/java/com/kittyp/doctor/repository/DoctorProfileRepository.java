@@ -16,6 +16,9 @@ public interface DoctorProfileRepository extends JpaRepository<DoctorProfile, Lo
 
     DoctorProfile findByUser_Id(Long userId);
 
+    @EntityGraph(attributePaths = "clinic")
+    Optional<DoctorProfile> findWithClinicById(Long id);
+
     @EntityGraph(attributePaths = { "user", "clinic" })
     Optional<DoctorProfile> findByUuid(String uuid);
 

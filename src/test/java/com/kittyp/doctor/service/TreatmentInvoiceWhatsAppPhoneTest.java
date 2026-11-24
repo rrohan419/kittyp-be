@@ -61,4 +61,19 @@ class TreatmentInvoiceWhatsAppPhoneTest {
         String phone = ReflectionTestUtils.invokeMethod(service, "resolveOwnerPhone", invoice, null);
         assertEquals("9988776655", phone);
     }
+
+    @Test
+    void prefersLinkedOwnersVerifiedWhatsappNumber() {
+        ReflectionTestUtils.setField(service, "objectMapper", objectMapper);
+        User owner = new User();
+        owner.setPhoneNumber("9988776655");
+        owner.setWhatsappNumber("8877665544");
+        ConsultationInvoice invoice = ConsultationInvoice.builder()
+                .ownerSnapshot("{}")
+                .owner(owner)
+                .build();
+
+        String phone = ReflectionTestUtils.invokeMethod(service, "resolveOwnerPhone", invoice, null);
+        assertEquals("8877665544", phone);
+    }
 }

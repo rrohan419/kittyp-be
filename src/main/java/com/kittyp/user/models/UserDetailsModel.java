@@ -28,6 +28,8 @@ public class UserDetailsModel {
     private LocalDateTime createdAt;
     private String phoneNumber;
     private String phoneCountryCode;
+    private String whatsappNumber;
+    private String whatsappCountryCode;
     private Integer age;
     private boolean enabled;
     private String profilePictureUrl;

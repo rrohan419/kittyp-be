@@ -5,70 +5,57 @@
 | Property | Env | Description |
 |----------|-----|-------------|
 | `whatsapp.enabled` | `WHATSAPP_ENABLED` | `true` when ready to send (default `false`) |
+| `whatsapp.token` | `WHATSAPP_TOKEN` | Server-only permanent token for Kittyp's shared WABA |
+| `whatsapp.phone-number-id` | `WHATSAPP_PHONE_NUMBER_ID` | Kittyp's shared Cloud API phone number ID |
+| `whatsapp.business-account-id` | `WHATSAPP_BUSINESS_ACCOUNT_ID` | Kittyp's shared WhatsApp Business Account ID (WABA) |
 | `whatsapp.api-version` | `WHATSAPP_API_VERSION` | e.g. `v21.0` |
 | `whatsapp.invoice-template` | `WHATSAPP_INVOICE_TEMPLATE` | Template name, default `invoice` |
 | `whatsapp.invoice-template-lang` | `WHATSAPP_INVOICE_TEMPLATE_LANG` | Default `en` |
-| `whatsapp.vaccine-template` | `WHATSAPP_VACCINE_TEMPLATE` | Phase 2, default `vaccine_reminder` |
-| `whatsapp.checkup-template` | `WHATSAPP_CHECKUP_TEMPLATE` | Phase 2, default `checkup_reminder` |
-| `whatsapp.promo-template` | `WHATSAPP_PROMO_TEMPLATE` | Phase 2, default `promo_offer` |
+| `whatsapp.vaccine-template` | `WHATSAPP_VACCINE_TEMPLATE` | Default `vaccine_reminder` |
+| `whatsapp.checkup-template` | `WHATSAPP_CHECKUP_TEMPLATE` | Default `checkup_reminder` |
+| `whatsapp.promo-template` | `WHATSAPP_PROMO_TEMPLATE` | Default `promo_offer` |
+| `whatsapp.appointment-template` | `WHATSAPP_APPOINTMENT_TEMPLATE` | Optional approved Kittyp WABA text-template name |
 | `whatsapp.default-country-code` | `WHATSAPP_DEFAULT_COUNTRY_CODE` | Default `91` for 10-digit IN numbers |
-| `whatsapp.meta-app-id` | `WHATSAPP_META_APP_ID` | KittyP Meta App ID (public to FE for Embedded Signup + template sample upload) |
-| `whatsapp.meta-app-secret` | `WHATSAPP_META_APP_SECRET` | **Server only** — code exchange for Embedded Signup |
-| `whatsapp.embedded-signup-config-id` | `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` | Embedded Signup `config_id` from Meta |
+| `whatsapp.meta-app-id` | `WHATSAPP_META_APP_ID` | Kittyp Meta App ID; used for uploading a sample invoice PDF when submitting a document template |
+| `whatsapp.meta-app-secret` | `WHATSAPP_META_APP_SECRET` | **Server only** — legacy practice-owned Embedded Signup flow |
+| `whatsapp.embedded-signup-config-id` | `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` | Legacy practice-owned Embedded Signup `config_id` |
 | `whatsapp.webhook-verify-token` | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Hub verify token for `/api/v1/webhook/whatsapp` |
 | `whatsapp.register-pin` | `WHATSAPP_REGISTER_PIN` | Optional 6-digit PIN for Cloud API phone register |
-| `app.crypto.secret` | `APP_CRYPTO_SECRET` | AES key material for WhatsApp tokens at rest (prefer dedicated secret, not JWT) |
+| `app.crypto.secret` | `APP_CRYPTO_SECRET` | AES key material for legacy practice-owned WhatsApp tokens at rest |
 
-Public FE config (never exposes secret): `GET /api/v1/public/whatsapp/embedded-signup-config`
-→ `{ enabled, appId, configId, apiVersion }`.
+The shared sender credentials are never returned to the frontend. Its token, Phone Number ID,
+and WABA ID must identify the same Kittyp-owned Cloud API number.
 
-## Embedded Signup v4 (recommended clinic UX)
+If Meta reports that `message_templates` is a nonexisting field, check that
+`WHATSAPP_BUSINESS_ACCOUNT_ID` is the WhatsApp Business Account ID shown in WhatsApp Manager,
+not the Meta Business Manager ID, app ID, or phone number ID. The token must also have access
+to that WABA and the `whatsapp_business_management` permission.
 
-Create a **new** Facebook Login for Business configuration in Meta App Dashboard:
-`Facebook Login for Business` → `Configurations` → `Embedded Signup`. Select the
-Cloud API product and copy its new configuration ID into
-`WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`. Do not reuse the previous Embedded Signup
-configuration; Meta's v2 flow is deprecated on October 15, 2026.
+## Kittyp shared sender setup
 
-Clinic admins and personal-practice doctors use **Connect WhatsApp with Meta** on
-`/clinic/whatsapp` or `/doctor/whatsapp`. Flow:
+Configure one Kittyp-owned Meta Business Manager/WABA and Cloud API number:
 
-1. FE loads Facebook JS SDK with public App ID + the v4 Embedded Signup `config_id`
-2. Meta returns an auth `code` and a `WA_EMBEDDED_SIGNUP` message with `event: FINISH`
-   plus `data.waba_id` and `data.phone_number_id`
-3. BE `POST .../whatsapp/connect/embedded` exchanges the code (App Secret), validates the phone
-   belongs to the WABA, subscribes the KittyP app, optionally registers the phone, saves credentials,
-   and ensures `invoice_receipt` templates
-4. Invoice WhatsApp send is blocked until cached invoice template status is **APPROVED**
-5. Meta webhooks `GET|POST /api/v1/webhook/whatsapp` refresh template status on approval/rejection
+1. Set `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, and `WHATSAPP_BUSINESS_ACCOUNT_ID` in the
+   backend environment.
+2. Grant the permanent token `whatsapp_business_messaging` and `whatsapp_business_management`.
+3. Set `WHATSAPP_ENABLED=true` only after the account and approved templates are ready.
+4. Approve the required templates in WhatsApp Manager. The Messaging page reads the approved
+   templates directly from this WABA.
 
-### Meta app checklist (ops)
+Clinic admins and personal-practice doctors do not connect their own WhatsApp accounts. Previously
+saved clinic/doctor credentials and Embedded Signup endpoints remain only for legacy compatibility;
+they are not used to send outbound communications.
 
-1. KittyP Meta App: WhatsApp product + **Facebook Login for Business** + Embedded Signup configuration
-2. App domains / redirect allowlist for KittyP FE origin(s)
-3. Permissions: `whatsapp_business_management`, `whatsapp_business_messaging`
-   (Development mode for your test BM; App Review / Advanced access for other businesses)
-4. Server secrets: App ID, App Secret, Embedded Signup Config ID, webhook verify token
-5. Subscribe the app’s webhook to the WABA (Embedded Signup does this via `subscribed_apps`)
+## Required template: `invoice`
 
-**Advanced / pilots:** collapsed manual form still accepts Phone Number ID + WABA ID + token.
-Manual connect also validates that the phone ID belongs to the WABA.
+Kittyp sends all clinic and personal-practice invoice PDFs through this approved DOCUMENT template
+on the shared Kittyp WABA. The backend checks that the configured name/language is currently
+approved before uploading and sending the PDF. Approve the template on Kittyp's WABA before use.
 
-## Meta prerequisites (manual path)
-
-1. Meta Business Manager + WhatsApp Business Account (WABA).
-2. Cloud API phone number; copy **Phone number ID**.
-3. System user with `whatsapp_business_messaging` + permanent token.
-4. Approve templates in WhatsApp Manager before production sends.
-
-## Required template: `invoice_receipt`
-
-KittyP **auto-creates** this template on the clinic/doctor WABA when WhatsApp credentials are saved
-(`POST /{WABA_ID}/message_templates`). Admins only enter Phone Number ID, WABA ID, and token
-(or use Embedded Signup).
-
-**Server requirement:** set `whatsapp.meta-app-id` / `WHATSAPP_META_APP_ID` to your Meta App ID
-(developers.facebook.com) so KittyP can upload a sample PDF handle for the DOCUMENT header.
+`whatsapp.invoice-template` and `whatsapp.invoice-template-lang` configure the name and language.
+The default template name is `invoice`.
+If Kittyp submits the template, `whatsapp.meta-app-id` / `WHATSAPP_META_APP_ID` must be set so it
+can upload a sample PDF handle for Meta's DOCUMENT header.
 
 **Token permissions:** `whatsapp_business_messaging` + `whatsapp_business_management`.
 
@@ -97,45 +84,67 @@ Thank you for choosing us.
 | 4 | Invoice number |
 | 5 | Grand total (plain number string) |
 
-Header media is uploaded at send time (PDF from S3 → Meta media ID). Template status appears in
-WhatsApp Business settings (`templatesReady`, `invoiceTemplateStatus`). Use **Retry template setup**
-if creation failed or while waiting for Meta approval.
+The PDF from S3 is uploaded to Meta using Kittyp's sender credentials and attached using this
+DOCUMENT header. The template is not offered in the generic text composer.
 
-Cached columns on `clinics` / `doctor_profiles`:
-`whatsapp_connection_status`, `whatsapp_connected_at`, `whatsapp_last_verified_at`,
-`whatsapp_invoice_template_status`.
+Legacy per-practice cached WhatsApp status columns do not determine outbound readiness.
 
-## Later templates
+## Approved messaging templates
 
-- `vaccine_reminder` — text, vars: pet, vaccine, due date
-- `checkup_reminder` — text, vars: pet, clinic, date
-- `payment_receipt` — document header (similar to invoice)
-- `promo_offer` — marketing (stricter Meta approval)
+The Messaging page loads approved/active text or document templates from Kittyp's WABA. Text-template
+parameters are entered in the order of the numbered placeholders in the approved body.
+Document-header templates (including `invoice`) remain available to Billing, which attaches the
+generated PDF; they cannot be sent from the generic composer.
 
-## Per-doctor / per-clinic senders
+Reminder templates must be approved on Kittyp's WABA:
 
-| Field | Meta / env name |
-|-------|-----------------|
-| Phone Number ID | `WHATSAPP_PHONE_NUMBER_ID` |
-| Business Account ID (WABA) | `WHATSAPP_BUSINESS_ACCOUNT_ID` |
-| Access token (write-only) | `WHATSAPP_TOKEN` |
+**`vaccine_reminder`**
 
-| Sender | Stored on | Who uses it |
-|--------|-----------|-------------|
-| Doctor personal | `doctor_profiles.whatsapp_*` | Personal practice invoices |
-| Clinic | `clinics.whatsapp_*` | All clinic-portal invoices (shared by clinic doctors) |
+```
+Hello {{1}}, this is a reminder from {{3}} that {{2}} is due for {{4}} on {{5}}.
 
-API returns `whatsappConfigured`, `connectionStatus`, `invoiceTemplateStatus`, `whatsappReadyToSend`,
-`phoneNumberId`, `businessAccountId` (never the token). Tokens are encrypted at rest
-(`app.crypto.secret` / `APP_CRYPTO_SECRET`, falls back to `JWT_SECRET`).
+Please contact the clinic to schedule the vaccination.
 
-**Send gate:** credentials configured but invoice template not APPROVED → `503`
-“WhatsApp invoice template not approved yet”.
+If this vaccination has already been completed or an appointment is already booked, please ignore this reminder.
+```
 
-**No platform credential fallback:** invoice sends use only the doctor or clinic sender. Missing entity credentials → clear `503` (even if `WHATSAPP_TOKEN` is set in env). Env `whatsapp.token` / `whatsapp.phone-number-id` are unused for entity sends.
+**`checkup_reminder`**
 
-Clinic WhatsApp settings GET/PUT / Embedded connect require `ROLE_CLINIC_ADMIN` (staff cannot read Meta IDs).
+```
+Hello {{1}}, following {{2}}'s visit to {{3}} on {{4}}, the veterinarian recommended a follow-up check-up around {{5}}.
+
+Please contact the clinic to arrange the visit.
+
+If this follow-up is already booked, you can ignore this reminder.
+```
+
+## Automatic reminder delivery
+
+Vaccine schedules and pet reminders are delivered by the dedicated pet-reminder scheduler at
+10:00 AM in `Asia/Kolkata` (`kittyp.reminders.cron` can override the time). The generic
+Messaging dispatcher does not claim these automation records, preventing duplicate or
+template-less sends. Automation sends reserve and settle channel credits through the same
+wallet/ledger as manually composed messages, and successful sends remain in Message History.
+Email uses the 2,000-message monthly free allowance before paid credits. Failed deliveries
+release reserved credits and remain eligible for the next scheduler run
+instead of being marked complete. Clinic-wide pause and per-automation settings still apply.
+
+## Sender ownership and readiness
+
+| Setting | Purpose |
+|---------|---------|
+| `WHATSAPP_TOKEN` | Kittyp's server-side permanent access token |
+| `WHATSAPP_PHONE_NUMBER_ID` | Shared Cloud API sender number |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | WABA used to fetch templates and verify approval |
+| `WHATSAPP_ENABLED` | Global delivery kill switch |
+
+Invoice sends require the configured approved DOCUMENT template; text sends require a currently
+approved text template and a matching parameter count. Missing sender configuration, disabled
+delivery, or missing approval returns a clear service error. Practice-owned credentials stored
+on `clinics` or `doctor_profiles` are not consulted for outbound messages.
 
 ## Local / no credentials
 
-With `whatsapp.enabled=false` (default outside local), `LoggingWhatsAppService` is active. Invoice create still saves the PDF; send returns **503**. If clinic/doctor Meta credentials are saved, the error asks you to set `WHATSAPP_ENABLED=true`. If credentials are missing, it asks you to add Phone Number ID + token in Clinic/Doctor settings.
+With `whatsapp.enabled=false` (default), `LoggingWhatsAppService` is active and sends return **503**.
+Invoice creation still saves the PDF. To enable sends, Kittyp operators must configure the shared
+sender credentials and set `WHATSAPP_ENABLED=true`; practices do not need to configure a sender.

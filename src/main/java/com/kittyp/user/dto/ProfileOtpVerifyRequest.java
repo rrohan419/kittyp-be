@@ -8,13 +8,13 @@ import lombok.Setter;
 @Setter
 public class ProfileOtpVerifyRequest {
 
-    /** EMAIL or PHONE */
+    /** EMAIL, PHONE or WHATSAPP */
     @NotBlank
     private String channel;
 
     private String email;
     private String phone;
+    private String accessToken;
 
-    @NotBlank
     private String code;
 }

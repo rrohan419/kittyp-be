@@ -16,6 +16,7 @@ import com.kittyp.payment.enums.WebhookSource;
 import com.kittyp.payment.model.RazorpayResponseModel;
 import com.kittyp.payment.model.RazorpayResponseModel.PaymentEntity;
 import com.kittyp.payment.repository.WebhookEventRepository;
+import com.kittyp.notification.service.MessagingLifecycleService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -34,6 +35,7 @@ public class WebhookServiceImpl implements WebhookService {
 	private final Mapper mapper;
 	private final WebhookEventRepository webhookEventRepository;
 	private final PaymentCaptureService paymentCaptureService;
+	private final MessagingLifecycleService messagingLifecycleService;
 
 @Override
     @Transactional
@@ -70,7 +72,10 @@ public class WebhookServiceImpl implements WebhookService {
 		OrderStatus mapped = eventType != null ? OrderStatus.fromRazorpayStatus(eventType) : OrderStatus.UNKNOWN;
 		try {
 			if (mapped == OrderStatus.SUCCESSFULL) {
-				paymentCaptureService.completeCaptured(orderId, paymentId);
+				if (!messagingLifecycleService.creditVerifiedWebhook(orderId, paymentId,
+						paymentEntity.getAmount(), paymentEntity.getCurrency())) {
+					paymentCaptureService.completeCaptured(orderId, paymentId);
+				}
 				webhookEvent.setStatus(PROCESSED);
 			} else if (mapped == OrderStatus.FAILED) {
 				paymentCaptureService.failStoreIfPending(orderId);

@@ -18,6 +18,7 @@ import com.kittyp.payment.model.RazorpayResponseModel.Payload;
 import com.kittyp.payment.model.RazorpayResponseModel.PaymentEntity;
 import com.kittyp.payment.model.RazorpayResponseModel.PaymentWrapper;
 import com.kittyp.payment.repository.WebhookEventRepository;
+import com.kittyp.notification.service.MessagingLifecycleService;
 
 class WebhookServiceImplCaptureTest {
 
@@ -30,7 +31,10 @@ class WebhookServiceImplCaptureTest {
 		webhookEventRepository = mock(WebhookEventRepository.class);
 		captureProbe = new CaptureProbe();
 		Mapper mapper = new Mapper(new ModelMapper(), new ObjectMapper(), mock(Environment.class));
-		service = new WebhookServiceImpl(mapper, webhookEventRepository, captureProbe);
+		MessagingLifecycleService messagingLifecycle = mock(MessagingLifecycleService.class);
+		when(messagingLifecycle.creditVerifiedWebhook(org.mockito.ArgumentMatchers.anyString(),
+				org.mockito.ArgumentMatchers.anyString())).thenReturn(false);
+		service = new WebhookServiceImpl(mapper, webhookEventRepository, captureProbe, messagingLifecycle);
 	}
 
 	@Test

@@ -41,12 +41,15 @@ class ZeptoMailServiceImplTest {
 				environment);
 
 		service.sendClinicProfileVerified("clinic@example.com", "Clinic Admin", "Paws Clinic",
-				"https://example.com/clinic");
+				"https://example.com/clinic", 42L);
 
 		ArgumentCaptor<EmailAuditDto> auditCaptor = ArgumentCaptor.forClass(EmailAuditDto.class);
 		verify(auditService).saveEmailAudit(auditCaptor.capture());
 		assertEquals("ZeptoMail", auditCaptor.getValue().getProvider());
 		assertEquals("request-123", auditCaptor.getValue().getRequestId());
+		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
+		verify(sender).sendEmail(mailCaptor.capture());
+		assertEquals(42L, mailCaptor.getValue().getClinicAccountId());
 	}
 
 	@Test
@@ -65,7 +68,7 @@ class ZeptoMailServiceImplTest {
 				mock(OrderDao.class),
 				environment);
 
-		service.sendUpdateOtpEmail("new@example.com", "123456", "Rohan", "Clinic", "new@example.com");
+		service.sendUpdateOtpEmail("new@example.com", "123456", "Rohan", "Clinic", "new@example.com", null);
 
 		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
 		verify(sender).sendEmail(mailCaptor.capture());
@@ -97,7 +100,7 @@ class ZeptoMailServiceImplTest {
 				environment);
 
 		service.sendClinicProfileRejected(
-				"owner@example.com", "Clinic Admin", "Paws Clinic", "Please upload a valid license.");
+				"owner@example.com", "Clinic Admin", "Paws Clinic", "Please upload a valid license.", 42L);
 
 		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
 		verify(sender).sendEmail(mailCaptor.capture());
@@ -106,6 +109,7 @@ class ZeptoMailServiceImplTest {
 		assertEquals("Paws Clinic", mailCaptor.getValue().getMergeInfo().get("clinic_name"));
 		assertEquals("Please upload a valid license.",
 				mailCaptor.getValue().getMergeInfo().get("rejection_reason"));
+		assertEquals(42L, mailCaptor.getValue().getClinicAccountId());
 	}
 
 	@Test
@@ -125,7 +129,7 @@ class ZeptoMailServiceImplTest {
 				environment);
 
 		service.sendClinicPetParentInviteEmail("owner@example.com", "Rohan", "Milo", "Happy Paws",
-				"https://kittyp.in/signup?role=USER&email=owner%40example.com");
+				"https://kittyp.in/signup?role=USER&email=owner%40example.com", 42L);
 
 		ArgumentCaptor<ZeptoMailDto> mailCaptor = ArgumentCaptor.forClass(ZeptoMailDto.class);
 		verify(sender).sendEmail(mailCaptor.capture());
@@ -138,6 +142,7 @@ class ZeptoMailServiceImplTest {
 		assertEquals("Happy Paws", mail.getMergeInfo().get("clinic_name"));
 		assertEquals("https://kittyp.in/signup?role=USER&email=owner%40example.com",
 				mail.getMergeInfo().get("invite_url"));
+		assertEquals(42L, mail.getClinicAccountId());
 	}
 
 	@Test

@@ -64,6 +64,6 @@ public class CreateConsultationInvoiceDto {
 
     private Boolean generatePdf;
 
-    /** When true with generatePdf, upload PDF to Meta and send invoice_receipt template. */
+    /** When true with generatePdf, upload the PDF and send it using the approved invoice template. */
     private Boolean sendWhatsApp;
 }

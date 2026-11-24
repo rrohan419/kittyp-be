@@ -16,7 +16,7 @@ public interface WhatsAppService {
     }
 
     /**
-     * True when the given clinic/doctor sender has Phone Number ID + token.
+     * True when the supplied sender has a Phone Number ID + token.
      * Does not imply {@link #isDeliveryEnabled()}.
      */
     boolean isConfigured(WhatsAppSenderCredentials sender);
@@ -53,6 +53,14 @@ public interface WhatsAppService {
             String templateName,
             String languageCode,
             List<String> bodyParams);
+
+    /** Same approved-template send with provider message id when supported. */
+    default String sendTextTemplateWithId(
+            WhatsAppSenderCredentials sender, String toE164Digits, String templateName,
+            String languageCode, List<String> bodyParams) {
+        sendTextTemplate(sender,toE164Digits,templateName,languageCode,bodyParams);
+        return null;
+    }
 
     /**
      * Send an approved authentication template with a copy-code button.

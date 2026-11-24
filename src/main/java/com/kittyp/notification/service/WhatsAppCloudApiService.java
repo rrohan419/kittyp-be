@@ -154,6 +154,16 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             String templateName,
             String languageCode,
             List<String> bodyParams) {
+        sendTextTemplateWithId(sender,toE164Digits,templateName,languageCode,bodyParams);
+    }
+
+    @Override
+    public String sendTextTemplateWithId(
+            WhatsAppSenderCredentials sender,
+            String toE164Digits,
+            String templateName,
+            String languageCode,
+            List<String> bodyParams) {
         WhatsAppSenderCredentials creds = requireSender(sender);
         List<Map<String, Object>> components = new ArrayList<>();
         if (bodyParams != null && !bodyParams.isEmpty()) {
@@ -184,7 +194,7 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         payload.put(KeyConstant.WHATSAPP_MESSAGE_TYPE, "template");
         payload.put("template", template);
 
-        postMessage(creds, payload);
+        return postMessage(creds, payload);
     }
 
     @Override
@@ -223,21 +233,18 @@ public class WhatsAppCloudApiService implements WhatsAppService {
         postMessage(creds, payload);
     }
 
-    private void postMessage(WhatsAppSenderCredentials creds, Map<String, Object> payload) {
+    private String postMessage(WhatsAppSenderCredentials creds, Map<String, Object> payload) {
         try {
-            client(creds).post()
+            String response=client(creds).post()
                     .uri("/{phoneNumberId}/messages", creds.phoneNumberId())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
-                    .toBodilessEntity();
-            log.info("WhatsApp template message accepted for {}",
-                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))));
+                    .body(String.class);
+            JsonNode ids=objectMapper.readTree(response==null?"{}":response).path("messages");
+            return ids.isArray()&&ids.size()>0?ids.get(0).path("id").asText(null):null;
         } catch (RestClientResponseException e) {
-            log.error("WhatsApp send failed: status={} to={} body={}",
-                    e.getStatusCode().value(),
-                    WhatsAppPhones.redact(String.valueOf(payload.get("to"))),
-                    e.getResponseBodyAsString());
+            log.error("WhatsApp send failed: status={}",e.getStatusCode().value());
             throw metaFailure("WhatsApp send failed", e);
         } catch (Exception e) {
             throw new CustomException("WhatsApp send failed", HttpStatus.BAD_GATEWAY, e);
@@ -262,12 +269,8 @@ public class WhatsAppCloudApiService implements WhatsAppService {
 
     private CustomException metaFailure(String prefix, RestClientResponseException e) {
         int status = e.getStatusCode().value();
-        String detail = extractMetaError(e.getResponseBodyAsString());
-        String hint = metaHint(status, detail);
-        String message = prefix + " (Meta HTTP " + status + ")"
-                + (detail != null ? ": " + detail : "")
-                + (hint != null ? " — " + hint : "");
-        return new CustomException(message, HttpStatus.BAD_GATEWAY, e);
+        return new CustomException(prefix + " (Meta HTTP " + status + ")",
+                HttpStatus.BAD_GATEWAY, e);
     }
 
     private String extractMetaError(String responseBody) {
@@ -300,7 +303,7 @@ public class WhatsAppCloudApiService implements WhatsAppService {
             return "Check Phone Number ID (not the display phone or WABA ID) in Clinic WhatsApp settings";
         }
         if (lower.contains("template") || lower.contains("translation")) {
-            return "Create and approve template 'invoice_receipt' (DOCUMENT header, language en) in Meta WhatsApp Manager";
+            return "Check that the configured invoice DOCUMENT template is approved and its language matches WhatsApp Manager";
         }
         if (httpStatus == 401 || httpStatus == 403 || lower.contains("access token") || lower.contains("permission")) {
             return "Token needs whatsapp_business_messaging on this WABA; regenerate a permanent token if needed";

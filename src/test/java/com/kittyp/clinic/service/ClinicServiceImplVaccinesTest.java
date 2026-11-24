@@ -3,9 +3,14 @@ package com.kittyp.clinic.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -26,6 +31,10 @@ import com.kittyp.clinic.entity.ClinicPetOwner;
 import com.kittyp.clinic.enums.ClinicStatus;
 import com.kittyp.clinic.repository.ClinicDoctorRepository;
 import com.kittyp.clinic.repository.ClinicPetEnrollmentRepository;
+import com.kittyp.clinic.entity.ClinicPetEnrollment;
+import com.kittyp.notification.enums.MessageChannel;
+import com.kittyp.notification.enums.MessageTenantType;
+import com.kittyp.notification.service.AutomationMessageBridge;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.entity.Pet;
 import com.kittyp.user.entity.Role;
@@ -61,6 +70,8 @@ class ClinicServiceImplVaccinesTest {
     private PetVaccineScheduleDao petVaccineScheduleDao;
     @Mock
     private VaccineMasterRepository vaccineMasterRepository;
+    @Mock
+    private AutomationMessageBridge automationMessageBridge;
 
     @InjectMocks
     private ClinicServiceImpl clinicService;
@@ -87,6 +98,39 @@ class ClinicServiceImplVaccinesTest {
         assertEquals("Rabies", model.vaccineName());
         assertEquals(LocalDate.of(2026, 9, 15), model.dueDate());
         assertEquals(false, model.completed());
+    }
+
+    @Test
+    void addVaccineDue_skipsPastStagesAndKeepsTodaysCatchUpStage() {
+        User admin = user(1L, EMAIL);
+        Clinic clinic = clinic(admin);
+        Pet pet = pet(clinic);
+        ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder()
+                .clinic(clinic).pet(pet).clinicOwner(pet.getClinicOwner()).build();
+        enrollment.setIsActive(true);
+        VaccineMaster master = VaccineMaster.builder().name("Rabies").species("DOG").build();
+        master.setId(3L);
+        stubAccess(admin, clinic, pet);
+        when(vaccineMasterRepository.findById(3L)).thenReturn(Optional.of(master));
+        when(petVaccineScheduleDao.save(any(PetVaccineSchedule.class))).thenAnswer(inv -> {
+            PetVaccineSchedule saved = inv.getArgument(0);
+            saved.setId(12L);
+            return saved;
+        });
+        when(clinicPetEnrollmentRepository.findByPet_IdAndIsActiveTrue(pet.getId()))
+                .thenReturn(List.of(enrollment));
+
+        clinicService.addVaccineDue(CLINIC_UUID, PET_UUID,
+                new AddVaccineDueRequest(3L, LocalDate.now().plusDays(1)), EMAIL);
+
+        verify(automationMessageBridge, never()).schedule(
+                any(), any(), any(), any(), any(), eq("SEVEN_DAY"), any(), any(),
+                any(), any(), any(), any(), any());
+        verify(automationMessageBridge, times(2)).schedule(
+                eq(MessageTenantType.CLINIC), eq(clinic.getId()), eq("VACCINE_REMINDER"),
+                eq("PET_VACCINE_SCHEDULE"), eq("VACCINE_SCHEDULE_12"), eq("ONE_DAY"),
+                eq("Pat"), eq(pet.getName()), any(MessageChannel.class), any(),
+                eq("Pet vaccination reminder"), any(), eq(LocalDate.now().atStartOfDay()));
     }
 
     @Test
@@ -120,7 +164,12 @@ class ClinicServiceImplVaccinesTest {
         when(clinicStaffDao.isActiveMember(clinic.getId(), admin.getId())).thenReturn(false);
         when(clinicDoctorRepository.existsByClinic_IdAndDoctor_User_IdAndIsActiveTrue(clinic.getId(), admin.getId()))
                 .thenReturn(false);
-        when(petsRepository.findByUuidAndClinic_Id(PET_UUID, clinic.getId())).thenReturn(Optional.of(pet));
+        ClinicPetEnrollment enrollment = ClinicPetEnrollment.builder()
+                .clinic(clinic).pet(pet).clinicOwner(pet.getClinicOwner()).build();
+        enrollment.setIsActive(true);
+        when(clinicPetEnrollmentRepository
+                .findByClinic_IdAndPet_UuidAndIsActiveTrue(clinic.getId(), PET_UUID))
+                .thenReturn(Optional.of(enrollment));
     }
 
     private static Clinic clinic(User owner) {

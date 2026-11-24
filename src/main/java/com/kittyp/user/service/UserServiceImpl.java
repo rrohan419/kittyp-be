@@ -29,7 +29,8 @@ import com.kittyp.common.model.PaginationModel;
 import com.kittyp.common.util.VerificationCodeService;
 import com.kittyp.email.service.ZeptoMailService;
 import com.kittyp.notification.FcmPushNotificationService;
-import com.kittyp.notification.service.SmsService;
+import com.kittyp.notification.service.Msg91OtpVerifyService;
+import com.kittyp.notification.service.WhatsappOtpService;
 import com.kittyp.user.dao.RoleDao;
 import com.kittyp.user.dao.UserDao;
 import com.kittyp.user.dao.UserFcmTokenDao;
@@ -69,7 +70,8 @@ public class UserServiceImpl implements UserService {
 	private final UserFcmTokenDao fcmTokenDao;
 	private final JwtUtils jwtUtils;
 	private final RefreshTokenService refreshTokenService;
-	private final SmsService smsService;
+	private final Msg91OtpVerifyService msg91OtpVerifyService;
+	private final WhatsappOtpService whatsappOtpService;
 	private final ClinicOwnerUserLinkService clinicOwnerUserLinkService;
 
 	@Value("${jwt.expiration}")
@@ -125,11 +127,19 @@ public class UserServiceImpl implements UserService {
 		boolean emailChanging = userDetailDto.getEmail() != null && !userDetailDto.getEmail().isBlank()
 				&& !userDetailDto.getEmail().trim().equalsIgnoreCase(user.getEmail());
 		boolean phoneChanging = isPhoneChanging(user, userDetailDto);
+		boolean whatsappChanging = isWhatsappChanging(user, userDetailDto);
 
 		if (phoneChanging) {
 			String local = userDetailDto.getPhoneNumber() == null ? "" : userDetailDto.getPhoneNumber().trim();
 			if (!local.matches("\\d{10}")) {
 				throw new CustomException("Phone number must be exactly 10 digits", HttpStatus.BAD_REQUEST);
+			}
+			if (whatsappChanging) {
+				String whatsappLocal = userDetailDto.getWhatsappNumber() == null
+						? "" : userDetailDto.getWhatsappNumber().trim();
+				if (!whatsappLocal.matches("\\d{10}")) {
+					throw new CustomException("WhatsApp number must be exactly 10 digits", HttpStatus.BAD_REQUEST);
+				}
 			}
 		}
 
@@ -173,6 +183,20 @@ public class UserServiceImpl implements UserService {
 			verificationCodeService.clearVerified(
 					VerificationCodeService.profilePhoneVerifiedKey(user.getUuid(), fullPhone));
 			logger.debug("Updated phone number to: {}", fullPhone);
+		}
+		if (whatsappChanging) {
+			String fullPhone = normalizePhone(
+					userDetailDto.getWhatsappCountryCode(), userDetailDto.getWhatsappNumber());
+			if (!verificationCodeService.isVerified(
+					VerificationCodeService.profileWhatsappVerifiedKey(user.getUuid(), fullPhone))) {
+				throw new CustomException(
+						"WhatsApp re-verification required before changing WhatsApp number",
+						HttpStatus.BAD_REQUEST);
+			}
+			user.setWhatsappCountryCode(userDetailDto.getWhatsappCountryCode().trim());
+			user.setWhatsappNumber(userDetailDto.getWhatsappNumber().trim());
+			verificationCodeService.clearVerified(
+					VerificationCodeService.profileWhatsappVerifiedKey(user.getUuid(), fullPhone));
 		}
 
 		if (userDetailDto.getAge() != null) {
@@ -229,6 +253,10 @@ public class UserServiceImpl implements UserService {
 				.createdAt(user.getCreatedAt())
 				.phoneNumber(user.getPhoneNumber())
 				.phoneCountryCode(phoneCountryCode)
+				.whatsappNumber(user.getWhatsappNumber())
+				.whatsappCountryCode(user.getWhatsappCountryCode() == null || user.getWhatsappCountryCode().isBlank()
+						? (user.getWhatsappNumber() == null || user.getWhatsappNumber().isBlank() ? null : "+91")
+						: user.getWhatsappCountryCode())
 				.age(user.getAge())
 				.enabled(user.isEnabled())
 				.profilePictureUrl(user.getProfilePictureUrl())
@@ -273,13 +301,28 @@ public class UserServiceImpl implements UserService {
 			if (phone.equals(currentFull)) {
 				throw new CustomException("New phone must be different from current phone", HttpStatus.BAD_REQUEST);
 			}
-			String code = verificationCodeService.generateCode(
-					VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone));
-			smsService.sendOtp(phone, code);
-			return new MessageResponse("OTP sent to phone");
+			throw new CustomException(
+					"Use the MSG91 SMS verification widget for the phone channel",
+					HttpStatus.METHOD_NOT_ALLOWED);
 		}
 
-		throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
+		if ("WHATSAPP".equals(channel)) {
+			if (request.getPhone() == null || request.getPhone().isBlank()) {
+				throw new CustomException("WhatsApp number is required", HttpStatus.BAD_REQUEST);
+			}
+			String phone = request.getPhone().trim();
+			String digits = phone.replaceAll("\\D", "");
+			if (digits.length() < 10 || !digits.substring(digits.length() - 10).matches("\\d{10}")) {
+				throw new CustomException("WhatsApp number must include a valid 10-digit local number",
+						HttpStatus.BAD_REQUEST);
+			}
+			String code = verificationCodeService.generateCode(
+					VerificationCodeService.profileWhatsappOtpKey(user.getUuid(), phone));
+			whatsappOtpService.sendOtp(digits, code);
+			return new MessageResponse("OTP sent to WhatsApp");
+		}
+
+		throw new CustomException("channel must be EMAIL or WHATSAPP", HttpStatus.BAD_REQUEST);
 	}
 
 	@Override
@@ -298,14 +341,21 @@ public class UserServiceImpl implements UserService {
 			}
 		} else if ("PHONE".equals(channel)) {
 			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
-			ok = verificationCodeService.verifyCode(
-					VerificationCodeService.profilePhoneOtpKey(user.getUuid(), phone), request.getCode(), true);
+			ok = msg91OtpVerifyService.verifyOtp(request.getAccessToken());
 			if (ok) {
 				verificationCodeService.markVerified(
 						VerificationCodeService.profilePhoneVerifiedKey(user.getUuid(), phone));
 			}
+		} else if ("WHATSAPP".equals(channel)) {
+			String phone = request.getPhone() == null ? "" : request.getPhone().trim();
+			ok = verificationCodeService.verifyCode(
+					VerificationCodeService.profileWhatsappOtpKey(user.getUuid(), phone), request.getCode(), true);
+			if (ok) {
+				verificationCodeService.markVerified(
+						VerificationCodeService.profileWhatsappVerifiedKey(user.getUuid(), phone));
+			}
 		} else {
-			throw new CustomException("channel must be EMAIL or PHONE", HttpStatus.BAD_REQUEST);
+			throw new CustomException("channel must be EMAIL, PHONE or WHATSAPP", HttpStatus.BAD_REQUEST);
 		}
 
 		if (!ok) {
@@ -332,6 +382,19 @@ public class UserServiceImpl implements UserService {
 				? "+91"
 				: user.getPhoneCountryCode();
 		String current = normalizePhone(currentCode, user.getPhoneNumber());
+		return !next.equals(current);
+	}
+
+	private static boolean isWhatsappChanging(User user, UserDetailDto dto) {
+		if (dto.getWhatsappNumber() == null || dto.getWhatsappNumber().isBlank()
+				|| dto.getWhatsappCountryCode() == null || dto.getWhatsappCountryCode().isBlank()) {
+			return false;
+		}
+		String next = normalizePhone(dto.getWhatsappCountryCode(), dto.getWhatsappNumber());
+		String currentCode = user.getWhatsappCountryCode() == null || user.getWhatsappCountryCode().isBlank()
+				? "+91"
+				: user.getWhatsappCountryCode();
+		String current = normalizePhone(currentCode, user.getWhatsappNumber());
 		return !next.equals(current);
 	}
 
