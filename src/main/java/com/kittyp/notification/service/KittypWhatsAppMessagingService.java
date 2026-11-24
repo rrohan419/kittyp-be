@@ -72,7 +72,9 @@ public class KittypWhatsAppMessagingService {
                         && template.language().equalsIgnoreCase(language))
                 .findFirst()
                 .orElseThrow(() -> new CustomException(
-                        "Kittyp's WhatsApp invoice document template is not approved",
+                        "No approved DOCUMENT template named '" + name
+                                + "' was found on Kittyp's configured WhatsApp Business Account. "
+                                + "Approve the invoice template on that WABA, not another account.",
                         HttpStatus.SERVICE_UNAVAILABLE));
     }
 }

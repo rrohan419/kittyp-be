@@ -148,4 +148,7 @@ public class ConsultationInvoice extends BaseEntity {
 
     @Column(name = "issued_at")
     private LocalDateTime issuedAt;
+
+    @Column(name = "whatsapp_sent_at")
+    private LocalDateTime whatsappSentAt;
 }

@@ -136,11 +136,13 @@ public class ClinicInvoiceController {
     @PostMapping(ApiUrl.CLINIC_INVOICE_SEND_WHATSAPP)
     @PreAuthorize(CLINIC_BILLING)
     public ResponseEntity<SuccessResponse<ConsultationInvoice>> sendWhatsApp(
-            @PathVariable String uuid, @PathVariable String invoiceUuid) {
+            @PathVariable String uuid,
+            @PathVariable String invoiceUuid,
+            @RequestParam(defaultValue = "false") boolean resendConfirmed) {
         Clinic clinic = requireAccessibleClinic(uuid);
         ConsultationInvoice invoice = treatmentInvoiceService.requireClinicInvoice(clinic, invoiceUuid);
         invoice = treatmentInvoiceService.sendInvoiceWhatsApp(
-                invoice, null);
+                invoice, null, resendConfirmed);
         return responseBuilder.buildSuccessResponse(invoice, ResponseMessage.SUCCESS, HttpStatus.OK);
     }
 

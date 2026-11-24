@@ -2,6 +2,7 @@ package com.kittyp.notification.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,6 +46,6 @@ class KittypWhatsAppMessagingServiceTest {
                 () -> service.requireInvoiceDocumentTemplate("invoice", "en"));
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, exception.getHttpStatus());
-        assertEquals("Kittyp's WhatsApp invoice document template is not approved", exception.getMessage());
+        assertTrue(exception.getMessage().contains("No approved DOCUMENT template named 'invoice'"));
     }
 }

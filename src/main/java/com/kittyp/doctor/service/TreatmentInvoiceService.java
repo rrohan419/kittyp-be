@@ -289,6 +289,16 @@ public class TreatmentInvoiceService {
 
     @Transactional
     public ConsultationInvoice sendInvoiceWhatsApp(ConsultationInvoice invoice, String overridePhone) {
+        return sendInvoiceWhatsApp(invoice, overridePhone, false);
+    }
+
+    public ConsultationInvoice sendInvoiceWhatsApp(
+            ConsultationInvoice invoice, String overridePhone, boolean resendConfirmed) {
+        if (invoice.getWhatsappSentAt() != null && !resendConfirmed) {
+            throw new CustomException(
+                    "This invoice was already sent on WhatsApp. Confirm resend to send it again.",
+                    HttpStatus.CONFLICT);
+        }
         CreateInvoiceResultDto result = sendInvoiceToOwner(invoice, overridePhone);
         if (!result.isWhatsappSent()) {
             String msg = result.getWhatsappError();
@@ -388,6 +398,8 @@ public class TreatmentInvoiceService {
                         managed.getOwner(),
                         petEntity);
                 whatsappSent = true;
+                managed.setWhatsappSentAt(LocalDateTime.now());
+                managed = invoiceRepository.save(managed);
             } catch (Exception e) {
                 whatsappError = e.getMessage() != null && !e.getMessage().isBlank()
                         ? e.getMessage()
